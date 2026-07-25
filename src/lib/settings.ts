@@ -1,15 +1,20 @@
 import type { ModelTier } from "@/lib/models";
+import { DEFAULT_PRICING, type ModelPricing } from "@/lib/pricing";
 
 export const SETTINGS_STORAGE_KEY = "jobhunt-settings";
 
 export type AppSettings = {
   apiKey: string;
   modelTier: ModelTier;
+  monthlyBudgetUsd: number;
+  pricing: Record<ModelTier, ModelPricing>;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
   apiKey: "",
   modelTier: "premium",
+  monthlyBudgetUsd: 20,
+  pricing: DEFAULT_PRICING,
 };
 
 export function loadSettings(): AppSettings {
@@ -21,6 +26,14 @@ export function loadSettings(): AppSettings {
     return {
       apiKey: parsed.apiKey ?? "",
       modelTier: parsed.modelTier === "budget" ? "budget" : "premium",
+      monthlyBudgetUsd:
+        typeof parsed.monthlyBudgetUsd === "number" && parsed.monthlyBudgetUsd >= 0
+          ? parsed.monthlyBudgetUsd
+          : DEFAULT_SETTINGS.monthlyBudgetUsd,
+      pricing: {
+        premium: { ...DEFAULT_PRICING.premium, ...parsed.pricing?.premium },
+        budget: { ...DEFAULT_PRICING.budget, ...parsed.pricing?.budget },
+      },
     };
   } catch {
     return DEFAULT_SETTINGS;

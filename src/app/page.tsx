@@ -37,9 +37,10 @@ export default function HomePage() {
   );
 
   const handleJobParsed = useCallback(
-    (text: string, source: string) => {
+    (text: string, source: string, sourceType: "file" | "url" | "text") => {
       update("jobDescription", text);
       update("jobSource", source);
+      update("jobSourceType", sourceType);
     },
     [update]
   );
@@ -94,10 +95,12 @@ export default function HomePage() {
             <JobDescriptionInput
               jobDescription={state.jobDescription}
               jobSource={state.jobSource}
+              jobSourceType={state.jobSourceType}
               onParsed={handleJobParsed}
               onClear={() => {
                 update("jobDescription", "");
                 update("jobSource", "");
+                update("jobSourceType", "");
                 setState((prev) => ({ ...prev, matchReport: null, reportChatMessages: [] }));
               }}
             />

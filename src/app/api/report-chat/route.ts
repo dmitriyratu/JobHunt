@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
     }
     messages.push({ role: "user", content: message.trim() });
 
-    const raw = await createStructuredCompletion<RawReportChatResponse>(client, {
+    const { result: raw, usage } = await createStructuredCompletion<RawReportChatResponse>(client, {
       model,
       schemaName: "report_chat_response",
       schema: REPORT_CHAT_SCHEMA,
@@ -256,7 +256,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ reply, proposals });
+    return NextResponse.json({ reply, proposals, usage: { model, ...usage } });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to process chat message";

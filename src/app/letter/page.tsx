@@ -13,6 +13,7 @@ import {
   type AppSettings,
 } from "@/lib/settings";
 import { useJobHuntState } from "@/lib/useAppState";
+import { appendUsageEntry } from "@/lib/usage";
 
 export default function LetterPage() {
   const { state, update, hydrated } = useJobHuntState();
@@ -50,6 +51,15 @@ export default function LetterPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Generation failed");
       update("generatedEmail", data.email);
+      if (data.usage) {
+        appendUsageEntry({
+          endpoint: "generate-email",
+          model: data.usage.model,
+          tier: settings.modelTier,
+          usage: data.usage,
+          pricing: settings.pricing[settings.modelTier],
+        });
+      }
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : "Generation failed");
     } finally {

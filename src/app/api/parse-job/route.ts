@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseFileBuffer } from "@/lib/parsers";
 import { fetchAndExtractText } from "@/lib/parsers/html";
+import { cleanExtractedText } from "@/lib/textClean";
 
 export const runtime = "nodejs";
 
@@ -17,11 +18,12 @@ export async function POST(request: NextRequest) {
       }
 
       const buffer = Buffer.from(await file.arrayBuffer());
-      const text = await parseFileBuffer(buffer, file.name, file.type);
+      const text = cleanExtractedText(await parseFileBuffer(buffer, file.name, file.type));
 
       return NextResponse.json({
         text,
         source: file.name,
+        sourceType: "file",
         charCount: text.length,
       });
     }
@@ -43,10 +45,11 @@ export async function POST(request: NextRequest) {
       } catch {
         return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
       }
-      const extracted = await fetchAndExtractText(parsedUrl.toString());
+      const extracted = cleanExtractedText(await fetchAndExtractText(parsedUrl.toString()));
       return NextResponse.json({
         text: extracted,
         source: parsedUrl.toString(),
+        sourceType: "url",
         charCount: extracted.length,
       });
     }
@@ -58,10 +61,11 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      const trimmed = text.trim();
+      const trimmed = cleanExtractedText(text);
       return NextResponse.json({
         text: trimmed,
         source: "Pasted text",
+        sourceType: "text",
         charCount: trimmed.length,
       });
     }

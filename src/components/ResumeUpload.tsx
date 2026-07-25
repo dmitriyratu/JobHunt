@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import DocumentPreview from "./DocumentPreview";
 
 type Props = {
   resumeText: string;
@@ -19,6 +20,14 @@ export default function ResumeUpload({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [isPdf, setIsPdf] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (fileUrl) URL.revokeObjectURL(fileUrl);
+    };
+  }, [fileUrl]);
 
   const uploadFile = useCallback(
     async (file: File) => {
@@ -35,6 +44,11 @@ export default function ResumeUpload({
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Upload failed");
 
+        setFileUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(file);
+        });
+        setIsPdf(file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
         onParsed(data.text, data.filename);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Upload failed");
@@ -44,6 +58,15 @@ export default function ResumeUpload({
     },
     [onParsed]
   );
+
+  const handleClear = useCallback(() => {
+    setFileUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setIsPdf(false);
+    onClear();
+  }, [onClear]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -72,17 +95,16 @@ export default function ResumeUpload({
               </p>
             </div>
           </div>
-          <button onClick={onClear} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
+          <button onClick={handleClear} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
             Replace
           </button>
         </div>
-        <div className="mt-4">
-          <p className="text-xs text-[var(--color-text-secondary)] mb-2">Preview</p>
-          <pre className="text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap max-h-40 overflow-y-auto bg-[var(--color-surface)] rounded-lg p-3 border border-[var(--color-border-subtle)]">
-            {resumeText.slice(0, 2000)}
-            {resumeText.length > 2000 && "…"}
-          </pre>
-        </div>
+        <DocumentPreview
+          cleanedText={resumeText}
+          fileUrl={fileUrl ?? undefined}
+          fileName={resumeFilename}
+          isPdf={isPdf}
+        />
       </div>
     );
   }

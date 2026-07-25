@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ModelTier } from "@/lib/models";
+import type { ModelPricing } from "@/lib/pricing";
+import { appendUsageEntry } from "@/lib/usage";
 import type { MatchReport, MatchReportProposal, ReportChatMessage } from "@/types";
 import ProposalDiffCard from "./ProposalDiffCard";
 
@@ -12,6 +14,7 @@ type Props = {
   jobDescription: string;
   apiKey: string;
   modelTier: ModelTier;
+  pricing: ModelPricing;
   onNewMessage: (userMsg: ReportChatMessage, assistantMsg: ReportChatMessage) => void;
   onAcceptProposal: (messageIndex: number, proposalId: string) => void;
   onRejectProposal: (messageIndex: number, proposalId: string) => void;
@@ -24,6 +27,7 @@ export default function ReportChat({
   jobDescription,
   apiKey,
   modelTier,
+  pricing,
   onNewMessage,
   onAcceptProposal,
   onRejectProposal,
@@ -71,6 +75,15 @@ export default function ReportChat({
         proposals: proposals.map((p) => ({ ...p, resolution: "pending" as const })),
       };
       onNewMessage(userMsg, assistantMsg);
+      if (data.usage) {
+        appendUsageEntry({
+          endpoint: "report-chat",
+          model: data.usage.model,
+          tier: modelTier,
+          usage: data.usage,
+          pricing,
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
       setInput(trimmed);

@@ -15,6 +15,7 @@ import {
   type AppSettings,
 } from "@/lib/settings";
 import { useJobHuntState } from "@/lib/useAppState";
+import { appendUsageEntry } from "@/lib/usage";
 import type { ReportChatMessage } from "@/types";
 
 export default function MatchPage() {
@@ -48,7 +49,21 @@ export default function MatchPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Analysis failed");
-      setState((prev) => ({ ...prev, matchReport: data.report, reportChatMessages: [] }));
+      setState((prev) => ({
+        ...prev,
+        matchReport: data.report,
+        reportChatMessages: [],
+        companyName: prev.companyName || data.company || prev.companyName,
+      }));
+      if (data.usage) {
+        appendUsageEntry({
+          endpoint: "analyze-match",
+          model: data.usage.model,
+          tier: settings.modelTier,
+          usage: data.usage,
+          pricing: settings.pricing[settings.modelTier],
+        });
+      }
     } catch (err) {
       setAnalyzeError(err instanceof Error ? err.message : "Analysis failed");
     } finally {
@@ -188,6 +203,7 @@ export default function MatchPage() {
                   jobDescription={state.jobDescription}
                   apiKey={settings.apiKey}
                   modelTier={settings.modelTier}
+                  pricing={settings.pricing[settings.modelTier]}
                   onNewMessage={handleNewChatMessage}
                   onAcceptProposal={handleAcceptProposal}
                   onRejectProposal={handleRejectProposal}

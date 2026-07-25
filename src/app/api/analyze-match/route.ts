@@ -28,6 +28,7 @@ Steps:
    - "gap": the resume shows no evidence of this
 4. Do NOT invent experience, skills, or credentials not present in the resume. If there is no evidence, use status "gap" and leave evidence empty.
 5. Write a 2-3 sentence overall summary of the candidate's fit.
+6. If the hiring company's name is clearly stated in the job description, extract it. Otherwise leave it as an empty string — do not guess.
 
 Output strictly matches the provided JSON schema.`;
 
@@ -51,12 +52,13 @@ const MATCH_REPORT_SCHEMA = {
   type: "object",
   properties: {
     summary: { type: "string" },
+    company: { type: "string" },
     items: {
       type: "array",
       items: REQUIREMENT_ITEM_SCHEMA,
     },
   },
-  required: ["summary", "items"],
+  required: ["summary", "company", "items"],
   additionalProperties: false,
 } as const;
 
@@ -70,6 +72,7 @@ type RawReportItem = {
 
 type RawReport = {
   summary: string;
+  company: string;
   items: RawReportItem[];
 };
 
@@ -127,7 +130,7 @@ export async function POST(request: NextRequest) {
         jobDesc.text,
     ];
 
-    const raw = await createStructuredCompletion<RawReport>(client, {
+    const { result: raw, usage } = await createStructuredCompletion<RawReport>(client, {
       model,
       schemaName: "match_report",
       schema: MATCH_REPORT_SCHEMA,
@@ -173,7 +176,11 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    return NextResponse.json({ report });
+    return NextResponse.json({
+      report,
+      company: raw.company?.trim() ?? "",
+      usage: { model, ...usage },
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to analyze match";

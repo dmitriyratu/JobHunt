@@ -123,7 +123,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ email });
+    return NextResponse.json({
+      email,
+      usage: {
+        model,
+        promptTokens: completion.usage?.prompt_tokens ?? 0,
+        completionTokens: completion.usage?.completion_tokens ?? 0,
+        totalTokens: completion.usage?.total_tokens ?? 0,
+      },
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to generate email";

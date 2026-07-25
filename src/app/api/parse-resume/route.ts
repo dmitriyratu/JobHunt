@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseFileBuffer } from "@/lib/parsers";
+import { cleanExtractedText } from "@/lib/textClean";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const text = await parseFileBuffer(buffer, file.name, file.type);
+    const text = cleanExtractedText(await parseFileBuffer(buffer, file.name, file.type));
 
     if (!text || text.length < 20) {
       return NextResponse.json(

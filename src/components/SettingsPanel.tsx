@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MODEL_TIERS, type ModelTier } from "@/lib/models";
 import { maskApiKey, type AppSettings } from "@/lib/settings";
+import type { ModelPricing } from "@/lib/pricing";
 
 type Props = {
   settings: AppSettings;
@@ -13,6 +14,8 @@ export default function SettingsPanel({ settings, onSave }: Props) {
   const [open, setOpen] = useState(false);
   const [draftKey, setDraftKey] = useState("");
   const [draftTier, setDraftTier] = useState<ModelTier>(settings.modelTier);
+  const [draftBudget, setDraftBudget] = useState(String(settings.monthlyBudgetUsd));
+  const [draftPricing, setDraftPricing] = useState(settings.pricing);
   const [showKey, setShowKey] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [editingKey, setEditingKey] = useState(!settings.apiKey);
@@ -22,14 +25,27 @@ export default function SettingsPanel({ settings, onSave }: Props) {
     if (!open) {
       setDraftKey(settings.apiKey);
       setDraftTier(settings.modelTier);
+      setDraftBudget(String(settings.monthlyBudgetUsd));
+      setDraftPricing(settings.pricing);
       setEditingKey(!settings.apiKey);
     }
   }
 
+  function updatePricing(tier: ModelTier, field: keyof ModelPricing, value: string) {
+    const num = Number(value);
+    setDraftPricing((prev) => ({
+      ...prev,
+      [tier]: { ...prev[tier], [field]: Number.isFinite(num) && num >= 0 ? num : prev[tier][field] },
+    }));
+  }
+
   function handleSave() {
+    const budget = Number(draftBudget);
     const next: AppSettings = {
       apiKey: draftKey.trim(),
       modelTier: draftTier,
+      monthlyBudgetUsd: Number.isFinite(budget) && budget >= 0 ? budget : settings.monthlyBudgetUsd,
+      pricing: draftPricing,
     };
     onSave(next);
     setSavedFlash(true);
@@ -186,6 +202,61 @@ export default function SettingsPanel({ settings, onSave }: Props) {
                   )
                 )}
               </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-2">
+                Budget &amp; pricing
+              </label>
+              <div className="mb-3">
+                <label className="text-xs text-[var(--color-text-muted)] block mb-1">
+                  Monthly budget (USD)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={draftBudget}
+                  onChange={(e) => setDraftBudget(e.target.value)}
+                  className="input-base max-w-[160px]"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(Object.entries(MODEL_TIERS) as [ModelTier, (typeof MODEL_TIERS)[ModelTier]][]).map(
+                  ([tier, meta]) => (
+                    <div key={tier} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+                      <p className="text-xs font-medium mb-2">{meta.subtitle} ($/1M tokens)</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-[var(--color-text-muted)] block mb-1">Input</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={draftPricing[tier].input}
+                            onChange={(e) => updatePricing(tier, "input", e.target.value)}
+                            className="input-base text-sm py-1.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-[var(--color-text-muted)] block mb-1">Output</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={draftPricing[tier].output}
+                            onChange={(e) => updatePricing(tier, "output", e.target.value)}
+                            className="input-base text-sm py-1.5"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+              <p className="text-xs text-[var(--color-text-muted)] mt-2">
+                Estimates — verify current rates at platform.openai.com/pricing.
+              </p>
             </div>
 
             <div className="flex items-center gap-3">

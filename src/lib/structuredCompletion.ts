@@ -9,10 +9,21 @@ type StructuredCompletionOptions = {
   maxTokens?: number;
 };
 
+export type UsageStats = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+};
+
+export type StructuredCompletionResult<T> = {
+  result: T;
+  usage: UsageStats;
+};
+
 export async function createStructuredCompletion<T>(
   client: OpenAI,
   { model, messages, schemaName, schema, temperature, maxTokens }: StructuredCompletionOptions
-): Promise<T> {
+): Promise<StructuredCompletionResult<T>> {
   const completion = await client.chat.completions.create({
     model,
     messages,
@@ -33,9 +44,18 @@ export async function createStructuredCompletion<T>(
     throw new Error("Model returned an empty response. Try again.");
   }
 
+  let result: T;
   try {
-    return JSON.parse(content) as T;
+    result = JSON.parse(content) as T;
   } catch {
     throw new Error("Model returned malformed JSON. Try again.");
   }
+
+  const usage: UsageStats = {
+    promptTokens: completion.usage?.prompt_tokens ?? 0,
+    completionTokens: completion.usage?.completion_tokens ?? 0,
+    totalTokens: completion.usage?.total_tokens ?? 0,
+  };
+
+  return { result, usage };
 }

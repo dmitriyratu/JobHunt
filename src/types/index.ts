@@ -50,6 +50,7 @@ export type AppState = {
   resumeFilename: string;
   jobDescription: string;
   jobSource: string;
+  jobSourceType: "file" | "url" | "text" | "";
   matchReport: MatchReport | null;
   reportChatMessages: ReportChatMessage[];
   letterContext: string;
@@ -63,6 +64,7 @@ export const initialAppState: AppState = {
   resumeFilename: "",
   jobDescription: "",
   jobSource: "",
+  jobSourceType: "",
   matchReport: null,
   reportChatMessages: [],
   letterContext: "",

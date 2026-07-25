@@ -1,19 +1,23 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import DocumentPreview from "./DocumentPreview";
 
 type Tab = "paste" | "url" | "file";
+type SourceType = "file" | "url" | "text";
 
 type Props = {
   jobDescription: string;
   jobSource: string;
-  onParsed: (text: string, source: string) => void;
+  jobSourceType: SourceType | "";
+  onParsed: (text: string, source: string, sourceType: SourceType) => void;
   onClear: () => void;
 };
 
 export default function JobDescriptionInput({
   jobDescription,
   jobSource,
+  jobSourceType,
   onParsed,
   onClear,
 }: Props) {
@@ -23,6 +27,14 @@ export default function JobDescriptionInput({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [isPdf, setIsPdf] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (fileUrl) URL.revokeObjectURL(fileUrl);
+    };
+  }, [fileUrl]);
 
   const submit = useCallback(async () => {
     setError("");
@@ -36,7 +48,12 @@ export default function JobDescriptionInput({
         const res = await fetch("/api/parse-job", { method: "POST", body: formData });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to parse file");
-        onParsed(data.text, data.source);
+        setFileUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(file);
+        });
+        setIsPdf(file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
+        onParsed(data.text, data.source, "file");
         return;
       }
 
@@ -51,13 +68,22 @@ export default function JobDescriptionInput({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to parse job description");
-      onParsed(data.text, data.source);
+      onParsed(data.text, data.source, tab === "url" ? "url" : "text");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
   }, [tab, url, pasteText, onParsed]);
+
+  const handleClear = useCallback(() => {
+    setFileUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setIsPdf(false);
+    onClear();
+  }, [onClear]);
 
   if (jobDescription) {
     return (
@@ -69,17 +95,17 @@ export default function JobDescriptionInput({
               Source: {jobSource} · {jobDescription.length.toLocaleString()} chars
             </p>
           </div>
-          <button onClick={onClear} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
+          <button onClick={handleClear} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
             Replace
           </button>
         </div>
-        <div className="mt-4">
-          <p className="text-xs text-[var(--color-text-secondary)] mb-2">Preview</p>
-          <pre className="text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap max-h-40 overflow-y-auto bg-[var(--color-surface)] rounded-lg p-3 border border-[var(--color-border-subtle)]">
-            {jobDescription.slice(0, 2000)}
-            {jobDescription.length > 2000 && "…"}
-          </pre>
-        </div>
+        <DocumentPreview
+          cleanedText={jobDescription}
+          fileUrl={jobSourceType === "file" ? fileUrl ?? undefined : undefined}
+          fileName={jobSourceType === "file" ? jobSource : undefined}
+          isPdf={jobSourceType === "file" ? isPdf : false}
+          externalUrl={jobSourceType === "url" ? jobSource : undefined}
+        />
       </div>
     );
   }
