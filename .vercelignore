@@ -1,0 +1,9 @@
+# Belt-and-braces: .env is already gitignored, but never let secrets upload
+# even if this is deployed outside a git context.
+.env
+.env.local
+.env*.local
+
+.next
+node_modules
+.claude

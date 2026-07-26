@@ -146,7 +146,7 @@ export default function SettingsModal({ open, onClose, settings, onSave }: Props
               </div>
             )}
             <p className="text-xs text-[var(--color-text-muted)] mt-1.5">
-              Saved locally in your browser. Falls back to server .env if empty.
+              Stored only in your browser — never sent anywhere but OpenAI. Required when the app is deployed.
             </p>
           </div>
 
