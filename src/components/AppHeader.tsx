@@ -2,12 +2,10 @@
 
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MODEL_TIERS } from "@/lib/models";
 import type { AppSettings } from "@/lib/settings";
 import { useJobHuntState } from "@/lib/useAppState";
 import SettingsModal from "./SettingsModal";
 import StageNav from "./StageNav";
-import UsageModal from "./UsageModal";
 
 type Props = {
   subtitle: string;
@@ -17,10 +15,8 @@ type Props = {
 
 export default function AppHeader({ subtitle, settings, onSettingsSave }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [usageOpen, setUsageOpen] = useState(false);
   const { state, newSession } = useJobHuntState();
   const router = useRouter();
-  const tierMeta = MODEL_TIERS[settings.modelTier];
 
   // Home = start a fresh application. If the current session is still an
   // uncommitted draft we're already on a blank one, so don't discard its work.
@@ -32,7 +28,7 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
   return (
     <>
       <header className="border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)]">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+        <div className="app-container py-4 flex items-center justify-between gap-4">
           <button
             onClick={goHome}
             title="Start a new application"
@@ -53,9 +49,7 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
             <button
               onClick={() => setSettingsOpen(true)}
               title={
-                settings.apiKey
-                  ? `${tierMeta.label} · ${tierMeta.subtitle}`
-                  : "Add your OpenAI key and pick a model"
+                settings.apiKey ? "OpenAI key saved in this browser" : "Add your OpenAI key"
               }
               className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-md border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-overlay)] hover:border-[var(--color-text-muted)] transition-colors"
             >
@@ -71,24 +65,13 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
                 />
               )}
             </button>
-
-            <button
-              onClick={() => setUsageOpen(true)}
-              title="LLM usage & spend"
-              className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-md border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-overlay)] hover:border-[var(--color-text-muted)] transition-colors"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14" />
-              </svg>
-              Usage
-            </button>
           </div>
         </div>
 
         {/* The journey gets its own centered panel below the title rather than
             competing with the utility buttons for room in the top row. */}
         <div className="border-t border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
-          <div className="max-w-6xl mx-auto px-6 py-2.5 flex justify-center">
+          <div className="app-container py-2.5 flex justify-center">
             <StageNav />
           </div>
         </div>
@@ -99,11 +82,6 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
         onClose={() => setSettingsOpen(false)}
         settings={settings}
         onSave={onSettingsSave}
-      />
-      <UsageModal
-        open={usageOpen}
-        onClose={() => setUsageOpen(false)}
-        adminApiKey={settings.adminApiKey}
       />
     </>
   );

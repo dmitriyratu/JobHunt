@@ -4,10 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 import ContextRecap from "@/components/ContextRecap";
-import EmailOutput from "@/components/EmailOutput";
+import LetterComposer from "@/components/LetterComposer";
+import LetterOutput from "@/components/LetterOutput";
 import SessionCostSummary from "@/components/SessionCostSummary";
 import StepNav from "@/components/StepNav";
-import { getPricingForTier } from "@/lib/models";
 import { plainTextToHtml } from "@/lib/plainTextToHtml";
 import { resolveCompany } from "@/lib/session";
 import {
@@ -51,7 +51,6 @@ export default function LetterPage() {
           recipientName: state.recipientName || undefined,
           companyName: resolveCompany(state) || undefined,
           apiKey: settings.apiKey || undefined,
-          modelTier: settings.modelTier,
         }),
       });
       const data = await res.json();
@@ -64,9 +63,7 @@ export default function LetterPage() {
         const entries = appendUsageEntry({
           endpoint: "generate-email",
           model: data.usage.model,
-          tier: settings.modelTier,
           usage: data.usage,
-          pricing: getPricingForTier(settings.modelTier),
         });
         setUsageEntries(entries);
       }
@@ -95,7 +92,7 @@ export default function LetterPage() {
         onSettingsSave={handleSettingsSave}
       />
 
-      <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <main className="app-container py-8 space-y-6">
         {!state.resumeText || !state.jobDescription ? (
           <div className="glass-panel p-8 text-center">
             <p className="text-sm text-[var(--color-text-secondary)] mb-4">
@@ -107,46 +104,65 @@ export default function LetterPage() {
           </div>
         ) : (
           <>
-            <ContextRecap
-              resumeFilename={state.resumeFilename}
-              resumeText={state.resumeText}
-              jobSource={state.jobSource}
-              jobDescription={state.jobDescription}
-              report={state.matchReport}
-              jobTitle={state.detectedJobTitle}
-              detectedCompany={state.detectedCompany}
-              companyName={state.companyName}
-              onCompanyNameChange={(v) => update("companyName", v)}
-            />
+            {/* Two columns on wide screens, the same shape as the match page:
+                what's carried over and what you're adding sit beside the
+                letter instead of pushing it below the fold. */}
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)] gap-6 items-start">
+              <div className="space-y-6 xl:sticky xl:top-6">
+                <ContextRecap
+                  resumeFilename={state.resumeFilename}
+                  resumeText={state.resumeText}
+                  jobSource={state.jobSource}
+                  jobDescription={state.jobDescription}
+                  report={state.matchReport}
+                  jobTitle={state.detectedJobTitle}
+                  detectedCompany={state.detectedCompany}
+                  companyName={state.companyName}
+                  onCompanyNameChange={(v) => update("companyName", v)}
+                />
 
-            {!state.matchReport && (
-              <div className="glass-panel p-4 flex items-center justify-between gap-3">
-                <p className="text-xs text-[var(--color-text-secondary)]">
-                  No match report yet — the letter is much stronger with one.
-                </p>
-                <Link href="/match" className="btn-secondary text-xs py-1.5 px-3 shrink-0">
-                  Run the analysis
-                </Link>
+                {!state.matchReport && (
+                  <div className="glass-panel p-4 flex items-center justify-between gap-3">
+                    <p className="text-xs text-[var(--color-text-secondary)]">
+                      No match report yet — the letter is much stronger with one.
+                    </p>
+                    <Link href="/match" className="btn-secondary text-xs py-1.5 px-3 shrink-0">
+                      Run the analysis
+                    </Link>
+                  </div>
+                )}
+
+                <LetterComposer
+                  loading={generating}
+                  error={generateError}
+                  canGenerate={canGenerate}
+                  hasBody={Boolean(state.generatedBody)}
+                  recipientName={state.recipientName}
+                  letterContext={state.letterContext}
+                  onRecipientNameChange={(v) => update("recipientName", v)}
+                  onLetterContextChange={(v) => update("letterContext", v)}
+                  onGenerate={handleGenerate}
+                />
               </div>
+
+              {/* Keyed on the session so the rich-text editor drops its
+                  internal document when you switch applications. */}
+              <LetterOutput
+                key={state.id}
+                subject={state.generatedSubject}
+                body={state.generatedBody}
+                onSubjectChange={(v) => update("generatedSubject", v)}
+                onBodyChange={(html) => update("generatedBody", html)}
+              />
+            </div>
+
+            {state.generatedBody && (
+              <SessionCostSummary
+                entries={usageEntries}
+                settings={settings}
+                onSettingsSave={handleSettingsSave}
+              />
             )}
-
-            <EmailOutput
-              key={state.id}
-              subject={state.generatedSubject}
-              body={state.generatedBody}
-              loading={generating}
-              error={generateError}
-              canGenerate={canGenerate}
-              recipientName={state.recipientName}
-              letterContext={state.letterContext}
-              onRecipientNameChange={(v) => update("recipientName", v)}
-              onLetterContextChange={(v) => update("letterContext", v)}
-              onSubjectChange={(v) => update("generatedSubject", v)}
-              onBodyChange={(html) => update("generatedBody", html)}
-              onGenerate={handleGenerate}
-            />
-
-            {state.generatedBody && <SessionCostSummary entries={usageEntries} adminApiKey={settings.adminApiKey} />}
           </>
         )}
 

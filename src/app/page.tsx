@@ -73,7 +73,7 @@ export default function HomePage() {
         onSettingsSave={handleSettingsSave}
       />
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="app-container py-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           <section>
             <SectionHeader

@@ -1,7 +1,7 @@
 "use client";
 
-import type { MatchReportItem, ResolvedProposal } from "@/types";
-import { ImportancePill, StatusPill } from "./MatchReportView";
+import type { MatchReportItem, ResolvedProposal, StandoutItem } from "@/types";
+import { ImportancePill, ResultPill } from "./MatchReportView";
 
 type Props = {
   proposal: ResolvedProposal;
@@ -15,14 +15,17 @@ const ACTION_LABEL: Record<ResolvedProposal["action"], string> = {
   remove: "Removed",
 };
 
-function fieldChanged<K extends keyof MatchReportItem>(
-  before: MatchReportItem | null | undefined,
-  after: MatchReportItem,
+function fieldChanged<T, K extends keyof T>(
+  before: T | null | undefined,
+  after: T,
   field: K
 ): boolean {
   if (!before) return false;
   return before[field] !== after[field];
 }
+
+const PREVIEW_CLASS =
+  "rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3";
 
 function ItemPreview({
   item,
@@ -31,10 +34,11 @@ function ItemPreview({
   item: MatchReportItem;
   compareTo?: MatchReportItem | null;
 }) {
-  const changed = <K extends keyof MatchReportItem>(field: K) => fieldChanged(compareTo, item, field);
+  const changed = <K extends keyof MatchReportItem>(field: K) =>
+    fieldChanged(compareTo, item, field);
 
   return (
-    <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3">
+    <div className={PREVIEW_CLASS}>
       <p className={`text-sm mb-1.5 ${changed("requirement") ? "font-semibold" : "font-medium"}`}>
         {item.requirement}
       </p>
@@ -42,8 +46,14 @@ function ItemPreview({
         <span className={changed("importance") ? "ring-1 ring-[var(--color-accent)] rounded-full" : ""}>
           <ImportancePill importance={item.importance} />
         </span>
-        <span className={changed("status") ? "ring-1 ring-[var(--color-accent)] rounded-full" : ""}>
-          <StatusPill status={item.status} />
+        <span
+          className={
+            changed("status") || changed("strength")
+              ? "ring-1 ring-[var(--color-accent)] rounded-full"
+              : ""
+          }
+        >
+          <ResultPill status={item.status} strength={item.strength} />
         </span>
       </div>
       {item.evidence && (
@@ -68,14 +78,65 @@ function ItemPreview({
   );
 }
 
+function StandoutPreview({
+  item,
+  compareTo,
+}: {
+  item: StandoutItem;
+  compareTo?: StandoutItem | null;
+}) {
+  const changed = <K extends keyof StandoutItem>(field: K) =>
+    fieldChanged(compareTo, item, field);
+
+  return (
+    <div className={PREVIEW_CLASS}>
+      <p className={`text-sm mb-1.5 ${changed("credential") ? "font-semibold" : "font-medium"}`}>
+        {item.credential}
+      </p>
+      {item.evidence && (
+        <p
+          className={`text-xs text-[var(--color-text-secondary)] ${
+            changed("evidence") ? "font-semibold" : ""
+          }`}
+        >
+          {item.evidence}
+        </p>
+      )}
+      {item.whyValuable && (
+        <p
+          className={`text-xs text-[var(--color-text-muted)] mt-1 ${
+            changed("whyValuable") ? "font-semibold" : ""
+          }`}
+        >
+          {item.whyValuable}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function ProposalDiffCard({ proposal, onAccept, onReject }: Props) {
-  const { action, before, after, rationale, resolution } = proposal;
+  const { action, rationale, resolution } = proposal;
+
+  // Narrow on `target` rather than destructuring before/after up front, so the
+  // union keeps the correlation between the target and the payload type.
+  const before =
+    proposal.target === "standout"
+      ? proposal.before && <StandoutPreview item={proposal.before} />
+      : proposal.before && <ItemPreview item={proposal.before} />;
+  const after =
+    proposal.target === "standout"
+      ? proposal.after && (
+          <StandoutPreview item={proposal.after} compareTo={proposal.before} />
+        )
+      : proposal.after && <ItemPreview item={proposal.after} compareTo={proposal.before} />;
 
   return (
     <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-3 mt-2">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-semibold text-[var(--color-accent)] uppercase tracking-wide">
           {ACTION_LABEL[action]}
+          {proposal.target === "standout" ? " standout" : ""}
         </span>
         {resolution !== "pending" && (
           <span
@@ -96,7 +157,7 @@ export default function ProposalDiffCard({ proposal, onAccept, onReject }: Props
             <p className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide mb-1">
               Before
             </p>
-            <ItemPreview item={before} />
+            {before}
           </div>
         )}
         {after && (
@@ -104,7 +165,7 @@ export default function ProposalDiffCard({ proposal, onAccept, onReject }: Props
             <p className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide mb-1">
               After
             </p>
-            <ItemPreview item={after} compareTo={before} />
+            {after}
           </div>
         )}
       </div>

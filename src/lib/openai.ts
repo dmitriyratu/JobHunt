@@ -1,5 +1,4 @@
 import OpenAI from "openai";
-import { getModelForTier, type ModelTier } from "@/lib/models";
 
 /**
  * The server-side OPENAI_API_KEY is a local-development convenience only.
@@ -26,8 +25,4 @@ export function getOpenAIClient(apiKey?: string): OpenAI {
     );
   }
   return new OpenAI({ apiKey: key });
-}
-
-export function resolveModel(modelTier?: ModelTier): string {
-  return getModelForTier(modelTier);
 }

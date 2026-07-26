@@ -6,17 +6,49 @@ export type ChatMessage = {
 export type RequirementImportance = "critical" | "important" | "nice-to-have";
 export type MatchStatus = "match" | "partial" | "gap";
 
+/**
+ * How far past the bar you clear a requirement you already match.
+ *
+ * `status` alone is binary, so someone with 12 years and someone with 5.1
+ * both land on "match" against a "5+ years" requirement. That flattening lost
+ * the single most persuasive thing about a candidate, so overshoot is tracked
+ * separately. Only meaningful when status is "match"; normalised to "meets"
+ * otherwise.
+ */
+export type RequirementStrength = "meets" | "exceeds";
+
 export type MatchReportItem = {
   id: string;
   requirement: string;
   importance: RequirementImportance;
   status: MatchStatus;
+  strength: RequirementStrength;
   evidence: string;
   note: string;
 };
 
+/**
+ * Something genuinely rare or highly prized in the candidate's background that
+ * the posting never asked for.
+ *
+ * Requirements flow job-description → resume, so anything the posting didn't
+ * think to ask about (a patent, a founded company, a widely used open-source
+ * project) had no representation at all. Standouts are the reverse channel.
+ */
+export type StandoutItem = {
+  id: string;
+  /** The credential itself, stated plainly. */
+  credential: string;
+  /** Supporting evidence drawn from the resume — never invented. */
+  evidence: string;
+  /** Why a hiring team would prize it, even unasked. */
+  whyValuable: string;
+};
+
 export type MatchReport = {
   items: MatchReportItem[];
+  /** May be absent on reports saved before standouts existed — read via `?? []`. */
+  standouts: StandoutItem[];
   overallScore: number;
   summary: string;
   generatedAt: string;
@@ -26,16 +58,32 @@ export type MatchReport = {
   };
 };
 
-export type ProposalAction = "add" | "modify" | "remove";
+/** A report entry the chat can be asked about — a requirement or a standout. */
+export type ReportEntry = MatchReportItem | StandoutItem;
 
-export type MatchReportProposal = {
+export type ProposalAction = "add" | "modify" | "remove";
+export type ProposalTarget = "requirement" | "standout";
+
+type ProposalBase = {
   id: string;
   action: ProposalAction;
   targetItemId: string | null;
-  before: MatchReportItem | null;
-  after: MatchReportItem | null;
   rationale: string;
 };
+
+export type RequirementProposal = ProposalBase & {
+  target: "requirement";
+  before: MatchReportItem | null;
+  after: MatchReportItem | null;
+};
+
+export type StandoutProposal = ProposalBase & {
+  target: "standout";
+  before: StandoutItem | null;
+  after: StandoutItem | null;
+};
+
+export type MatchReportProposal = RequirementProposal | StandoutProposal;
 
 export type ResolvedProposal = MatchReportProposal & {
   resolution: "pending" | "accepted" | "rejected";

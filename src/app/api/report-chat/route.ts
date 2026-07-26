@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type OpenAI from "openai";
-import { tierSupportsTemperature, type ModelTier } from "@/lib/models";
-import { getOpenAIClient, resolveModel } from "@/lib/openai";
+import { getTaskModel } from "@/lib/models";
+import { getOpenAIClient } from "@/lib/openai";
 import { createStructuredCompletion } from "@/lib/structuredCompletion";
 import type {
   ChatMessage,
@@ -11,48 +11,77 @@ import type {
   MatchStatus,
   ProposalAction,
   RequirementImportance,
+  StandoutItem,
 } from "@/types";
 
 export const runtime = "nodejs";
 
 const MAX_CONTEXT_CHARS = 12000;
 
-const SYSTEM_PROMPT = `You are helping a job applicant refine a match report that compares their resume against a job description. You already have the resume, the job description, and the current match report (a list of requirement items, each with importance, status, evidence, and a note).
+const SYSTEM_PROMPT = `You are helping a job applicant refine a match report that compares their resume against a job description. You already have the resume, the job description, and the current match report.
+
+The report has two parts:
+- "items": requirements drawn from the job description. Each has importance, status (match/partial/gap), strength (meets/exceeds), evidence, and a note. "exceeds" means the candidate clears that bar by a wide margin, not merely satisfies it; it only applies when status is "match".
+- "standouts": credentials that are rare or highly prized but that this posting never asked for (patents, founding a company, widely used open-source work, notable awards). Each has a credential, evidence, and whyValuable.
 
 Reply conversationally and briefly (2-4 sentences) to the user's message.
 
-Only propose changes to the report when the user's message supplies new information or explicitly asks for a change (e.g. "actually I have 6 years of Python, not 3", "that Jira requirement isn't important", "add a line about my AWS cert"). If the message is just a question or doesn't warrant a report change, return an empty proposals array.
+Only propose changes when the user's message supplies new information or explicitly asks for one (e.g. "actually I have 6 years of Python, not 3", "that Jira requirement isn't important", "I also hold a patent on this"). If the message is just a question, return an empty proposals array.
 
-For each proposal:
-- action "modify": change an existing item. Set targetItemId to that item's id. Fill requirement/importance/status/evidence/note with the FULL revised item (not just the changed field).
-- action "remove": delete an existing item that no longer belongs (rare). Set targetItemId to that item's id. Other fields can be empty strings.
-- action "add": propose a new requirement item the report missed. Set targetItemId to null. Fill requirement/importance/status/evidence/note for the new item.
+Set "target" on every proposal to say which part of the report it touches:
 
-Never invent evidence not supported by the resume. rationale is a single short sentence explaining why you're proposing the change.`;
+target "requirement":
+- action "modify": Set targetItemId to that item's id. Fill requirement/importance/status/strength/evidence/note with the FULL revised item, not just the changed field.
+- action "remove": Set targetItemId to that item's id. Other fields can be empty strings.
+- action "add": Set targetItemId to null. Fill requirement/importance/status/strength/evidence/note for the new item.
+- Leave credential and whyValuable as empty strings.
+
+target "standout":
+- action "modify": Set targetItemId to that standout's id. Fill credential/evidence/whyValuable with the FULL revised standout.
+- action "remove": Set targetItemId to that standout's id. Other fields can be empty strings.
+- action "add": Set targetItemId to null. Fill credential/evidence/whyValuable. Only do this for something genuinely rare and prized that the posting did not ask for — an ordinary skill belongs in items, not here.
+- Leave requirement/importance/status/strength as empty strings or defaults.
+
+If the user tells you they clear a requirement by a wide margin, prefer modifying that item to strength "exceeds" over adding a standout — standouts are only for things the posting never asked about at all.
+
+Never invent evidence not supported by the resume or by what the user just told you. rationale is a single short sentence explaining why you're proposing the change.`;
 
 const PROPOSAL_ITEM_SCHEMA = {
   type: "object",
   properties: {
     action: { type: "string", enum: ["add", "modify", "remove"] },
+    target: { type: "string", enum: ["requirement", "standout"] },
     targetItemId: { type: ["string", "null"] },
+    // Requirement fields
     requirement: { type: "string" },
     importance: {
       type: "string",
       enum: ["critical", "important", "nice-to-have"],
     },
     status: { type: "string", enum: ["match", "partial", "gap"] },
-    evidence: { type: "string" },
+    strength: { type: "string", enum: ["meets", "exceeds"] },
     note: { type: "string" },
+    // Standout fields
+    credential: { type: "string" },
+    whyValuable: { type: "string" },
+    // Shared
+    evidence: { type: "string" },
     rationale: { type: "string" },
   },
+  // Strict mode requires every property to be listed, so both variants' fields
+  // are always present; the unused side comes back as empty strings.
   required: [
     "action",
+    "target",
     "targetItemId",
     "requirement",
     "importance",
     "status",
-    "evidence",
+    "strength",
     "note",
+    "credential",
+    "whyValuable",
+    "evidence",
     "rationale",
   ],
   additionalProperties: false,
@@ -73,12 +102,16 @@ const REPORT_CHAT_SCHEMA = {
 
 type RawProposal = {
   action: string;
+  target: string;
   targetItemId: string | null;
   requirement: string;
   importance: string;
   status: string;
-  evidence: string;
+  strength: string;
   note: string;
+  credential: string;
+  whyValuable: string;
+  evidence: string;
   rationale: string;
 };
 
@@ -99,16 +132,21 @@ function truncate(text: string): string {
   return text.length > MAX_CONTEXT_CHARS ? text.slice(0, MAX_CONTEXT_CHARS) : text;
 }
 
-function nextItemId(items: MatchReportItem[], mintedSoFar: Set<string>): string {
+function nextId(
+  prefix: string,
+  existing: { id: string }[],
+  mintedSoFar: Set<string>
+): string {
+  const pattern = new RegExp(`^${prefix}(\\d+)$`);
   let max = 0;
-  for (const item of items) {
-    const match = /^r(\d+)$/.exec(item.id);
+  for (const entry of existing) {
+    const match = pattern.exec(entry.id);
     if (match) max = Math.max(max, Number(match[1]));
   }
-  let candidate = `r${max + 1}`;
+  let candidate = `${prefix}${max + 1}`;
   while (mintedSoFar.has(candidate)) {
     max += 1;
-    candidate = `r${max + 1}`;
+    candidate = `${prefix}${max + 1}`;
   }
   mintedSoFar.add(candidate);
   return candidate;
@@ -123,7 +161,6 @@ type ReportChatRequest = {
   /** Requirement the user clicked in the report to scope this question. */
   attachedItemId?: string;
   apiKey?: string;
-  modelTier?: ModelTier;
 };
 
 export async function POST(request: NextRequest) {
@@ -137,7 +174,6 @@ export async function POST(request: NextRequest) {
       chatHistory,
       attachedItemId,
       apiKey,
-      modelTier,
     } = body;
 
     if (!message?.trim()) {
@@ -151,7 +187,7 @@ export async function POST(request: NextRequest) {
     }
 
     const client = getOpenAIClient(apiKey);
-    const model = resolveModel(modelTier);
+    const taskModel = getTaskModel("report-chat");
 
     const contextMessage = [
       `[Resume]\n${truncate(resumeText?.trim() ?? "")}`,
@@ -172,15 +208,18 @@ export async function POST(request: NextRequest) {
     for (const msg of chatHistory ?? []) {
       messages.push({ role: msg.role, content: msg.content });
     }
-    // When the user clicked a specific requirement, name it explicitly so the
-    // model resolves pronouns ("make that a match") against the right item
-    // instead of guessing from the wording.
+    // When the user clicked a specific entry, name it explicitly so the model
+    // resolves pronouns ("make that a match") against the right one instead of
+    // guessing from the wording. Standouts are clickable too, so search both.
     const attached = attachedItemId
-      ? report.items.find((item) => item.id === attachedItemId)
+      ? report.items.find((item) => item.id === attachedItemId) ??
+        (report.standouts ?? []).find((s) => s.id === attachedItemId)
       : undefined;
+    const attachedKind =
+      attached && "credential" in attached ? "standout" : "requirement";
     const userContent = attached
       ? [
-          `The user is referring to this specific requirement (id "${attached.id}"):`,
+          `The user is referring to this specific ${attachedKind} (id "${attached.id}"):`,
           JSON.stringify(attached),
           "",
           `Their message: ${message.trim()}`,
@@ -189,45 +228,113 @@ export async function POST(request: NextRequest) {
     messages.push({ role: "user", content: userContent });
 
     const { result: raw, usage } = await createStructuredCompletion<RawReportChatResponse>(client, {
-      model,
+      model: taskModel.id,
       schemaName: "report_chat_response",
       schema: REPORT_CHAT_SCHEMA,
       temperature: 0.4,
-      supportsTemperature: tierSupportsTemperature(modelTier),
+      supportsTemperature: taskModel.supportsTemperature,
       maxTokens: 1200,
       messages,
     });
 
     const mintedSoFar = new Set<string>();
     const proposals: MatchReportProposal[] = [];
+    // Reports saved before standouts existed have no array here.
+    const standouts = report.standouts ?? [];
+
+    /** Builds a requirement item, normalising overshoot the same way analyze-match does. */
+    function buildItem(id: string, rawProposal: RawProposal): MatchReportItem {
+      const status = rawProposal.status as MatchStatus;
+      return {
+        id,
+        requirement: rawProposal.requirement.trim(),
+        importance: rawProposal.importance as RequirementImportance,
+        status,
+        strength: status === "match" && rawProposal.strength === "exceeds" ? "exceeds" : "meets",
+        evidence: rawProposal.evidence?.trim() ?? "",
+        note: rawProposal.note?.trim() ?? "",
+      };
+    }
+
+    function requirementFieldsValid(rawProposal: RawProposal): boolean {
+      return (
+        VALID_IMPORTANCE.includes(rawProposal.importance as RequirementImportance) &&
+        VALID_STATUS.includes(rawProposal.status as MatchStatus) &&
+        Boolean(rawProposal.requirement?.trim())
+      );
+    }
 
     (raw.proposals ?? []).forEach((rawProposal, i) => {
       if (!VALID_ACTIONS.includes(rawProposal.action as ProposalAction)) return;
       const action = rawProposal.action as ProposalAction;
+      const id = `p${i + 1}`;
+      const rationale = rawProposal.rationale?.trim() ?? "";
 
-      if (action === "add") {
-        if (
-          !VALID_IMPORTANCE.includes(rawProposal.importance as RequirementImportance) ||
-          !VALID_STATUS.includes(rawProposal.status as MatchStatus) ||
-          !rawProposal.requirement?.trim()
-        ) {
+      if (rawProposal.target === "standout") {
+        if (action === "add") {
+          if (!rawProposal.credential?.trim()) return;
+          const after: StandoutItem = {
+            id: nextId("s", standouts, mintedSoFar),
+            credential: rawProposal.credential.trim(),
+            evidence: rawProposal.evidence?.trim() ?? "",
+            whyValuable: rawProposal.whyValuable?.trim() ?? "",
+          };
+          proposals.push({
+            id,
+            target: "standout",
+            action,
+            targetItemId: null,
+            before: null,
+            after,
+            rationale,
+          });
           return;
         }
-        const after: MatchReportItem = {
-          id: nextItemId(report.items, mintedSoFar),
-          requirement: rawProposal.requirement.trim(),
-          importance: rawProposal.importance as RequirementImportance,
-          status: rawProposal.status as MatchStatus,
-          evidence: rawProposal.evidence?.trim() ?? "",
-          note: rawProposal.note?.trim() ?? "",
-        };
+
+        const existing = standouts.find((s) => s.id === rawProposal.targetItemId);
+        if (!existing) return;
+
+        if (action === "remove") {
+          proposals.push({
+            id,
+            target: "standout",
+            action,
+            targetItemId: existing.id,
+            before: existing,
+            after: null,
+            rationale,
+          });
+          return;
+        }
+
+        if (!rawProposal.credential?.trim()) return;
         proposals.push({
-          id: `p${i + 1}`,
+          id,
+          target: "standout",
+          action,
+          targetItemId: existing.id,
+          before: existing,
+          after: {
+            id: existing.id,
+            credential: rawProposal.credential.trim(),
+            evidence: rawProposal.evidence?.trim() ?? "",
+            whyValuable: rawProposal.whyValuable?.trim() ?? "",
+          },
+          rationale,
+        });
+        return;
+      }
+
+      if (action === "add") {
+        if (!requirementFieldsValid(rawProposal)) return;
+        proposals.push({
+          id,
+          target: "requirement",
           action,
           targetItemId: null,
           before: null,
-          after,
-          rationale: rawProposal.rationale?.trim() ?? "",
+          after: buildItem(nextId("r", report.items, mintedSoFar), rawProposal),
+          rationale,
         });
         return;
       }
@@ -237,39 +344,27 @@ export async function POST(request: NextRequest) {
 
       if (action === "remove") {
         proposals.push({
-          id: `p${i + 1}`,
+          id,
+          target: "requirement",
           action,
           targetItemId: existing.id,
           before: existing,
           after: null,
-          rationale: rawProposal.rationale?.trim() ?? "",
+          rationale,
         });
         return;
       }
 
       // modify
-      if (
-        !VALID_IMPORTANCE.includes(rawProposal.importance as RequirementImportance) ||
-        !VALID_STATUS.includes(rawProposal.status as MatchStatus) ||
-        !rawProposal.requirement?.trim()
-      ) {
-        return;
-      }
-      const after: MatchReportItem = {
-        id: existing.id,
-        requirement: rawProposal.requirement.trim(),
-        importance: rawProposal.importance as RequirementImportance,
-        status: rawProposal.status as MatchStatus,
-        evidence: rawProposal.evidence?.trim() ?? "",
-        note: rawProposal.note?.trim() ?? "",
-      };
+      if (!requirementFieldsValid(rawProposal)) return;
       proposals.push({
-        id: `p${i + 1}`,
+        id,
+        target: "requirement",
         action,
         targetItemId: existing.id,
         before: existing,
-        after,
-        rationale: rawProposal.rationale?.trim() ?? "",
+        after: buildItem(existing.id, rawProposal),
+        rationale,
       });
     });
 
@@ -281,7 +376,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ reply, proposals, usage: { model, ...usage } });
+    return NextResponse.json({
+      reply,
+      proposals,
+      usage: { model: taskModel.id, ...usage },
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to process chat message";

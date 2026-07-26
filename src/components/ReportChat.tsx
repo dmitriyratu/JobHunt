@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ModelTier } from "@/lib/models";
-import type { ModelPricing } from "@/lib/pricing";
+import { entryLabel } from "@/lib/matchReport";
 import { appendUsageEntry } from "@/lib/usage";
 import type {
   MatchReport,
-  MatchReportItem,
   MatchReportProposal,
   ReportChatMessage,
+  ReportEntry,
 } from "@/types";
 import ProposalDiffCard from "./ProposalDiffCard";
 
@@ -18,10 +17,8 @@ type Props = {
   resumeText: string;
   jobDescription: string;
   apiKey: string;
-  modelTier: ModelTier;
-  pricing: ModelPricing;
-  /** Requirement the user clicked in the report, to scope the next question. */
-  attachedItem: MatchReportItem | null;
+  /** Requirement or standout the user clicked in the report, to scope the next question. */
+  attachedItem: ReportEntry | null;
   onClearAttachment: () => void;
   onNewMessage: (userMsg: ReportChatMessage, assistantMsg: ReportChatMessage) => void;
   onAcceptProposal: (messageIndex: number, proposalId: string) => void;
@@ -34,8 +31,6 @@ export default function ReportChat({
   resumeText,
   jobDescription,
   apiKey,
-  modelTier,
-  pricing,
   attachedItem,
   onClearAttachment,
   onNewMessage,
@@ -69,7 +64,7 @@ export default function ReportChat({
     const attachedAtSend = attachedItem;
     const userMsg: ReportChatMessage = {
       role: "user",
-      content: attachedAtSend ? `Re: “${attachedAtSend.requirement}”\n${trimmed}` : trimmed,
+      content: attachedAtSend ? `Re: “${entryLabel(attachedAtSend)}”\n${trimmed}` : trimmed,
     };
     onClearAttachment();
 
@@ -85,7 +80,6 @@ export default function ReportChat({
           attachedItemId: attachedAtSend?.id,
           chatHistory: messages.map((m) => ({ role: m.role, content: m.content })),
           apiKey: apiKey || undefined,
-          modelTier,
         }),
       });
       const data = await res.json();
@@ -102,9 +96,7 @@ export default function ReportChat({
         appendUsageEntry({
           endpoint: "report-chat",
           model: data.usage.model,
-          tier: modelTier,
           usage: data.usage,
-          pricing,
         });
       }
     } catch (err) {
@@ -118,7 +110,10 @@ export default function ReportChat({
   const disabled = !report;
 
   return (
-    <div className="glass-panel flex flex-col h-[560px]">
+    // The cap matters because this column is sticky and the Back/Next bar is
+    // pinned to the bottom of the viewport: without it, a short window would
+    // leave the message input hidden underneath that bar.
+    <div className="glass-panel flex flex-col h-[560px] max-h-[calc(100vh-11rem)]">
       <div className="px-5 py-4 border-b border-[var(--color-border-subtle)]">
         <h3 className="font-medium text-sm">Refine the report</h3>
         <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
@@ -137,20 +132,25 @@ export default function ReportChat({
 
         {!disabled && messages.length === 0 && (
           <div className="text-center py-8">
-            <p className="text-sm text-[var(--color-text-muted)]">
+            <p className="text-sm text-[var(--color-text-secondary)]">
               No messages yet. Point out anything the report got wrong.
             </p>
-            <div className="flex flex-wrap gap-2 justify-center mt-4">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setInput(s)}
-                  className="text-xs px-3 py-1.5 rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
+            {/* Hidden the moment you start typing — once you have your own
+                wording, prompts to copy are just noise in the way. They come
+                back if you clear the box. */}
+            {!input.trim() && (
+              <div className="flex flex-wrap gap-2 justify-center mt-4">
+                {SUGGESTIONS.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setInput(s)}
+                    className="text-xs px-3 py-1.5 rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -231,12 +231,12 @@ export default function ReportChat({
                 Asking about
               </p>
               <p className="text-xs text-[var(--color-text-primary)] break-words">
-                {attachedItem.requirement}
+                {entryLabel(attachedItem)}
               </p>
             </div>
             <button
               onClick={onClearAttachment}
-              aria-label="Remove attached requirement"
+              aria-label="Remove attachment"
               className="shrink-0 p-1 rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-overlay)]"
             >
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -270,7 +270,7 @@ export default function ReportChat({
 
 const SUGGESTIONS = [
   "That Python requirement is wrong, I have 6 years",
-  "The Jira line isn't actually important for this role",
-  "Add a line about my AWS certification",
+  "I don't just meet that one — I led the team that built it",
+  "I also hold a patent in this area",
   "I don't think that gap is fair, I did this in my last job",
 ];

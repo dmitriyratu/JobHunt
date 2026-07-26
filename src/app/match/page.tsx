@@ -8,7 +8,6 @@ import ReportChat from "@/components/ReportChat";
 import SectionHeader from "@/components/SectionHeader";
 import StepNav from "@/components/StepNav";
 import { computeOverallScore } from "@/lib/matchReport";
-import { getPricingForTier } from "@/lib/models";
 import { ANALYSIS_RESET } from "@/lib/session";
 import {
   DEFAULT_SETTINGS,
@@ -55,7 +54,6 @@ export default function MatchPage() {
           resumeText: state.resumeText,
           jobDescription: state.jobDescription,
           apiKey: settings.apiKey || undefined,
-          modelTier: settings.modelTier,
         }),
       });
       const data = await res.json();
@@ -72,9 +70,7 @@ export default function MatchPage() {
         appendUsageEntry({
           endpoint: "analyze-match",
           model: data.usage.model,
-          tier: settings.modelTier,
           usage: data.usage,
-          pricing: getPricingForTier(settings.modelTier),
         });
       }
     } catch (err) {
@@ -135,7 +131,21 @@ export default function MatchPage() {
         if (!proposal || proposal.resolution !== "pending") return prev;
 
         let items = prev.matchReport.items;
-        if (proposal.action === "add" && proposal.after) {
+        // Reports saved before standouts existed have no array here.
+        let standouts = prev.matchReport.standouts ?? [];
+
+        if (proposal.target === "standout") {
+          if (proposal.action === "add" && proposal.after) {
+            const after = proposal.after;
+            standouts = [...standouts, after];
+          } else if (proposal.action === "modify" && proposal.after) {
+            const after = proposal.after;
+            standouts = standouts.map((s) => (s.id === after.id ? after : s));
+          } else if (proposal.action === "remove" && proposal.targetItemId) {
+            const targetId = proposal.targetItemId;
+            standouts = standouts.filter((s) => s.id !== targetId);
+          }
+        } else if (proposal.action === "add" && proposal.after) {
           const after = proposal.after;
           items = [...items, after];
         } else if (proposal.action === "modify" && proposal.after) {
@@ -159,6 +169,9 @@ export default function MatchPage() {
           matchReport: {
             ...prev.matchReport,
             items,
+            standouts,
+            // Standouts and overshoot are persuasion material, not extra fit —
+            // the score still measures only what the posting asked for.
             overallScore: computeOverallScore(items),
           },
           reportChatMessages: messages,
@@ -202,7 +215,7 @@ export default function MatchPage() {
         onSettingsSave={handleSettingsSave}
       />
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="app-container py-8">
         {!canAnalyze ? (
           <div className="glass-panel p-8 text-center">
             <p className="text-sm text-[var(--color-text-secondary)] mb-4">
@@ -245,10 +258,14 @@ export default function MatchPage() {
                 resumeText={state.resumeText}
                 jobDescription={state.jobDescription}
                 apiKey={settings.apiKey}
-                modelTier={settings.modelTier}
-                pricing={getPricingForTier(settings.modelTier)}
                 attachedItem={
-                  state.matchReport?.items.find((i) => i.id === attachedItemId) ?? null
+                  state.matchReport
+                    ? state.matchReport.items.find((i) => i.id === attachedItemId) ??
+                      (state.matchReport.standouts ?? []).find(
+                        (s) => s.id === attachedItemId
+                      ) ??
+                      null
+                    : null
                 }
                 onClearAttachment={() => setAttachedItemId(null)}
                 onNewMessage={handleNewChatMessage}

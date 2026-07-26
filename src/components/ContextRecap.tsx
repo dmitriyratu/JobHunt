@@ -15,12 +15,62 @@ type Props = {
   onCompanyNameChange: (v: string) => void;
 };
 
+/**
+ * One row of the definition list.
+ *
+ * Values are left-aligned into a shared column rather than right-aligned to the
+ * panel edge. Right-alignment gave every value a different starting x, so once
+ * one of them wrapped there was nothing tying a line back to its label.
+ */
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 text-xs">
-      <span className="text-[var(--color-text-muted)] shrink-0">{label}</span>
-      <span className="text-[var(--color-text-secondary)] text-right min-w-0">{children}</span>
-    </div>
+    <>
+      <dt className="text-[var(--color-text-muted)]">{label}</dt>
+      <dd className="text-[var(--color-text-secondary)] min-w-0">{children}</dd>
+    </>
+  );
+}
+
+/**
+ * A job URL is far too long to sit in a right-aligned row — truncating it just
+ * shows a meaningless prefix. Show the host instead and keep the full URL on
+ * the link, which is both shorter and more useful than a clipped string.
+ */
+function JobSourceValue({ jobSource, charCount }: { jobSource: string; charCount: number }) {
+  if (!jobSource) return <>—</>;
+
+  let url: URL | null = null;
+  try {
+    const parsed = new URL(jobSource);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") url = parsed;
+  } catch {
+    // Not a URL — a filename or pasted text.
+  }
+
+  const suffix = ` · ${charCount.toLocaleString()} chars, sent in full`;
+
+  if (!url) {
+    return (
+      <span className="truncate inline-block max-w-full align-bottom" title={jobSource}>
+        {jobSource}
+        {suffix}
+      </span>
+    );
+  }
+
+  return (
+    <span className="truncate inline-block max-w-full align-bottom">
+      <a
+        href={url.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={url.href}
+        className="text-[var(--color-accent)] hover:underline"
+      >
+        {url.hostname.replace(/^www\./, "")} ↗
+      </a>
+      {suffix}
+    </span>
   );
 }
 
@@ -47,39 +97,63 @@ export default function ContextRecap({
         </Link>
       </div>
 
-      <div className="space-y-3">
+      <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-3 text-xs items-baseline">
         {jobTitle && <Row label="Role">{jobTitle}</Row>}
 
         {detectedCompany ? (
           <Row label="Company">{detectedCompany}</Row>
         ) : (
-          <div className="flex items-center justify-between gap-3">
-            <label className="text-xs text-[var(--color-text-muted)] shrink-0">
-              Company (not detected)
-            </label>
-            <input
-              value={companyName}
-              onChange={(e) => onCompanyNameChange(e.target.value)}
-              placeholder="e.g. Netflix"
-              className="input-base max-w-[220px] py-1.5 text-xs"
-            />
-          </div>
+          <>
+            <dt className="text-[var(--color-text-muted)]">
+              <label htmlFor="recap-company">Company</label>
+            </dt>
+            <dd className="min-w-0">
+              <input
+                id="recap-company"
+                value={companyName}
+                onChange={(e) => onCompanyNameChange(e.target.value)}
+                placeholder="Not detected — type it here"
+                className="input-base py-1.5 text-xs"
+              />
+            </dd>
+          </>
         )}
 
         <Row label="Resume">
-          <span className="truncate inline-block max-w-full align-bottom">
-            {resumeFilename || "—"} · {resumeText.length.toLocaleString()} chars
+          <span
+            className="truncate inline-block max-w-full align-bottom"
+            title={resumeFilename || undefined}
+          >
+            {resumeFilename || "—"} · {resumeText.length.toLocaleString()} chars, sent in full
           </span>
         </Row>
         <Row label="Job description">
-          <span className="truncate inline-block max-w-full align-bottom">
-            {jobSource || "—"} · {jobDescription.length.toLocaleString()} chars
-          </span>
+          <JobSourceValue jobSource={jobSource} charCount={jobDescription.length} />
         </Row>
+        {/* Spell out that the whole report goes in, not just the headline score
+            — "84/100 · 12 requirements" reads like the score is all the letter
+            gets, when in fact every requirement, its evidence and its
+            assessment are part of the prompt. */}
         <Row label="Match report">
-          {report ? `${report.overallScore}/100 fit · ${report.items.length} requirements` : "Not analyzed"}
+          {report ? (
+            <>
+              all {report.items.length} requirements with evidence
+              {(report.standouts ?? []).length > 0 &&
+                ` · ${(report.standouts ?? []).length} standout${
+                  (report.standouts ?? []).length === 1 ? "" : "s"
+                }`}{" "}
+              · {report.overallScore}/100 fit
+            </>
+          ) : (
+            "Not analyzed"
+          )}
         </Row>
-      </div>
+      </dl>
+
+      <p className="text-[10px] text-[var(--color-text-muted)] leading-relaxed mt-4 pt-3 border-t border-[var(--color-border-subtle)]">
+        Everything above is passed to the letter in full, plus the recipient, the company and any
+        notes you add below.
+      </p>
     </div>
   );
 }

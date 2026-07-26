@@ -13,6 +13,12 @@ import type { Session } from "@/types";
 
 type Props = {
   session: Session;
+  /** This is the application currently loaded in the workspace. */
+  active: boolean;
+  /**
+   * Details are showing. Kept separate from `active` so clicking away can
+   * collapse a card back to its compact form without switching applications.
+   */
   expanded: boolean;
   onSelect: () => void;
   onDelete: () => void;
@@ -33,15 +39,21 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default function SessionCard({ session, expanded, onSelect, onDelete }: Props) {
+export default function SessionCard({
+  session,
+  active,
+  expanded,
+  onSelect,
+  onDelete,
+}: Props) {
   const [confirming, setConfirming] = useState(false);
 
   const title = sessionTitle(session);
   const company = resolveCompany(session);
   const stage = sessionStage(session);
   const score = session.matchReport?.overallScore;
-  // The company already has its own row above, so don't repeat it in the
-  // title line — show just the role there when we know it.
+  // The company reads from the logo tile and its own line, so the headline
+  // shows just the role when we know it.
   const roleLabel = session.detectedJobTitle.trim() || title;
 
   // Delete is a sibling of the card button, never a child — nested buttons are
@@ -50,26 +62,35 @@ export default function SessionCard({ session, expanded, onSelect, onDelete }: P
     <div className="group relative">
       <button
         onClick={onSelect}
+        aria-expanded={expanded}
         className={`w-full text-left rounded-lg border p-3 transition-colors ${
-          expanded
+          active
             ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)]"
             : "border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] hover:border-[var(--color-text-muted)]"
         }`}
       >
-        {/* Wide wordmark logos get their own row so they read at full width
-            instead of being crushed into a square. */}
-        {company && (
-          <div className="flex items-center h-5 mb-2 pr-5">
-            <CompanyLogo company={company} />
+        {/* Brand mark leads, role reads beside it — the two things you scan a
+            list of applications for. The tile keeps a constant footprint
+            whether it holds a wordmark or the initials fallback, so the
+            headlines stay aligned down the rail. */}
+        <div className="flex items-start gap-3 pr-5">
+          {company && (
+            <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-1.5">
+              <CompanyLogo company={company} variant="tile" />
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            {/* Wraps — never truncated, so the full role is always readable. */}
+            <p className="text-sm font-medium break-words leading-snug">{roleLabel}</p>
+            {company && (
+              <p className="text-xs text-[var(--color-text-muted)] break-words mt-0.5">
+                {company}
+              </p>
+            )}
           </div>
-        )}
+        </div>
 
-        {/* Wraps — never truncated, so the full role is always readable. */}
-        <p className={`text-sm font-medium break-words ${company ? "" : "pr-5"}`}>
-          {roleLabel}
-        </p>
-
-        <div className="flex items-center flex-wrap gap-2 mt-2 text-[10px]">
+        <div className="flex items-center flex-wrap gap-2 mt-2.5 text-[10px]">
           {typeof score === "number" ? (
             <span className={`px-1.5 py-0.5 rounded-full font-medium ${scoreClass(score)}`}>
               {score}/100

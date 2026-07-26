@@ -9,6 +9,13 @@ import { useJobHuntState } from "@/lib/useAppState";
  * Prev/next footer for moving through the journey. Navigation is purely
  * navigation — it never clears downstream work (only submitting new material
  * on a page does that), so both directions are always safe.
+ *
+ * Pinned to the bottom of the viewport so it stays reachable on pages that run
+ * long (a twelve-requirement match report is taller than a screen). It is a
+ * child of the page's padded container, so `-mx-6 px-6` stretches its surface
+ * across that padding and `-mb-8` cancels the container's bottom padding, which
+ * keeps the bar flush with the viewport edge instead of detaching from it once
+ * the page is scrolled all the way down.
  */
 export default function StepNav({ hint }: { hint?: string }) {
   const { state } = useJobHuntState();
@@ -22,7 +29,7 @@ export default function StepNav({ hint }: { hint?: string }) {
   const current = steps[i];
 
   return (
-    <nav className="mt-8 pt-5 border-t border-[var(--color-border-subtle)] flex items-center justify-between gap-4">
+    <nav className="sticky bottom-0 z-30 mt-8 -mx-6 -mb-8 px-6 py-3 bg-[var(--color-surface)] border-t border-[var(--color-border)] flex items-center justify-between gap-4">
       <div className="min-w-0">
         {prev ? (
           <Link

@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import type { AppSettings } from "@/lib/settings";
 import { getTabId, type UsageEndpoint, type UsageEntry } from "@/lib/usage";
-import UsageModal from "./UsageModal";
+import SettingsModal from "./SettingsModal";
 
 type Props = {
   entries: UsageEntry[];
-  adminApiKey: string;
+  settings: AppSettings;
+  onSettingsSave: (settings: AppSettings) => void;
 };
 
 const ENDPOINT_LABEL: Record<UsageEndpoint, string> = {
@@ -21,8 +23,8 @@ function formatUsd(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
-export default function SessionCostSummary({ entries, adminApiKey }: Props) {
-  const [usageOpen, setUsageOpen] = useState(false);
+export default function SessionCostSummary({ entries, settings, onSettingsSave }: Props) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const tabId = getTabId();
   const sessionEntries = entries.filter((e) => e.tabId === tabId);
   if (sessionEntries.length === 0) return null;
@@ -51,16 +53,17 @@ export default function SessionCostSummary({ entries, adminApiKey }: Props) {
           ))}
         </div>
         <button
-          onClick={() => setUsageOpen(true)}
+          onClick={() => setSettingsOpen(true)}
           className="text-xs text-[var(--color-accent)] hover:underline"
         >
-          Full history →
+          Full usage →
         </button>
       </div>
-      <UsageModal
-        open={usageOpen}
-        onClose={() => setUsageOpen(false)}
-        adminApiKey={adminApiKey}
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={settings}
+        onSave={onSettingsSave}
       />
     </div>
   );

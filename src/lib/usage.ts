@@ -1,18 +1,18 @@
 import type { UsageStats } from "./structuredCompletion";
-import type { ModelTier } from "./models";
-import { computeCost, type ModelPricing } from "./pricing";
+import { getTaskModel, type TaskId } from "./models";
+import { computeCost } from "./pricing";
 
 export const USAGE_STORAGE_KEY = "jobhunt-usage";
 const TAB_ID_KEY = "jobhunt-tab-id";
 
-export type UsageEndpoint = "analyze-match" | "report-chat" | "generate-email";
+/** Each endpoint is one task, so the two names index the same thing. */
+export type UsageEndpoint = TaskId;
 
 export type UsageEntry = {
   id: string;
   timestamp: string;
   endpoint: UsageEndpoint;
   model: string;
-  tier: ModelTier;
   tabId: string;
   promptTokens: number;
   completionTokens: number;
@@ -49,24 +49,27 @@ function saveUsageLog(entries: UsageEntry[]): void {
   localStorage.setItem(USAGE_STORAGE_KEY, JSON.stringify(entries));
 }
 
+/**
+ * Pricing is derived from the endpoint rather than passed in: the endpoint
+ * fully determines the model, so the two can't drift apart. Cost is baked in
+ * here at record time so historical entries stay accurate if rates change.
+ */
 export function appendUsageEntry(params: {
   endpoint: UsageEndpoint;
   model: string;
-  tier: ModelTier;
   usage: UsageStats;
-  pricing: ModelPricing;
 }): UsageEntry[] {
+  const pricing = getTaskModel(params.endpoint).pricing;
   const entry: UsageEntry = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     timestamp: new Date().toISOString(),
     endpoint: params.endpoint,
     model: params.model,
-    tier: params.tier,
     tabId: getTabId(),
     promptTokens: params.usage.promptTokens,
     completionTokens: params.usage.completionTokens,
     totalTokens: params.usage.totalTokens,
-    costUsd: computeCost(params.pricing, params.usage.promptTokens, params.usage.completionTokens),
+    costUsd: computeCost(pricing, params.usage.promptTokens, params.usage.completionTokens),
   };
   const entries = [...loadUsageLog(), entry];
   saveUsageLog(entries);

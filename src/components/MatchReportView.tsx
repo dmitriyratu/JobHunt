@@ -1,6 +1,12 @@
 "use client";
 
-import type { MatchReport, MatchReportItem, MatchStatus, RequirementImportance } from "@/types";
+import type {
+  MatchReport,
+  MatchReportItem,
+  MatchStatus,
+  RequirementImportance,
+  RequirementStrength,
+} from "@/types";
 
 type Props = {
   report: MatchReport | null;
@@ -43,6 +49,74 @@ function sortItems(items: MatchReportItem[]): MatchReportItem[] {
       IMPORTANCE_ORDER[a.importance] - IMPORTANCE_ORDER[b.importance] ||
       STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
   );
+}
+
+const RULE_CLASS: Record<MatchStatus, string> = {
+  match: "border-[var(--color-success)]",
+  partial: "border-[var(--color-warning)]",
+  gap: "border-[var(--color-danger)]",
+};
+
+function ruleClass(status: MatchStatus, strength?: RequirementStrength): string {
+  if (status === "match" && strength === "exceeds") return "border-[var(--color-accent)]";
+  return RULE_CLASS[status];
+}
+
+/**
+ * A labelled, rule-marked block of supporting text.
+ *
+ * The requirement, the resume evidence, and the verdict are three different
+ * kinds of statement, and unlabelled they read as one grey paragraph. Every
+ * block shares the same indent so they line up; the rule colour is what says
+ * which is which.
+ */
+function DetailBlock({
+  label,
+  text,
+  rule,
+  muted = false,
+}: {
+  label: string;
+  text: string;
+  rule: string;
+  muted?: boolean;
+}) {
+  return (
+    <div className={`border-l-2 pl-2.5 ${rule}`}>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)] mb-0.5">
+        {label}
+      </p>
+      <p
+        className={`text-xs leading-relaxed ${
+          muted ? "text-[var(--color-text-tertiary)]" : "text-[var(--color-text-secondary)]"
+        }`}
+      >
+        {text}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Status and overshoot read as one four-level scale — Gap / Partial / Match /
+ * Exceeds — rather than two pills side by side. "Exceeds" already implies a
+ * match, so showing both would just crowd the row.
+ */
+export function ResultPill({
+  status,
+  strength,
+}: {
+  status: MatchStatus;
+  strength?: RequirementStrength;
+}) {
+  if (status === "match" && strength === "exceeds") {
+    return (
+      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-accent)] text-white">
+        Exceeds
+      </span>
+    );
+  }
+  return <StatusPill status={status} />;
 }
 
 export function StatusPill({ status }: { status: MatchStatus }) {
@@ -166,26 +240,46 @@ export default function MatchReportView({
   }
 
   const sorted = sortItems(report.items);
+  // Reports saved before standouts existed have no array here.
+  const standouts = report.standouts ?? [];
 
   return (
+    // Deliberately unbounded height. A dozen requirements, each with evidence
+    // and an assessment, needs the whole page — boxing them into a scroller
+    // made the report feel cramped and hid most of it. Back/Next is a sticky
+    // bar at the page bottom instead, so a long report never puts the nav out
+    // of reach.
     <div className="glass-panel p-5">
-      <div className="flex items-start gap-4 mb-4">
+      <div className="flex items-start gap-4">
         <ScoreRing score={report.overallScore} />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h3 className="font-medium text-sm mb-1">Match report</h3>
           <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
             {report.summary}
           </p>
+          {error && <p className="text-[var(--color-danger)] text-xs mt-2">{error}</p>}
         </div>
       </div>
 
-      {error && <p className="text-[var(--color-danger)] text-xs mb-3">{error}</p>}
-
-      <p className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide mb-2">
-        Click a requirement to ask the chat about it
+      {/* Full panel width so it lines up with the requirement cards below,
+          rather than reading as a control that belongs to the summary text. */}
+      <button
+        onClick={onAnalyze}
+        disabled={loading}
+        className="btn-secondary w-full text-xs mt-4"
+      >
+        {loading ? "Re-analyzing…" : "Re-analyze match"}
+      </button>
+      <p className="text-[10px] text-[var(--color-text-muted)] mt-2 text-center">
+        Replaces this report, including any accepted chat edits.
       </p>
 
-      <div className="space-y-2 mb-4">
+      <p className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide mt-5 mb-2">
+        Click any entry to ask the chat about it
+      </p>
+
+      <div>
+        <div className="space-y-2">
         {sorted.map((item) => {
           const attached = item.id === attachedItemId;
           return (
@@ -197,22 +291,39 @@ export default function MatchReportView({
               className={`w-full text-left rounded-lg border p-3 transition-colors ${
                 attached
                   ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)]"
-                  : "border-[var(--color-border-subtle)] bg-[var(--color-surface)] hover:border-[var(--color-text-muted)]"
+                  : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-text-muted)]"
               }`}
             >
-              <div className="flex items-start justify-between gap-2 mb-1.5">
-                <p className="text-sm font-medium min-w-0">{item.requirement}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-semibold text-[var(--color-text-primary)] leading-snug min-w-0">
+                  {item.requirement}
+                </p>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <ImportancePill importance={item.importance} />
-                  <StatusPill status={item.status} />
+                  <ResultPill status={item.status} strength={item.strength} />
                 </div>
               </div>
-              {item.evidence && (
-                <p className="text-xs text-[var(--color-text-secondary)]">{item.evidence}</p>
+
+              {(item.evidence || item.note) && (
+                <div className="mt-2.5 pt-2.5 border-t border-[var(--color-border-subtle)] space-y-2">
+                  {item.evidence && (
+                    <DetailBlock
+                      label="From your resume"
+                      text={item.evidence}
+                      rule={ruleClass(item.status, item.strength)}
+                    />
+                  )}
+                  {item.note && (
+                    <DetailBlock
+                      label="Assessment"
+                      text={item.note}
+                      rule="border-[var(--color-text-muted)]"
+                      muted
+                    />
+                  )}
+                </div>
               )}
-              {item.note && (
-                <p className="text-xs text-[var(--color-text-muted)] mt-1">{item.note}</p>
-              )}
+
               {attached && (
                 <p className="text-[10px] font-medium text-[var(--color-accent)] mt-2">
                   Attached to your next chat message
@@ -223,12 +334,64 @@ export default function MatchReportView({
         })}
       </div>
 
-      <button onClick={onAnalyze} disabled={loading} className="btn-secondary w-full text-xs">
-        {loading ? "Re-analyzing…" : "Re-analyze match"}
-      </button>
-      <p className="text-[10px] text-[var(--color-text-muted)] mt-2 text-center">
-        Re-analyzing replaces this report, including any accepted chat edits.
-      </p>
+      {standouts.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-[var(--color-border-subtle)]">
+          <p className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide mb-1">
+            Standouts
+          </p>
+          <p className="text-xs text-[var(--color-text-secondary)] mb-2">
+            This posting never asked for these — the letter uses at most one.
+          </p>
+          <div className="space-y-2">
+            {standouts.map((standout) => {
+              const attached = standout.id === attachedItemId;
+              return (
+                <button
+                  key={standout.id}
+                  type="button"
+                  onClick={() => onAttachItem(standout.id)}
+                  aria-pressed={attached}
+                  className={`w-full text-left rounded-lg border p-3 transition-colors ${
+                    attached
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)]"
+                      : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-text-muted)]"
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-[var(--color-text-primary)] leading-snug">
+                    {standout.credential}
+                  </p>
+                  {(standout.evidence || standout.whyValuable) && (
+                    <div className="mt-2.5 pt-2.5 border-t border-[var(--color-border-subtle)] space-y-2">
+                      {standout.evidence && (
+                        <DetailBlock
+                          label="From your resume"
+                          text={standout.evidence}
+                          rule="border-[var(--color-accent)]"
+                        />
+                      )}
+                      {standout.whyValuable && (
+                        <DetailBlock
+                          label="Why it matters"
+                          text={standout.whyValuable}
+                          rule="border-[var(--color-text-muted)]"
+                          muted
+                        />
+                      )}
+                    </div>
+                  )}
+                  {attached && (
+                    <p className="text-[10px] font-medium text-[var(--color-accent)] mt-2">
+                      Attached to your next chat message
+                    </p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      </div>
     </div>
   );
 }

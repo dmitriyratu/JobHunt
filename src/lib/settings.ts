@@ -1,10 +1,12 @@
-import { MODEL_TIERS, type ModelTier } from "@/lib/models";
-
 export const SETTINGS_STORAGE_KEY = "jobhunt-settings";
 
+/**
+ * Model choice deliberately lives in code (see @/lib/models), not here — each
+ * endpoint picks the model its job needs. The only thing the user configures
+ * is credentials.
+ */
 export type AppSettings = {
   apiKey: string;
-  modelTier: ModelTier;
   /**
    * Optional OpenAI *Admin* key (sk-admin-...) with the api.usage.read scope.
    * Only used to read authoritative spend from OpenAI's Admin API; a normal
@@ -15,23 +17,19 @@ export type AppSettings = {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   apiKey: "",
-  modelTier: "balanced",
   adminApiKey: "",
 };
-
-function isModelTier(value: unknown): value is ModelTier {
-  return typeof value === "string" && value in MODEL_TIERS;
-}
 
 export function loadSettings(): AppSettings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
+    // A previously stored `modelTier` is simply ignored — the extra key is
+    // harmless and disappears on the next save.
     const parsed = JSON.parse(raw) as Partial<AppSettings>;
     return {
       apiKey: parsed.apiKey ?? "",
-      modelTier: isModelTier(parsed.modelTier) ? parsed.modelTier : DEFAULT_SETTINGS.modelTier,
       adminApiKey: parsed.adminApiKey ?? "",
     };
   } catch {

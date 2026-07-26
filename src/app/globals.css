@@ -8,6 +8,12 @@
   --color-border-subtle: #e7e9f1;
   --color-text-primary: #18181b;
   --color-text-secondary: #3f3f46;
+  /* Third readable step. --color-text-muted is only 4.48:1 on the tinted card
+     fill (#f5f6fa), which fails AA for body copy; this clears 7:1 there and
+     still reads as subordinate to secondary. Use it for de-emphasised prose. */
+  --color-text-tertiary: #52525b;
+  /* Reserve muted for genuinely non-essential text on white, and for hairlines
+     that need to be seen (4.48:1 on the card fill clears the 3:1 non-text bar). */
   --color-text-muted: #71717a;
   --color-accent: #2f5eea;
   --color-accent-hover: #2547c0;
@@ -58,6 +64,24 @@
 }
 
 @layer utilities {
+  /**
+   * The one content width, used by the header and by every page's <main>.
+   *
+   * Defined once because three hand-written max-widths had already drifted
+   * apart (header and two pages at 1152px, the letter page at 768px), which
+   * left most of a wide window empty and made the pages look unrelated.
+   *
+   * The inline padding is deliberately a constant 1.5rem at every breakpoint:
+   * the sticky StepNav bleeds its surface across it with `-mx-6 px-6`, so a
+   * responsive value here would misalign that bar.
+   */
+  .app-container {
+    width: 100%;
+    max-width: 1700px;
+    margin-inline: auto;
+    padding-inline: 1.5rem;
+  }
+
   .glass-panel {
     background: var(--color-surface-raised);
     border: 1px solid var(--color-border-subtle);

@@ -5,7 +5,22 @@ import { getCachedLogo, setCachedLogo } from "@/lib/logoCache";
 
 type Props = {
   company: string;
+  /**
+   * "inline" is a fixed-height strip that flows with text.
+   * "tile" fills a caller-sized box and falls back to initials rather than a
+   * name, so the box stays the same size whether or not a logo was found.
+   */
+  variant?: "inline" | "tile";
 };
+
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase() ?? "")
+    .join("");
+}
 
 /**
  * Company logos come from Wikidata's P154 ("logo image") property, resolved
@@ -16,7 +31,7 @@ type Props = {
  * Falls back to a plain text label whenever the company isn't in Wikidata
  * (most smaller employers won't be) or the image fails to load.
  */
-export default function CompanyLogo({ company }: Props) {
+export default function CompanyLogo({ company, variant = "inline" }: Props) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -53,6 +68,16 @@ export default function CompanyLogo({ company }: Props) {
   if (!company.trim()) return null;
 
   if (!url || failed) {
+    if (variant === "tile") {
+      return (
+        <span
+          className="text-sm font-semibold text-[var(--color-text-muted)]"
+          aria-label={company}
+        >
+          {initials(company)}
+        </span>
+      );
+    }
     return (
       <span className="text-xs font-medium text-[var(--color-text-secondary)]">{company}</span>
     );
@@ -68,7 +93,11 @@ export default function CompanyLogo({ company }: Props) {
       onError={() => setFailed(true)}
       loading="lazy"
       referrerPolicy="no-referrer"
-      className="h-5 w-auto max-w-[140px] object-contain object-left"
+      className={
+        variant === "tile"
+          ? "max-h-full max-w-full object-contain"
+          : "h-5 w-auto max-w-[140px] object-contain object-left"
+      }
     />
   );
 }

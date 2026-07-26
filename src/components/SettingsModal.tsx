@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MODEL_TIERS, type ModelTier } from "@/lib/models";
+import { TASK_MODELS, type TaskId, type TaskModel } from "@/lib/models";
 import { maskApiKey, type AppSettings } from "@/lib/settings";
+import UsagePanel from "./UsagePanel";
 
 type Props = {
   open: boolean;
@@ -11,15 +12,8 @@ type Props = {
   onSave: (settings: AppSettings) => void;
 };
 
-const TIER_BADGE_CLASS: Record<ModelTier, string> = {
-  flagship: "bg-[var(--color-accent-muted)] text-[var(--color-accent)]",
-  balanced: "bg-[var(--color-success-muted)] text-[var(--color-success)]",
-  budget: "bg-[var(--color-surface-overlay)] text-[var(--color-text-muted)]",
-};
-
 export default function SettingsModal({ open, onClose, settings, onSave }: Props) {
   const [draftKey, setDraftKey] = useState(settings.apiKey);
-  const [draftTier, setDraftTier] = useState<ModelTier>(settings.modelTier);
   const [draftAdminKey, setDraftAdminKey] = useState(settings.adminApiKey);
   const [showKey, setShowKey] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -30,7 +24,6 @@ export default function SettingsModal({ open, onClose, settings, onSave }: Props
   useEffect(() => {
     if (!open) return;
     setDraftKey(settings.apiKey);
-    setDraftTier(settings.modelTier);
     setDraftAdminKey(settings.adminApiKey);
     setEditingKey(!settings.apiKey);
   }, [open, settings]);
@@ -49,7 +42,6 @@ export default function SettingsModal({ open, onClose, settings, onSave }: Props
   function handleSave() {
     onSave({
       apiKey: draftKey.trim(),
-      modelTier: draftTier,
       adminApiKey: draftAdminKey.trim(),
     });
     setSavedFlash(true);
@@ -65,7 +57,7 @@ export default function SettingsModal({ open, onClose, settings, onSave }: Props
       onClick={onClose}
     >
       <div
-        className="glass-panel w-full max-w-3xl my-8 p-0 overflow-hidden"
+        className="glass-panel w-full max-w-4xl my-8 p-0 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -75,7 +67,7 @@ export default function SettingsModal({ open, onClose, settings, onSave }: Props
           <div>
             <h2 className="font-medium text-sm">AI settings</h2>
             <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-              Your OpenAI key and model
+              Your OpenAI key, and what it has cost
             </p>
           </div>
           <button onClick={onClose} className="btn-secondary text-xs py-1.5 px-3">
@@ -146,71 +138,87 @@ export default function SettingsModal({ open, onClose, settings, onSave }: Props
               </div>
             )}
             <p className="text-xs text-[var(--color-text-muted)] mt-1.5">
-              Stored only in your browser — never sent anywhere but OpenAI. Required when the app is deployed.
+              Stored only in your browser — never sent anywhere but OpenAI. Required when the app is
+              deployed.
             </p>
           </div>
 
-          <div>
-            <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-2">
-              Model
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {(Object.entries(MODEL_TIERS) as [ModelTier, (typeof MODEL_TIERS)[ModelTier]][]).map(
-                ([tier, meta]) => (
-                  <button
-                    key={tier}
-                    type="button"
-                    onClick={() => setDraftTier(tier)}
-                    className={`text-left rounded-lg border p-4 transition-colors ${
-                      draftTier === tier
-                        ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)]"
-                        : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-text-muted)]"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-sm">{meta.label}</span>
-                      <span
-                        className={`text-[10px] font-medium uppercase tracking-wide px-2 py-0.5 rounded-full ${TIER_BADGE_CLASS[tier]}`}
-                      >
-                        {meta.cost}
-                      </span>
-                    </div>
-                    <p className="text-xs text-[var(--color-text-secondary)] font-mono mb-1">
-                      {meta.subtitle}
-                    </p>
-                    <p className="text-xs text-[var(--color-text-muted)] leading-relaxed mb-2">
-                      {meta.description}
-                    </p>
-                    <p className="text-[10px] text-[var(--color-text-muted)] font-mono">
-                      ${meta.pricing.input.toFixed(2)} in · ${meta.pricing.output.toFixed(2)} out /1M
-                    </p>
-                  </button>
-                )
+          {/* Native <details> so the disclosure is keyboard-operable and
+              announced correctly without any state of its own. */}
+          <details className="group rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
+            <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] rounded-lg">
+              <svg
+                className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+                aria-hidden
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              Advanced
+              {settings.adminApiKey && (
+                <span className="ml-1 h-1.5 w-1.5 rounded-full bg-[var(--color-success)]" title="Admin key set" />
               )}
-            </div>
-            <p className="text-xs text-[var(--color-text-muted)] mt-2">
-              Estimates — verify current rates at platform.openai.com/pricing.
-            </p>
-          </div>
+            </summary>
 
-          <div>
-            <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-2">
-              OpenAI Admin key <span className="text-[var(--color-text-muted)]">(optional)</span>
-            </label>
-            <input
-              type="password"
-              value={draftAdminKey}
-              onChange={(e) => setDraftAdminKey(e.target.value)}
-              placeholder="sk-admin-..."
-              className="input-base font-mono text-sm"
-              autoComplete="off"
-            />
-            <p className="text-xs text-[var(--color-text-muted)] mt-1.5">
-              Lets Usage show OpenAI&rsquo;s own spend figures instead of local estimates. Needs an
-              Admin key with the <code className="font-mono">api.usage.read</code> scope — a normal
-              project key is rejected. Create one under Organization &rarr; Admin keys.
-            </p>
-          </div>
+            <div className="px-4 pb-4 pt-1 space-y-5">
+              <div>
+                <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-2">
+                  OpenAI Admin key <span className="text-[var(--color-text-muted)]">(optional)</span>
+                </label>
+                <input
+                  type="password"
+                  value={draftAdminKey}
+                  onChange={(e) => setDraftAdminKey(e.target.value)}
+                  placeholder="sk-admin-..."
+                  className="input-base font-mono text-sm"
+                  autoComplete="off"
+                />
+                <p className="text-xs text-[var(--color-text-muted)] mt-1.5">
+                  Lets Usage below show OpenAI&rsquo;s own spend figures instead of local estimates.
+                  Needs an Admin key with the <code className="font-mono">api.usage.read</code>{" "}
+                  scope — a normal project key is rejected. Create one under Organization &rarr;
+                  Admin keys.
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+                  Models
+                </p>
+                <p className="text-xs text-[var(--color-text-muted)] mb-3">
+                  Each step runs on the model its job needs — nothing to choose.
+                </p>
+                <ul className="space-y-2">
+                  {(Object.entries(TASK_MODELS) as [TaskId, TaskModel][]).map(([task, meta]) => (
+                    <li
+                      key={task}
+                      className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-3"
+                    >
+                      <div className="flex items-baseline justify-between gap-3 mb-1">
+                        <span className="font-medium text-sm">{meta.task}</span>
+                        <span className="text-xs font-mono text-[var(--color-text-secondary)] shrink-0">
+                          {meta.label}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
+                        {meta.why}
+                      </p>
+                      <p className="text-[10px] text-[var(--color-text-muted)] font-mono mt-1.5">
+                        ${meta.pricing.input.toFixed(2)} in · ${meta.pricing.output.toFixed(2)} out
+                        /1M
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-[var(--color-text-muted)] mt-2">
+                  Rates are estimates — verify at platform.openai.com/pricing.
+                </p>
+              </div>
+            </div>
+          </details>
 
           <div className="flex items-center gap-3">
             <button onClick={handleSave} className="btn-primary">
@@ -221,6 +229,14 @@ export default function SettingsModal({ open, onClose, settings, onSave }: Props
                 Add a key to use chat and email generation
               </p>
             )}
+          </div>
+
+          <div className="pt-5 border-t border-[var(--color-border-subtle)]">
+            <h3 className="font-medium text-sm">Usage &amp; spend</h3>
+            <p className="text-xs text-[var(--color-text-muted)] mt-0.5 mb-4">
+              What this app has cost you
+            </p>
+            <UsagePanel adminApiKey={settings.adminApiKey} />
           </div>
         </div>
       </div>
