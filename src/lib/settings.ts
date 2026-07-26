@@ -1,21 +1,27 @@
-import type { ModelTier } from "@/lib/models";
-import { DEFAULT_PRICING, type ModelPricing } from "@/lib/pricing";
+import { MODEL_TIERS, type ModelTier } from "@/lib/models";
 
 export const SETTINGS_STORAGE_KEY = "jobhunt-settings";
 
 export type AppSettings = {
   apiKey: string;
   modelTier: ModelTier;
-  monthlyBudgetUsd: number;
-  pricing: Record<ModelTier, ModelPricing>;
+  /**
+   * Optional OpenAI *Admin* key (sk-admin-...) with the api.usage.read scope.
+   * Only used to read authoritative spend from OpenAI's Admin API; a normal
+   * project key is rejected there with a 403.
+   */
+  adminApiKey: string;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
   apiKey: "",
-  modelTier: "premium",
-  monthlyBudgetUsd: 20,
-  pricing: DEFAULT_PRICING,
+  modelTier: "balanced",
+  adminApiKey: "",
 };
+
+function isModelTier(value: unknown): value is ModelTier {
+  return typeof value === "string" && value in MODEL_TIERS;
+}
 
 export function loadSettings(): AppSettings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
@@ -25,15 +31,8 @@ export function loadSettings(): AppSettings {
     const parsed = JSON.parse(raw) as Partial<AppSettings>;
     return {
       apiKey: parsed.apiKey ?? "",
-      modelTier: parsed.modelTier === "budget" ? "budget" : "premium",
-      monthlyBudgetUsd:
-        typeof parsed.monthlyBudgetUsd === "number" && parsed.monthlyBudgetUsd >= 0
-          ? parsed.monthlyBudgetUsd
-          : DEFAULT_SETTINGS.monthlyBudgetUsd,
-      pricing: {
-        premium: { ...DEFAULT_PRICING.premium, ...parsed.pricing?.premium },
-        budget: { ...DEFAULT_PRICING.budget, ...parsed.pricing?.budget },
-      },
+      modelTier: isModelTier(parsed.modelTier) ? parsed.modelTier : DEFAULT_SETTINGS.modelTier,
+      adminApiKey: parsed.adminApiKey ?? "",
     };
   } catch {
     return DEFAULT_SETTINGS;

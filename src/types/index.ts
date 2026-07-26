@@ -45,30 +45,42 @@ export type ReportChatMessage = ChatMessage & {
   proposals?: ResolvedProposal[];
 };
 
-export type AppState = {
+export type JobSourceType = "file" | "url" | "text" | "";
+
+export type Session = {
+  // Metadata — owned by the store, never written directly by callers.
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  /**
+   * False while this is still a scratch draft on page 1. Drafts are hidden
+   * from the applications rail and only become real entries once the user
+   * advances to the match report.
+   */
+  committed: boolean;
+
+  // Source material
   resumeText: string;
   resumeFilename: string;
   jobDescription: string;
   jobSource: string;
-  jobSourceType: "file" | "url" | "text" | "";
+  jobSourceType: JobSourceType;
+
+  // Analysis
   matchReport: MatchReport | null;
   reportChatMessages: ReportChatMessage[];
-  letterContext: string;
-  generatedEmail: string;
-  recipientName: string;
-  companyName: string;
-};
+  /** Written only by analyze-match — derived, not user-editable. */
+  detectedCompany: string;
+  detectedJobTitle: string;
+  /** Bare domain (e.g. "netflix.com") used to fetch the company logo. */
+  detectedCompanyDomain: string;
 
-export const initialAppState: AppState = {
-  resumeText: "",
-  resumeFilename: "",
-  jobDescription: "",
-  jobSource: "",
-  jobSourceType: "",
-  matchReport: null,
-  reportChatMessages: [],
-  letterContext: "",
-  generatedEmail: "",
-  recipientName: "",
-  companyName: "",
+  // Letter
+  letterContext: string;
+  recipientName: string;
+  /** Manual fallback, used only when detectedCompany is empty. */
+  companyName: string;
+  generatedSubject: string;
+  /** HTML (TipTap) */
+  generatedBody: string;
 };

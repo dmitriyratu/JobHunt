@@ -45,10 +45,11 @@ export async function POST(request: NextRequest) {
       } catch {
         return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
       }
-      const extracted = cleanExtractedText(await fetchAndExtractText(parsedUrl.toString()));
+      const fetched = await fetchAndExtractText(parsedUrl.toString());
+      const extracted = cleanExtractedText(fetched.text);
       return NextResponse.json({
         text: extracted,
-        source: parsedUrl.toString(),
+        source: fetched.url,
         sourceType: "url",
         charCount: extracted.length,
       });

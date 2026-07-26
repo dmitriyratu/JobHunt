@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { deleteFile, loadFile, saveFile } from "@/lib/fileStore";
 import DocumentPreview from "./DocumentPreview";
 
 type Props = {
   resumeText: string;
   resumeFilename: string;
+  fileKey: string;
   onParsed: (text: string, filename: string) => void;
   onClear: () => void;
 };
@@ -13,6 +15,7 @@ type Props = {
 export default function ResumeUpload({
   resumeText,
   resumeFilename,
+  fileKey: FILE_KEY,
   onParsed,
   onClear,
 }: Props) {
@@ -28,6 +31,21 @@ export default function ResumeUpload({
       if (fileUrl) URL.revokeObjectURL(fileUrl);
     };
   }, [fileUrl]);
+
+  // Rehydrate the original-file preview from IndexedDB after a reload —
+  // resumeText survives in localStorage, but the File blob only lives here.
+  useEffect(() => {
+    if (!resumeText || fileUrl) return;
+    let cancelled = false;
+    loadFile(FILE_KEY).then((file) => {
+      if (cancelled || !file) return;
+      setFileUrl(URL.createObjectURL(file));
+      setIsPdf(file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [resumeText, fileUrl, FILE_KEY]);
 
   const uploadFile = useCallback(
     async (file: File) => {
@@ -49,6 +67,7 @@ export default function ResumeUpload({
           return URL.createObjectURL(file);
         });
         setIsPdf(file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
+        void saveFile(FILE_KEY, file);
         onParsed(data.text, data.filename);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Upload failed");
@@ -56,7 +75,7 @@ export default function ResumeUpload({
         setLoading(false);
       }
     },
-    [onParsed]
+    [onParsed, FILE_KEY]
   );
 
   const handleClear = useCallback(() => {
@@ -65,8 +84,9 @@ export default function ResumeUpload({
       return null;
     });
     setIsPdf(false);
+    void deleteFile(FILE_KEY);
     onClear();
-  }, [onClear]);
+  }, [onClear, FILE_KEY]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {

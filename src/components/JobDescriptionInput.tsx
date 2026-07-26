@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { deleteFile, loadFile, saveFile } from "@/lib/fileStore";
+import { canonicalizeLinkedInUrl } from "@/lib/linkedinUrl";
 import DocumentPreview from "./DocumentPreview";
 
 type Tab = "paste" | "url" | "file";
@@ -10,6 +12,7 @@ type Props = {
   jobDescription: string;
   jobSource: string;
   jobSourceType: SourceType | "";
+  fileKey: string;
   onParsed: (text: string, source: string, sourceType: SourceType) => void;
   onClear: () => void;
 };
@@ -18,6 +21,7 @@ export default function JobDescriptionInput({
   jobDescription,
   jobSource,
   jobSourceType,
+  fileKey: FILE_KEY,
   onParsed,
   onClear,
 }: Props) {
@@ -36,6 +40,21 @@ export default function JobDescriptionInput({
     };
   }, [fileUrl]);
 
+  // Rehydrate the original-file preview from IndexedDB after a reload — the
+  // extracted text survives in localStorage, but the File blob only lives here.
+  useEffect(() => {
+    if (jobSourceType !== "file" || !jobDescription || fileUrl) return;
+    let cancelled = false;
+    loadFile(FILE_KEY).then((file) => {
+      if (cancelled || !file) return;
+      setFileUrl(URL.createObjectURL(file));
+      setIsPdf(file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [jobSourceType, jobDescription, fileUrl, FILE_KEY]);
+
   const submit = useCallback(async () => {
     setError("");
     setLoading(true);
@@ -53,6 +72,7 @@ export default function JobDescriptionInput({
           return URL.createObjectURL(file);
         });
         setIsPdf(file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
+        void saveFile(FILE_KEY, file);
         onParsed(data.text, data.source, "file");
         return;
       }
@@ -74,7 +94,7 @@ export default function JobDescriptionInput({
     } finally {
       setLoading(false);
     }
-  }, [tab, url, pasteText, onParsed]);
+  }, [tab, url, pasteText, onParsed, FILE_KEY]);
 
   const handleClear = useCallback(() => {
     setFileUrl((prev) => {
@@ -82,8 +102,9 @@ export default function JobDescriptionInput({
       return null;
     });
     setIsPdf(false);
+    void deleteFile(FILE_KEY);
     onClear();
-  }, [onClear]);
+  }, [onClear, FILE_KEY]);
 
   if (jobDescription) {
     return (
@@ -91,8 +112,14 @@ export default function JobDescriptionInput({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="font-medium text-sm">Job description loaded</p>
-            <p className="text-[var(--color-text-secondary)] text-xs mt-0.5 truncate">
-              Source: {jobSource} · {jobDescription.length.toLocaleString()} chars
+            {/* Only the URL may break mid-token; the char count stays intact
+                instead of splitting into "5,799 c / hars". */}
+            <p className="text-[var(--color-text-secondary)] text-xs mt-0.5">
+              <span className="break-all">{jobSource}</span>
+              <span className="whitespace-nowrap">
+                {" · "}
+                {jobDescription.length.toLocaleString()} chars
+              </span>
             </p>
           </div>
           <button onClick={handleClear} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
@@ -148,7 +175,7 @@ export default function JobDescriptionInput({
         <input
           type="url"
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          onChange={(e) => setUrl(canonicalizeLinkedInUrl(e.target.value))}
           placeholder="https://company.com/jobs/senior-engineer"
           className="input-base"
         />

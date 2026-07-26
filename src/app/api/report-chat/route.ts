@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type OpenAI from "openai";
-import type { ModelTier } from "@/lib/models";
+import { tierSupportsTemperature, type ModelTier } from "@/lib/models";
 import { getOpenAIClient, resolveModel } from "@/lib/openai";
 import { createStructuredCompletion } from "@/lib/structuredCompletion";
 import type {
@@ -120,6 +120,8 @@ type ReportChatRequest = {
   jobDescription: string;
   report: MatchReport;
   chatHistory: ChatMessage[];
+  /** Requirement the user clicked in the report to scope this question. */
+  attachedItemId?: string;
   apiKey?: string;
   modelTier?: ModelTier;
 };
@@ -127,8 +129,16 @@ type ReportChatRequest = {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as ReportChatRequest;
-    const { message, resumeText, jobDescription, report, chatHistory, apiKey, modelTier } =
-      body;
+    const {
+      message,
+      resumeText,
+      jobDescription,
+      report,
+      chatHistory,
+      attachedItemId,
+      apiKey,
+      modelTier,
+    } = body;
 
     if (!message?.trim()) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
@@ -162,13 +172,28 @@ export async function POST(request: NextRequest) {
     for (const msg of chatHistory ?? []) {
       messages.push({ role: msg.role, content: msg.content });
     }
-    messages.push({ role: "user", content: message.trim() });
+    // When the user clicked a specific requirement, name it explicitly so the
+    // model resolves pronouns ("make that a match") against the right item
+    // instead of guessing from the wording.
+    const attached = attachedItemId
+      ? report.items.find((item) => item.id === attachedItemId)
+      : undefined;
+    const userContent = attached
+      ? [
+          `The user is referring to this specific requirement (id "${attached.id}"):`,
+          JSON.stringify(attached),
+          "",
+          `Their message: ${message.trim()}`,
+        ].join("\n")
+      : message.trim();
+    messages.push({ role: "user", content: userContent });
 
     const { result: raw, usage } = await createStructuredCompletion<RawReportChatResponse>(client, {
       model,
       schemaName: "report_chat_response",
       schema: REPORT_CHAT_SCHEMA,
       temperature: 0.4,
+      supportsTemperature: tierSupportsTemperature(modelTier),
       maxTokens: 1200,
       messages,
     });

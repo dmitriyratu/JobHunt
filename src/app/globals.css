@@ -157,4 +157,26 @@
     opacity: 0.45;
     cursor: not-allowed;
   }
+
+  .letter-editor-content {
+    color: var(--color-text-primary);
+  }
+
+  .letter-editor-content p {
+    margin: 0 0 0.75em;
+  }
+
+  .letter-editor-content p:last-child {
+    margin-bottom: 0;
+  }
+
+  .letter-editor-content ul,
+  .letter-editor-content ol {
+    margin: 0 0 0.75em;
+    padding-left: 1.25em;
+  }
+
+  .letter-editor-content li {
+    margin: 0.25em 0;
+  }
 }

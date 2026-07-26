@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { ModelTier } from "@/lib/models";
+import { tierSupportsTemperature, type ModelTier } from "@/lib/models";
 import { getOpenAIClient, resolveModel } from "@/lib/openai";
 import { computeOverallScore } from "@/lib/matchReport";
 import { createStructuredCompletion } from "@/lib/structuredCompletion";
@@ -28,7 +28,9 @@ Steps:
    - "gap": the resume shows no evidence of this
 4. Do NOT invent experience, skills, or credentials not present in the resume. If there is no evidence, use status "gap" and leave evidence empty.
 5. Write a 2-3 sentence overall summary of the candidate's fit.
-6. If the hiring company's name is clearly stated in the job description, extract it. Otherwise leave it as an empty string — do not guess.
+6. If the hiring company's name is clearly stated in the job description, extract it into "company". Otherwise leave it as an empty string — do not guess.
+7. Extract the job title exactly as written in the posting (e.g. "Senior Backend Engineer") into "jobTitle". If it is not stated, use an empty string — do not guess.
+8. Set "companyDomain" to the company's primary website domain in lowercase, with no protocol and no "www." (e.g. "netflix.com", "stripe.com"). Use the real corporate domain you know for that company, not the job board it was posted on. If you are not confident of the exact domain, use an empty string — a wrong domain is worse than none.
 
 Output strictly matches the provided JSON schema.`;
 
@@ -53,12 +55,14 @@ const MATCH_REPORT_SCHEMA = {
   properties: {
     summary: { type: "string" },
     company: { type: "string" },
+    jobTitle: { type: "string" },
+    companyDomain: { type: "string" },
     items: {
       type: "array",
       items: REQUIREMENT_ITEM_SCHEMA,
     },
   },
-  required: ["summary", "company", "items"],
+  required: ["summary", "company", "jobTitle", "companyDomain", "items"],
   additionalProperties: false,
 } as const;
 
@@ -73,6 +77,8 @@ type RawReportItem = {
 type RawReport = {
   summary: string;
   company: string;
+  jobTitle: string;
+  companyDomain: string;
   items: RawReportItem[];
 };
 
@@ -135,6 +141,7 @@ export async function POST(request: NextRequest) {
       schemaName: "match_report",
       schema: MATCH_REPORT_SCHEMA,
       temperature: 0.3,
+      supportsTemperature: tierSupportsTemperature(modelTier),
       maxTokens: 2500,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
@@ -179,6 +186,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       report,
       company: raw.company?.trim() ?? "",
+      jobTitle: raw.jobTitle?.trim() ?? "",
+      companyDomain: (raw.companyDomain ?? "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, ""),
       usage: { model, ...usage },
     });
   } catch (error) {

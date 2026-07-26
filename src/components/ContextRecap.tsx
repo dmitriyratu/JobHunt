@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import type { MatchReport } from "@/types";
 
@@ -7,7 +9,20 @@ type Props = {
   jobSource: string;
   jobDescription: string;
   report: MatchReport | null;
+  jobTitle: string;
+  detectedCompany: string;
+  companyName: string;
+  onCompanyNameChange: (v: string) => void;
 };
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-xs">
+      <span className="text-[var(--color-text-muted)] shrink-0">{label}</span>
+      <span className="text-[var(--color-text-secondary)] text-right min-w-0">{children}</span>
+    </div>
+  );
+}
 
 export default function ContextRecap({
   resumeFilename,
@@ -15,6 +30,10 @@ export default function ContextRecap({
   jobSource,
   jobDescription,
   report,
+  jobTitle,
+  detectedCompany,
+  companyName,
+  onCompanyNameChange,
 }: Props) {
   return (
     <div className="glass-panel p-5">
@@ -29,24 +48,37 @@ export default function ContextRecap({
       </div>
 
       <div className="space-y-3">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-[var(--color-text-muted)]">Resume</span>
-          <span className="text-[var(--color-text-secondary)] truncate max-w-[60%]">
+        {jobTitle && <Row label="Role">{jobTitle}</Row>}
+
+        {detectedCompany ? (
+          <Row label="Company">{detectedCompany}</Row>
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <label className="text-xs text-[var(--color-text-muted)] shrink-0">
+              Company (not detected)
+            </label>
+            <input
+              value={companyName}
+              onChange={(e) => onCompanyNameChange(e.target.value)}
+              placeholder="e.g. Netflix"
+              className="input-base max-w-[220px] py-1.5 text-xs"
+            />
+          </div>
+        )}
+
+        <Row label="Resume">
+          <span className="truncate inline-block max-w-full align-bottom">
             {resumeFilename || "—"} · {resumeText.length.toLocaleString()} chars
           </span>
-        </div>
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-[var(--color-text-muted)]">Job description</span>
-          <span className="text-[var(--color-text-secondary)] truncate max-w-[60%]">
+        </Row>
+        <Row label="Job description">
+          <span className="truncate inline-block max-w-full align-bottom">
             {jobSource || "—"} · {jobDescription.length.toLocaleString()} chars
           </span>
-        </div>
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-[var(--color-text-muted)]">Match report</span>
-          <span className="text-[var(--color-text-secondary)]">
-            {report ? `${report.overallScore}/100 fit · ${report.items.length} requirements` : "Not analyzed"}
-          </span>
-        </div>
+        </Row>
+        <Row label="Match report">
+          {report ? `${report.overallScore}/100 fit · ${report.items.length} requirements` : "Not analyzed"}
+        </Row>
       </div>
     </div>
   );

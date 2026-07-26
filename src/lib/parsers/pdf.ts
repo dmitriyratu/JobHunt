@@ -23,9 +23,18 @@ type PdfPageProxy = {
 // no space glyph, relying purely on the horizontal gap for visual spacing —
 // that renderer then jams every word together. This reconstructs spaces from
 // the gap between the end of one item and the start of the next.
+//
+// disableCombineTextItems must be true here: pdf.js's own item-combining
+// (the false/default setting) merges same-line runs into fewer items using
+// its own internal notion of "close enough to be one item" *before* we ever
+// see them — for PDFs that encode each word as a separately-positioned run
+// with no embedded space glyph, that merge can fuse whole words together
+// first, destroying the positional gap our own logic below depends on. Only
+// the raw, unmerged per-run items preserve enough position data to rebuild
+// spacing reliably.
 function renderPageWithSpacing(pageData: PdfPageProxy): Promise<string> {
   return pageData
-    .getTextContent({ normalizeWhitespace: true, disableCombineTextItems: false })
+    .getTextContent({ normalizeWhitespace: true, disableCombineTextItems: true })
     .then((textContent) => {
       let text = "";
       let lastY: number | null = null;
@@ -42,7 +51,12 @@ function renderPageWithSpacing(pageData: PdfPageProxy): Promise<string> {
           lastEndX = null;
         } else if (lastEndX !== null) {
           const gap = x - lastEndX;
-          if (gap > fontSize * 0.25 && !/\s$/.test(text)) {
+          // Real-world word gaps in per-word-item PDFs run closer to 12-15% of
+          // font size than a full space-width — measured directly against a
+          // resume PDF that was jamming words together at a 25% threshold.
+          // Intra-word kerning is near-zero or negative, so this still won't
+          // insert spaces inside a word.
+          if (gap > fontSize * 0.12 && !/\s$/.test(text)) {
             text += " ";
           }
         }

@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 import JobDescriptionInput from "@/components/JobDescriptionInput";
 import ResumeUpload from "@/components/ResumeUpload";
 import SectionHeader from "@/components/SectionHeader";
-import SettingsPanel from "@/components/SettingsPanel";
+import StepNav from "@/components/StepNav";
+import { fileKey } from "@/lib/fileStore";
+import { JOB_CHANGE_RESET, RESUME_CHANGE_RESET } from "@/lib/session";
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -16,7 +17,7 @@ import {
 import { useJobHuntState } from "@/lib/useAppState";
 
 export default function HomePage() {
-  const { state, update, setState, hydrated } = useJobHuntState();
+  const { state, setState, hydrated } = useJobHuntState();
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   useEffect(() => {
@@ -28,25 +29,33 @@ export default function HomePage() {
     saveSettings(next);
   }, []);
 
+  // Submitting new source material is what invalidates downstream work —
+  // navigation never does. Identical content is a no-op so re-uploading the
+  // same file doesn't throw away an analysis.
   const handleResumeParsed = useCallback(
     (text: string, filename: string) => {
-      update("resumeText", text);
-      update("resumeFilename", filename);
+      setState((prev) => ({
+        ...prev,
+        resumeText: text,
+        resumeFilename: filename,
+        ...(text !== prev.resumeText ? RESUME_CHANGE_RESET : {}),
+      }));
     },
-    [update]
+    [setState],
   );
 
   const handleJobParsed = useCallback(
     (text: string, source: string, sourceType: "file" | "url" | "text") => {
-      update("jobDescription", text);
-      update("jobSource", source);
-      update("jobSourceType", sourceType);
+      setState((prev) => ({
+        ...prev,
+        jobDescription: text,
+        jobSource: source,
+        jobSourceType: sourceType,
+        ...(text !== prev.jobDescription ? JOB_CHANGE_RESET : {}),
+      }));
     },
-    [update]
+    [setState],
   );
-
-  const canReachMatch = Boolean(state.resumeText && state.jobDescription);
-  const canReachLetter = Boolean(state.resumeText && state.jobDescription && state.matchReport);
 
   if (!hydrated) {
     return (
@@ -60,14 +69,12 @@ export default function HomePage() {
     <div className="min-h-screen">
       <AppHeader
         subtitle="Resume & job description"
-        canReachMatch={canReachMatch}
-        canReachLetter={canReachLetter}
+        settings={settings}
+        onSettingsSave={handleSettingsSave}
       />
 
-      <SettingsPanel settings={settings} onSave={handleSettingsSave} />
-
       <main className="max-w-6xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           <section>
             <SectionHeader
               step={1}
@@ -75,14 +82,19 @@ export default function HomePage() {
               subtitle="Upload any format — we'll read and save the full text"
             />
             <ResumeUpload
+              key={state.id}
               resumeText={state.resumeText}
               resumeFilename={state.resumeFilename}
+              fileKey={fileKey(state.id, "resume")}
               onParsed={handleResumeParsed}
-              onClear={() => {
-                update("resumeText", "");
-                update("resumeFilename", "");
-                setState((prev) => ({ ...prev, matchReport: null, reportChatMessages: [] }));
-              }}
+              onClear={() =>
+                setState((prev) => ({
+                  ...prev,
+                  resumeText: "",
+                  resumeFilename: "",
+                  ...RESUME_CHANGE_RESET,
+                }))
+              }
             />
           </section>
 
@@ -93,36 +105,26 @@ export default function HomePage() {
               subtitle="Paste text, drop a link, or upload a file"
             />
             <JobDescriptionInput
+              key={state.id}
               jobDescription={state.jobDescription}
               jobSource={state.jobSource}
               jobSourceType={state.jobSourceType}
+              fileKey={fileKey(state.id, "jobDescription")}
               onParsed={handleJobParsed}
-              onClear={() => {
-                update("jobDescription", "");
-                update("jobSource", "");
-                update("jobSourceType", "");
-                setState((prev) => ({ ...prev, matchReport: null, reportChatMessages: [] }));
-              }}
+              onClear={() =>
+                setState((prev) => ({
+                  ...prev,
+                  jobDescription: "",
+                  jobSource: "",
+                  jobSourceType: "",
+                  ...JOB_CHANGE_RESET,
+                }))
+              }
             />
           </section>
         </div>
 
-        <div className="mt-8 flex flex-col items-end gap-2">
-          {canReachMatch ? (
-            <Link href="/match" className="btn-primary px-6 py-3">
-              Continue to match report →
-            </Link>
-          ) : (
-            <>
-              <button disabled className="btn-primary px-6 py-3 opacity-45 cursor-not-allowed">
-                Continue to match report →
-              </button>
-              <p className="text-xs text-[var(--color-text-muted)]">
-                Add your resume and a job description to continue
-              </p>
-            </>
-          )}
-        </div>
+        <StepNav />
       </main>
     </div>
   );

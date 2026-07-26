@@ -7,6 +7,8 @@ type StructuredCompletionOptions = {
   schema: Record<string, unknown>;
   temperature?: number;
   maxTokens?: number;
+  /** Reasoning-tier models (e.g. gpt-5.6-*) only support the default temperature (1). */
+  supportsTemperature?: boolean;
 };
 
 export type UsageStats = {
@@ -22,13 +24,21 @@ export type StructuredCompletionResult<T> = {
 
 export async function createStructuredCompletion<T>(
   client: OpenAI,
-  { model, messages, schemaName, schema, temperature, maxTokens }: StructuredCompletionOptions
+  {
+    model,
+    messages,
+    schemaName,
+    schema,
+    temperature,
+    maxTokens,
+    supportsTemperature = true,
+  }: StructuredCompletionOptions
 ): Promise<StructuredCompletionResult<T>> {
   const completion = await client.chat.completions.create({
     model,
     messages,
-    temperature: temperature ?? 0.3,
-    max_tokens: maxTokens ?? 2000,
+    ...(supportsTemperature ? { temperature: temperature ?? 0.3 } : {}),
+    max_completion_tokens: maxTokens ?? 2000,
     response_format: {
       type: "json_schema",
       json_schema: {

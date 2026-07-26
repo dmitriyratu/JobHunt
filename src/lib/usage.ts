@@ -3,6 +3,7 @@ import type { ModelTier } from "./models";
 import { computeCost, type ModelPricing } from "./pricing";
 
 export const USAGE_STORAGE_KEY = "jobhunt-usage";
+const TAB_ID_KEY = "jobhunt-tab-id";
 
 export type UsageEndpoint = "analyze-match" | "report-chat" | "generate-email";
 
@@ -12,11 +13,25 @@ export type UsageEntry = {
   endpoint: UsageEndpoint;
   model: string;
   tier: ModelTier;
+  tabId: string;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
   costUsd: number;
 };
+
+// One id per browser TAB (distinct from an application Session), for the lifetime of that tab (sessionStorage, not
+// localStorage) — a natural fit for "how much did this session cost," and it
+// carries across the 3-page flow since they're all the same tab.
+export function getTabId(): string {
+  if (typeof window === "undefined") return "";
+  let id = sessionStorage.getItem(TAB_ID_KEY);
+  if (!id) {
+    id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    sessionStorage.setItem(TAB_ID_KEY, id);
+  }
+  return id;
+}
 
 export function loadUsageLog(): UsageEntry[] {
   if (typeof window === "undefined") return [];
@@ -47,6 +62,7 @@ export function appendUsageEntry(params: {
     endpoint: params.endpoint,
     model: params.model,
     tier: params.tier,
+    tabId: getTabId(),
     promptTokens: params.usage.promptTokens,
     completionTokens: params.usage.completionTokens,
     totalTokens: params.usage.totalTokens,

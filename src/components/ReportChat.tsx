@@ -4,7 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import type { ModelTier } from "@/lib/models";
 import type { ModelPricing } from "@/lib/pricing";
 import { appendUsageEntry } from "@/lib/usage";
-import type { MatchReport, MatchReportProposal, ReportChatMessage } from "@/types";
+import type {
+  MatchReport,
+  MatchReportItem,
+  MatchReportProposal,
+  ReportChatMessage,
+} from "@/types";
 import ProposalDiffCard from "./ProposalDiffCard";
 
 type Props = {
@@ -15,6 +20,9 @@ type Props = {
   apiKey: string;
   modelTier: ModelTier;
   pricing: ModelPricing;
+  /** Requirement the user clicked in the report, to scope the next question. */
+  attachedItem: MatchReportItem | null;
+  onClearAttachment: () => void;
   onNewMessage: (userMsg: ReportChatMessage, assistantMsg: ReportChatMessage) => void;
   onAcceptProposal: (messageIndex: number, proposalId: string) => void;
   onRejectProposal: (messageIndex: number, proposalId: string) => void;
@@ -28,6 +36,8 @@ export default function ReportChat({
   apiKey,
   modelTier,
   pricing,
+  attachedItem,
+  onClearAttachment,
   onNewMessage,
   onAcceptProposal,
   onRejectProposal,
@@ -35,10 +45,15 @@ export default function ReportChat({
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Scroll the transcript's own container rather than using scrollIntoView —
+  // that walks up and scrolls every ancestor including the window, which
+  // yanked the whole page down to the chat on mount.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length === 0) return;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
   async function send() {
@@ -49,7 +64,14 @@ export default function ReportChat({
     setInput("");
     setLoading(true);
 
-    const userMsg: ReportChatMessage = { role: "user", content: trimmed };
+    // Keep the attachment visible in the transcript so the conversation still
+    // reads correctly later — otherwise "make that a match" loses its referent.
+    const attachedAtSend = attachedItem;
+    const userMsg: ReportChatMessage = {
+      role: "user",
+      content: attachedAtSend ? `Re: “${attachedAtSend.requirement}”\n${trimmed}` : trimmed,
+    };
+    onClearAttachment();
 
     try {
       const res = await fetch("/api/report-chat", {
@@ -60,6 +82,7 @@ export default function ReportChat({
           resumeText,
           jobDescription,
           report,
+          attachedItemId: attachedAtSend?.id,
           chatHistory: messages.map((m) => ({ role: m.role, content: m.content })),
           apiKey: apiKey || undefined,
           modelTier,
@@ -95,7 +118,7 @@ export default function ReportChat({
   const disabled = !report;
 
   return (
-    <div className="glass-panel flex flex-col h-full min-h-[320px]">
+    <div className="glass-panel flex flex-col h-[560px]">
       <div className="px-5 py-4 border-b border-[var(--color-border-subtle)]">
         <h3 className="font-medium text-sm">Refine the report</h3>
         <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
@@ -103,7 +126,7 @@ export default function ReportChat({
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
         {disabled && (
           <div className="text-center py-8">
             <p className="text-sm text-[var(--color-text-muted)]">
@@ -198,10 +221,30 @@ export default function ReportChat({
             </div>
           </div>
         )}
-        <div ref={bottomRef} />
       </div>
 
       <div className="px-5 py-4 border-t border-[var(--color-border-subtle)]">
+        {attachedItem && (
+          <div className="flex items-start gap-2 mb-2 rounded-lg border border-[var(--color-accent)] bg-[var(--color-accent-muted)] px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--color-accent)]">
+                Asking about
+              </p>
+              <p className="text-xs text-[var(--color-text-primary)] break-words">
+                {attachedItem.requirement}
+              </p>
+            </div>
+            <button
+              onClick={onClearAttachment}
+              aria-label="Remove attached requirement"
+              className="shrink-0 p-1 rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-overlay)]"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
         {error && <p className="text-[var(--color-danger)] text-xs mb-2">{error}</p>}
         <div className="flex gap-2">
           <input

@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 import MatchReportView from "@/components/MatchReportView";
 import ReportChat from "@/components/ReportChat";
 import SectionHeader from "@/components/SectionHeader";
-import SettingsPanel from "@/components/SettingsPanel";
+import StepNav from "@/components/StepNav";
 import { computeOverallScore } from "@/lib/matchReport";
+import { getPricingForTier } from "@/lib/models";
+import { ANALYSIS_RESET } from "@/lib/session";
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -19,13 +21,16 @@ import { appendUsageEntry } from "@/lib/usage";
 import type { ReportChatMessage } from "@/types";
 
 export default function MatchPage() {
-  const { state, setState, hydrated } = useJobHuntState();
+  const { state, setState, hydrated, commitSession } = useJobHuntState();
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState("");
+  const [attachedItemId, setAttachedItemId] = useState<string | null>(null);
 
   useEffect(() => {
     setSettings(loadSettings());
+    setSettingsLoaded(true);
   }, []);
 
   const handleSettingsSave = useCallback((next: AppSettings) => {
@@ -33,7 +38,13 @@ export default function MatchPage() {
     saveSettings(next);
   }, []);
 
-  const handleAnalyze = useCallback(async () => {
+  // A ref, not the `analyzing` state — setState is async and the auto-analyze
+  // effect can re-run before it lands.
+  const analyzingRef = useRef(false);
+
+  const runAnalyze = useCallback(async () => {
+    if (analyzingRef.current) return;
+    analyzingRef.current = true;
     setAnalyzeError("");
     setAnalyzing(true);
     try {
@@ -51,9 +62,11 @@ export default function MatchPage() {
       if (!res.ok) throw new Error(data.error ?? "Analysis failed");
       setState((prev) => ({
         ...prev,
+        ...ANALYSIS_RESET,
         matchReport: data.report,
-        reportChatMessages: [],
-        companyName: prev.companyName || data.company || prev.companyName,
+        detectedCompany: data.company ?? "",
+        detectedJobTitle: data.jobTitle ?? "",
+        detectedCompanyDomain: data.companyDomain ?? "",
       }));
       if (data.usage) {
         appendUsageEntry({
@@ -61,15 +74,47 @@ export default function MatchPage() {
           model: data.usage.model,
           tier: settings.modelTier,
           usage: data.usage,
-          pricing: settings.pricing[settings.modelTier],
+          pricing: getPricingForTier(settings.modelTier),
         });
       }
     } catch (err) {
       setAnalyzeError(err instanceof Error ? err.message : "Analysis failed");
     } finally {
+      analyzingRef.current = false;
       setAnalyzing(false);
     }
   }, [state.resumeText, state.jobDescription, settings, setState]);
+
+  // Latest-ref so the auto-analyze effect doesn't depend on the callback
+  // identity (which changes whenever state/settings do).
+  const analyzeRef = useRef(runAnalyze);
+  useEffect(() => {
+    analyzeRef.current = runAnalyze;
+  });
+
+  const canAnalyze = Boolean(state.resumeText && state.jobDescription);
+  const autoKey = `${state.id}|${state.resumeText.length}|${state.jobDescription.length}`;
+  const autoTriedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!hydrated || !settingsLoaded) return; // settings load in an effect; firing earlier would use DEFAULT_SETTINGS
+    if (!canAnalyze) return;
+    if (state.matchReport) return;
+    if (analyzingRef.current) return;
+    if (autoTriedRef.current === autoKey) return;
+    // Claimed synchronously, before the await — this is what makes React's
+    // double-invoked effects (StrictMode) fire the analysis only once.
+    autoTriedRef.current = autoKey;
+    void analyzeRef.current();
+  }, [hydrated, settingsLoaded, canAnalyze, state.matchReport, autoKey]);
+
+  // Reaching the match report is what turns a page-1 draft into a real
+  // application in the rail. Keyed on arrival rather than on a specific button
+  // so it works however the user navigated here.
+  useEffect(() => {
+    if (!hydrated || !canAnalyze || state.committed) return;
+    commitSession();
+  }, [hydrated, canAnalyze, state.committed, commitSession]);
 
   const handleNewChatMessage = useCallback(
     (userMsg: ReportChatMessage, assistantMsg: ReportChatMessage) => {
@@ -141,9 +186,6 @@ export default function MatchPage() {
     [setState]
   );
 
-  const canAnalyze = Boolean(state.resumeText && state.jobDescription);
-  const canReachLetter = Boolean(state.resumeText && state.jobDescription && state.matchReport);
-
   if (!hydrated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -156,11 +198,9 @@ export default function MatchPage() {
     <div className="min-h-screen">
       <AppHeader
         subtitle="Match report"
-        canReachMatch={canAnalyze}
-        canReachLetter={canReachLetter}
+        settings={settings}
+        onSettingsSave={handleSettingsSave}
       />
-
-      <SettingsPanel settings={settings} onSave={handleSettingsSave} />
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         {!canAnalyze ? (
@@ -173,62 +213,54 @@ export default function MatchPage() {
             </Link>
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <section>
-                <SectionHeader
-                  step={3}
-                  title="Match report"
-                  subtitle="Weighted by how important each requirement is"
-                />
-                <MatchReportView
-                  report={state.matchReport}
-                  canAnalyze={canAnalyze}
-                  loading={analyzing}
-                  error={analyzeError}
-                  onAnalyze={handleAnalyze}
-                />
-              </section>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+            <section>
+              <SectionHeader
+                step={3}
+                title="Match report"
+                subtitle="Weighted by how important each requirement is"
+              />
+              <MatchReportView
+                report={state.matchReport}
+                canAnalyze={canAnalyze}
+                loading={analyzing}
+                error={analyzeError}
+                onAnalyze={runAnalyze}
+                attachedItemId={attachedItemId}
+                onAttachItem={(id) =>
+                  setAttachedItemId((prev) => (prev === id ? null : id))
+                }
+              />
+            </section>
 
-              <section>
-                <SectionHeader
-                  step={4}
-                  title="Refine"
-                  subtitle="Chat proposes edits, you approve them"
-                />
-                <ReportChat
-                  report={state.matchReport}
-                  messages={state.reportChatMessages}
-                  resumeText={state.resumeText}
-                  jobDescription={state.jobDescription}
-                  apiKey={settings.apiKey}
-                  modelTier={settings.modelTier}
-                  pricing={settings.pricing[settings.modelTier]}
-                  onNewMessage={handleNewChatMessage}
-                  onAcceptProposal={handleAcceptProposal}
-                  onRejectProposal={handleRejectProposal}
-                />
-              </section>
-            </div>
+            <section className="lg:sticky lg:top-6">
+              <SectionHeader
+                step={4}
+                title="Refine"
+                subtitle="Chat proposes edits, you approve them"
+              />
+              <ReportChat
+                report={state.matchReport}
+                messages={state.reportChatMessages}
+                resumeText={state.resumeText}
+                jobDescription={state.jobDescription}
+                apiKey={settings.apiKey}
+                modelTier={settings.modelTier}
+                pricing={getPricingForTier(settings.modelTier)}
+                attachedItem={
+                  state.matchReport?.items.find((i) => i.id === attachedItemId) ?? null
+                }
+                onClearAttachment={() => setAttachedItemId(null)}
+                onNewMessage={handleNewChatMessage}
+                onAcceptProposal={handleAcceptProposal}
+                onRejectProposal={handleRejectProposal}
+              />
 
-            <div className="mt-8 flex flex-col items-end gap-2">
-              {canReachLetter ? (
-                <Link href="/letter" className="btn-primary px-6 py-3">
-                  Continue to letter →
-                </Link>
-              ) : (
-                <>
-                  <button disabled className="btn-primary px-6 py-3 opacity-45 cursor-not-allowed">
-                    Continue to letter →
-                  </button>
-                  <p className="text-xs text-[var(--color-text-muted)]">
-                    Analyze a match report above to continue
-                  </p>
-                </>
-              )}
-            </div>
-          </>
+            </section>
+          </div>
         )}
+
+        <StepNav />
       </main>
     </div>
   );

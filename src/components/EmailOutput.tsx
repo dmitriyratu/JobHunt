@@ -1,81 +1,56 @@
 "use client";
 
-import { useState } from "react";
+import LetterEditor from "./LetterEditor";
+import SubjectField from "./SubjectField";
 
 type Props = {
-  email: string;
+  subject: string;
+  body: string;
   loading: boolean;
   error: string;
   canGenerate: boolean;
   recipientName: string;
-  companyName: string;
   letterContext: string;
   onRecipientNameChange: (v: string) => void;
-  onCompanyNameChange: (v: string) => void;
   onLetterContextChange: (v: string) => void;
+  onSubjectChange: (v: string) => void;
+  onBodyChange: (html: string) => void;
   onGenerate: () => void;
 };
 
 export default function EmailOutput({
-  email,
+  subject,
+  body,
   loading,
   error,
   canGenerate,
   recipientName,
-  companyName,
   letterContext,
   onRecipientNameChange,
-  onCompanyNameChange,
   onLetterContextChange,
+  onSubjectChange,
+  onBodyChange,
   onGenerate,
 }: Props) {
-  const [copied, setCopied] = useState(false);
-
-  async function copy() {
-    await navigator.clipboard.writeText(email);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
   return (
     <div className="glass-panel p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="font-medium text-sm">Outreach email</h3>
-          <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-            Skim-optimized for busy hiring managers
-          </p>
-        </div>
-        {email && (
-          <button onClick={copy} className="btn-secondary text-xs py-1.5 px-3">
-            {copied ? "Copied!" : "Copy"}
-          </button>
-        )}
+      <div className="mb-4">
+        <h3 className="font-medium text-sm">Outreach email</h3>
+        <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+          Skim-optimized for busy hiring managers
+        </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div>
-          <label className="text-xs text-[var(--color-text-muted)] block mb-1">
-            Recipient name (optional)
-          </label>
-          <input
-            value={recipientName}
-            onChange={(e) => onRecipientNameChange(e.target.value)}
-            placeholder="Jane Smith"
-            className="input-base"
-          />
-        </div>
-        <div>
-          <label className="text-xs text-[var(--color-text-muted)] block mb-1">
-            Company (optional)
-          </label>
-          <input
-            value={companyName}
-            onChange={(e) => onCompanyNameChange(e.target.value)}
-            placeholder="Acme Corp"
-            className="input-base"
-          />
-        </div>
+      <div className="mb-4">
+        <label className="text-xs text-[var(--color-text-muted)] block mb-1">
+          Recipient name (optional)
+        </label>
+        <input
+          value={recipientName}
+          onChange={(e) => onRecipientNameChange(e.target.value)}
+          placeholder="Jane Smith"
+          className="input-base"
+        />
       </div>
 
       <div className="mb-4">
@@ -104,6 +79,8 @@ export default function EmailOutput({
             </svg>
             Generating…
           </span>
+        ) : body ? (
+          "Regenerate email"
         ) : (
           "Generate email"
         )}
@@ -115,12 +92,14 @@ export default function EmailOutput({
         </div>
       )}
 
-      {email ? (
-        <div className="bg-[var(--color-surface)] rounded-lg border border-[var(--color-border-subtle)] p-5">
-          <pre className="text-sm leading-relaxed whitespace-pre-wrap font-[family-name:var(--font-sans)] text-[var(--color-text-primary)]">
-            {email}
-          </pre>
-        </div>
+      {body ? (
+        <>
+          <SubjectField value={subject} onChange={onSubjectChange} />
+          <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">
+            Email body
+          </p>
+          <LetterEditor html={body} onChange={onBodyChange} />
+        </>
       ) : (
         <div className="rounded-lg border border-dashed border-[var(--color-border)] p-10 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-surface-overlay)]">
@@ -129,7 +108,7 @@ export default function EmailOutput({
             </svg>
           </div>
           <p className="text-sm text-[var(--color-text-muted)]">
-            Upload a resume and job description, then generate your email
+            Generate a letter to see the subject and body here
           </p>
         </div>
       )}

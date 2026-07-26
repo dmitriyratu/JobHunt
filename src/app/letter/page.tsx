@@ -5,7 +5,11 @@ import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 import ContextRecap from "@/components/ContextRecap";
 import EmailOutput from "@/components/EmailOutput";
-import SettingsPanel from "@/components/SettingsPanel";
+import SessionCostSummary from "@/components/SessionCostSummary";
+import StepNav from "@/components/StepNav";
+import { getPricingForTier } from "@/lib/models";
+import { plainTextToHtml } from "@/lib/plainTextToHtml";
+import { resolveCompany } from "@/lib/session";
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -13,16 +17,18 @@ import {
   type AppSettings,
 } from "@/lib/settings";
 import { useJobHuntState } from "@/lib/useAppState";
-import { appendUsageEntry } from "@/lib/usage";
+import { appendUsageEntry, loadUsageLog, type UsageEntry } from "@/lib/usage";
 
 export default function LetterPage() {
-  const { state, update, hydrated } = useJobHuntState();
+  const { state, update, patch, hydrated } = useJobHuntState();
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
+  const [usageEntries, setUsageEntries] = useState<UsageEntry[]>([]);
 
   useEffect(() => {
     setSettings(loadSettings());
+    setUsageEntries(loadUsageLog());
   }, []);
 
   const handleSettingsSave = useCallback((next: AppSettings) => {
@@ -43,42 +49,35 @@ export default function LetterPage() {
           matchReport: state.matchReport,
           letterContext: state.letterContext || undefined,
           recipientName: state.recipientName || undefined,
-          companyName: state.companyName || undefined,
+          companyName: resolveCompany(state) || undefined,
           apiKey: settings.apiKey || undefined,
           modelTier: settings.modelTier,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Generation failed");
-      update("generatedEmail", data.email);
+      patch({
+        generatedSubject: data.subject ?? "",
+        generatedBody: plainTextToHtml(data.body ?? ""),
+      });
       if (data.usage) {
-        appendUsageEntry({
+        const entries = appendUsageEntry({
           endpoint: "generate-email",
           model: data.usage.model,
           tier: settings.modelTier,
           usage: data.usage,
-          pricing: settings.pricing[settings.modelTier],
+          pricing: getPricingForTier(settings.modelTier),
         });
+        setUsageEntries(entries);
       }
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : "Generation failed");
     } finally {
       setGenerating(false);
     }
-  }, [
-    state.resumeText,
-    state.jobDescription,
-    state.matchReport,
-    state.letterContext,
-    state.recipientName,
-    state.companyName,
-    settings,
-    update,
-  ]);
+  }, [state, settings, patch]);
 
   const canGenerate = Boolean(state.resumeText && state.jobDescription);
-  const canReachMatch = Boolean(state.resumeText && state.jobDescription);
-  const canReachLetter = Boolean(state.resumeText && state.jobDescription && state.matchReport);
 
   if (!hydrated) {
     return (
@@ -92,11 +91,9 @@ export default function LetterPage() {
     <div className="min-h-screen">
       <AppHeader
         subtitle="Write your outreach letter"
-        canReachMatch={canReachMatch}
-        canReachLetter={canReachLetter}
+        settings={settings}
+        onSettingsSave={handleSettingsSave}
       />
-
-      <SettingsPanel settings={settings} onSave={handleSettingsSave} />
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         {!state.resumeText || !state.jobDescription ? (
@@ -108,15 +105,6 @@ export default function LetterPage() {
               ← Back to resume &amp; job
             </Link>
           </div>
-        ) : !state.matchReport ? (
-          <div className="glass-panel p-8 text-center">
-            <p className="text-sm text-[var(--color-text-secondary)] mb-4">
-              Analyze a match report before writing a letter.
-            </p>
-            <Link href="/match" className="btn-primary inline-block px-6 py-3">
-              ← Back to match report
-            </Link>
-          </div>
         ) : (
           <>
             <ContextRecap
@@ -125,23 +113,44 @@ export default function LetterPage() {
               jobSource={state.jobSource}
               jobDescription={state.jobDescription}
               report={state.matchReport}
+              jobTitle={state.detectedJobTitle}
+              detectedCompany={state.detectedCompany}
+              companyName={state.companyName}
+              onCompanyNameChange={(v) => update("companyName", v)}
             />
 
+            {!state.matchReport && (
+              <div className="glass-panel p-4 flex items-center justify-between gap-3">
+                <p className="text-xs text-[var(--color-text-secondary)]">
+                  No match report yet — the letter is much stronger with one.
+                </p>
+                <Link href="/match" className="btn-secondary text-xs py-1.5 px-3 shrink-0">
+                  Run the analysis
+                </Link>
+              </div>
+            )}
+
             <EmailOutput
-              email={state.generatedEmail}
+              key={state.id}
+              subject={state.generatedSubject}
+              body={state.generatedBody}
               loading={generating}
               error={generateError}
               canGenerate={canGenerate}
               recipientName={state.recipientName}
-              companyName={state.companyName}
               letterContext={state.letterContext}
               onRecipientNameChange={(v) => update("recipientName", v)}
-              onCompanyNameChange={(v) => update("companyName", v)}
               onLetterContextChange={(v) => update("letterContext", v)}
+              onSubjectChange={(v) => update("generatedSubject", v)}
+              onBodyChange={(html) => update("generatedBody", html)}
               onGenerate={handleGenerate}
             />
+
+            {state.generatedBody && <SessionCostSummary entries={usageEntries} adminApiKey={settings.adminApiKey} />}
           </>
         )}
+
+        <StepNav />
       </main>
     </div>
   );
