@@ -1,7 +1,7 @@
 "use client";
 
 import type { MatchReportItem, ResolvedProposal, StandoutItem } from "@/types";
-import { ImportancePill, ResultPill } from "./MatchReportView";
+import { GatePill, ImportancePill, ResultPill } from "./MatchReportView";
 
 type Props = {
   proposal: ResolvedProposal;
@@ -43,6 +43,7 @@ function ItemPreview({
         {item.requirement}
       </p>
       <div className="flex items-center gap-1.5 mb-1.5">
+        {item.gating && <GatePill />}
         <span className={changed("importance") ? "ring-1 ring-[var(--color-accent)] rounded-full" : ""}>
           <ImportancePill importance={item.importance} />
         </span>
@@ -63,6 +64,15 @@ function ItemPreview({
           }`}
         >
           {item.evidence}
+        </p>
+      )}
+      {item.bridge && (
+        <p
+          className={`text-xs text-[var(--color-text-secondary)] mt-1 ${
+            changed("bridge") ? "font-semibold" : ""
+          }`}
+        >
+          {item.bridge}
         </p>
       )}
       {item.note && (

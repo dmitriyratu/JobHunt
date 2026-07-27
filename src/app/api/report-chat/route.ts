@@ -21,7 +21,7 @@ const MAX_CONTEXT_CHARS = 12000;
 const SYSTEM_PROMPT = `You are helping a job applicant refine a match report that compares their resume against a job description. You already have the resume, the job description, and the current match report.
 
 The report has two parts:
-- "items": requirements drawn from the job description. Each has importance, status (match/partial/gap), strength (meets/exceeds), evidence, and a note. "exceeds" means the candidate clears that bar by a wide margin, not merely satisfies it; it only applies when status is "match".
+- "items": requirements drawn from the job description. Each has importance, status (match/partial/gap), strength (meets/exceeds), gating, evidence, a bridge, and a note. "exceeds" means the candidate clears that bar by a wide margin, not merely satisfies it; it only applies when status is "match". "gating" marks the one or two requirements this team would actually screen on. "bridge" is the non-obvious reason experience that does not look like the requirement still satisfies it — usually empty, because most matches are self-evident.
 - "standouts": credentials that are rare or highly prized but that this posting never asked for (patents, founding a company, widely used open-source work, notable awards). Each has a credential, evidence, and whyValuable.
 
 Reply conversationally and briefly (2-4 sentences) to the user's message.
@@ -35,6 +35,8 @@ target "requirement":
 - action "remove": Set targetItemId to that item's id. Other fields can be empty strings.
 - action "add": Set targetItemId to null. Fill requirement/importance/status/strength/evidence/note for the new item.
 - Leave credential and whyValuable as empty strings.
+- "bridge": leave it as an empty string unless the user has just explained a non-obvious reason their experience satisfies the requirement (a different industry with the same underlying problem, a different tool with the same primitives, a different title with the same scope). Then write that equivalence in one sentence, naming both sides. An empty bridge on a modify keeps whatever bridge the item already had, so you never need to repeat one back.
+- You cannot change "gating". It is assigned across the whole posting during analysis and stays put. If the user argues a different requirement is the real dealbreaker, say so in your reply and tell them to re-analyze — do not propose a change for it.
 
 target "standout":
 - action "modify": Set targetItemId to that standout's id. Fill credential/evidence/whyValuable with the FULL revised standout.
@@ -60,6 +62,7 @@ const PROPOSAL_ITEM_SCHEMA = {
     },
     status: { type: "string", enum: ["match", "partial", "gap"] },
     strength: { type: "string", enum: ["meets", "exceeds"] },
+    bridge: { type: "string" },
     note: { type: "string" },
     // Standout fields
     credential: { type: "string" },
@@ -78,6 +81,7 @@ const PROPOSAL_ITEM_SCHEMA = {
     "importance",
     "status",
     "strength",
+    "bridge",
     "note",
     "credential",
     "whyValuable",
@@ -108,6 +112,7 @@ type RawProposal = {
   importance: string;
   status: string;
   strength: string;
+  bridge: string;
   note: string;
   credential: string;
   whyValuable: string;
@@ -242,8 +247,20 @@ export async function POST(request: NextRequest) {
     // Reports saved before standouts existed have no array here.
     const standouts = report.standouts ?? [];
 
-    /** Builds a requirement item, normalising overshoot the same way analyze-match does. */
-    function buildItem(id: string, rawProposal: RawProposal): MatchReportItem {
+    /**
+     * Builds a requirement item, normalising overshoot the same way analyze-match does.
+     *
+     * `existing` is the item being modified, and it is what protects fields this
+     * chat does not manage. Accepting a proposal replaces the item wholesale on
+     * the client, so anything missing from `after` is destroyed rather than
+     * merged — `gating` in particular is assigned once, under a scarcity cap
+     * this route cannot re-check, and a wording fix must not silently move it.
+     */
+    function buildItem(
+      id: string,
+      rawProposal: RawProposal,
+      existing?: MatchReportItem
+    ): MatchReportItem {
       const status = rawProposal.status as MatchStatus;
       return {
         id,
@@ -251,7 +268,15 @@ export async function POST(request: NextRequest) {
         importance: rawProposal.importance as RequirementImportance,
         status,
         strength: status === "match" && rawProposal.strength === "exceeds" ? "exceeds" : "meets",
+        // A requirement the user raises in chat is new information, not a new
+        // gate: the gate is judged against the whole posting at analysis time.
+        gating: existing?.gating === true,
         evidence: rawProposal.evidence?.trim() ?? "",
+        // Strict mode forces every field into the response, so the model returns
+        // "" for anything it isn't changing. Treat empty as "leave it alone" —
+        // dropping a bridge on an unrelated wording fix costs the letter its
+        // strongest sentence. Re-analysis is the way to clear one.
+        bridge: rawProposal.bridge?.trim() || existing?.bridge || "",
         note: rawProposal.note?.trim() ?? "",
       };
     }
@@ -363,7 +388,7 @@ export async function POST(request: NextRequest) {
         action,
         targetItemId: existing.id,
         before: existing,
-        after: buildItem(existing.id, rawProposal),
+        after: buildItem(existing.id, rawProposal, existing),
         rationale,
       });
     });

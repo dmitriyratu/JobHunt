@@ -46,6 +46,10 @@ const STATUS_LABEL: Record<MatchStatus, string> = {
 function sortItems(items: MatchReportItem[]): MatchReportItem[] {
   return [...items].sort(
     (a, b) =>
+      // The gate is what the letter opens on, so it opens the report too.
+      // Reports saved before gating existed have no value here and fall
+      // straight through to the importance ordering.
+      Number(b.gating === true) - Number(a.gating === true) ||
       IMPORTANCE_ORDER[a.importance] - IMPORTANCE_ORDER[b.importance] ||
       STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
   );
@@ -128,6 +132,24 @@ export function StatusPill({ status }: { status: MatchStatus }) {
   return (
     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${classes[status]}`}>
       {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+/**
+ * Marks the requirement the letter is built on.
+ *
+ * Sits left of the importance pill because it outranks it: a posting calls eight
+ * things critical, but this is the one a recruiter screens on. Rendered only when
+ * true, so it reads as a flag rather than a third scale.
+ */
+export function GatePill() {
+  return (
+    <span
+      className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[var(--color-accent)] text-white"
+      title="The requirement this team screens on — your letter is built on this one"
+    >
+      Gate
     </span>
   );
 }
@@ -299,18 +321,26 @@ export default function MatchReportView({
                   {item.requirement}
                 </p>
                 <div className="flex items-center gap-1.5 shrink-0">
+                  {item.gating && <GatePill />}
                   <ImportancePill importance={item.importance} />
                   <ResultPill status={item.status} strength={item.strength} />
                 </div>
               </div>
 
-              {(item.evidence || item.note) && (
+              {(item.evidence || item.bridge || item.note) && (
                 <div className="mt-2.5 pt-2.5 border-t border-[var(--color-border-subtle)] space-y-2">
                   {item.evidence && (
                     <DetailBlock
                       label="From your resume"
                       text={item.evidence}
                       rule={ruleClass(item.status, item.strength)}
+                    />
+                  )}
+                  {item.bridge && (
+                    <DetailBlock
+                      label="Why it counts here"
+                      text={item.bridge}
+                      rule="border-[var(--color-accent)]"
                     />
                   )}
                   {item.note && (

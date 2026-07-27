@@ -25,6 +25,30 @@ export type MatchReportItem = {
   strength: RequirementStrength;
   evidence: string;
   note: string;
+  /**
+   * Whether the hiring team would actually screen on this requirement — fail it
+   * and you are out regardless of how the rest of the profile looks.
+   *
+   * Distinct from `importance`, which measures how the *posting* frames a
+   * requirement. Postings label eight things "required"; a recruiter working
+   * through a stack filters on one or two. Importance is rhetoric, gating is the
+   * filter. Judged against the role rather than the candidate, so a gate can sit
+   * on any status — and a gated `gap` is the most important thing in the report.
+   *
+   * Absent on reports saved before gating existed, so read as `=== true`.
+   */
+  gating?: boolean;
+  /**
+   * The non-obvious equivalence: why experience that does not look like this
+   * requirement on paper actually satisfies it.
+   *
+   * The letter is read before the resume and often instead of it, so experience
+   * that is misreadable at a glance gets no second chance. "The fraud-detection
+   * work is your churn problem: same imbalanced labels, same real-time scoring"
+   * is what stops a reader filing a strong candidate under "wrong industry".
+   * Empty whenever the match is self-evident, which is most of the time.
+   */
+  bridge?: string;
 };
 
 /**
