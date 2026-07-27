@@ -6,8 +6,10 @@ import { appendUsageEntry } from "@/lib/usage";
 import type {
   MatchReport,
   MatchReportProposal,
+  MatchStatus,
   ReportChatMessage,
   ReportEntry,
+  RequirementImportance,
 } from "@/types";
 import ProposalDiffCard from "./ProposalDiffCard";
 
@@ -146,7 +148,7 @@ export default function ReportChat({
                 back if you clear the box. */}
             {!input.trim() && (
               <div className="flex flex-wrap gap-2 justify-center mt-4">
-                {SUGGESTIONS.map((s) => (
+                {buildSuggestions(report).map((s) => (
                   <button
                     key={s}
                     onClick={() => setInput(s)}
@@ -274,9 +276,54 @@ export default function ReportChat({
   );
 }
 
-const SUGGESTIONS = [
-  "That Python requirement is wrong, I have 6 years",
-  "I don't just meet that one — I led the team that built it",
-  "I also hold a patent in this area",
-  "I don't think that gap is fair, I did this in my last job",
-];
+const STATUS_RANK: Record<MatchStatus, number> = { gap: 0, partial: 1, match: 2 };
+const IMPORTANCE_RANK: Record<RequirementImportance, number> = {
+  critical: 0,
+  important: 1,
+  "nice-to-have": 2,
+};
+
+function shorten(text: string, max = 42): string {
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}
+
+/**
+ * Openers built from this report rather than a fixed list.
+ *
+ * The hardcoded set talked about Python and patents, which is nonsense in front
+ * of a pediatrician — and a prompt you can't act on is worse than none, because
+ * it suggests the tool hasn't read your report. Quoting the user's own
+ * requirements costs nothing extra: it all comes from the report already loaded.
+ */
+function buildSuggestions(report: MatchReport | null): string[] {
+  if (!report?.items.length) return [];
+  const out: string[] = [];
+
+  const byNeed = [...report.items].sort(
+    (a, b) =>
+      STATUS_RANK[a.status] - STATUS_RANK[b.status] ||
+      IMPORTANCE_RANK[a.importance] - IMPORTANCE_RANK[b.importance]
+  );
+
+  const weakest = byNeed[0];
+  if (weakest && weakest.status !== "match") {
+    out.push(`I've actually done "${shorten(weakest.requirement)}"`);
+  }
+
+  const understated = report.items.find(
+    (i) => i.status === "match" && i.strength !== "exceeds" && i.importance !== "nice-to-have"
+  );
+  if (understated) {
+    // Phrased to fit a credential as readily as a skill: "I led it" reads as
+    // nonsense next to "MD or equivalent medical degree".
+    out.push(`I more than meet "${shorten(understated.requirement)}"`);
+  }
+
+  const secondWeak = byNeed.find((i) => i !== weakest && i.status !== "match");
+  if (secondWeak) {
+    out.push(`"${shorten(secondWeak.requirement)}" isn't a fair gap`);
+  }
+
+  out.push("You missed something important on my resume");
+  return out.slice(0, 4);
+}

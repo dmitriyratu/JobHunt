@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AppSettings } from "@/lib/settings";
 import { useJobHuntState } from "@/lib/useAppState";
+import FeedbackModal from "./FeedbackModal";
 import MobileSessionDrawer from "./MobileSessionDrawer";
 import SettingsModal from "./SettingsModal";
 import StageNav from "./StageNav";
@@ -72,6 +73,8 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
                 />
               )}
             </button>
+
+            <FeedbackModal />
 
             <MobileSessionDrawer />
           </div>

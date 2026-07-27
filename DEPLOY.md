@@ -21,6 +21,26 @@ spend the owner's OpenAI credits. Every visitor supplies their own key in
 |---|---|---|
 | `OPENAI_API_KEY` | Local dev only | Convenience so you don't paste a key on localhost. Ignored in production. |
 | `ALLOW_SERVER_OPENAI_KEY` | Optional | Set to `true` **only** for a private deployment where you accept that any visitor spends your credits. Requires `OPENAI_API_KEY` to also be set in Vercel. |
+| `FEEDBACK_WEBHOOK_URL` | Optional | Where the **Feedback** button delivers to. Unset, feedback is logged server-side and the sender is told plainly that it wasn't delivered, with their text offered back to copy. |
+
+### Receiving feedback
+
+The app has no database, so feedback needs somewhere to go. Any endpoint
+accepting a JSON `POST` works — the body carries a Slack/Discord-style `text`
+field plus structured `message`, `context` and `screenshot`.
+
+The quickest option is a Slack incoming webhook: create one at
+<https://api.slack.com/messaging/webhooks>, then set it in Vercel:
+
+```bash
+npx vercel env add FEEDBACK_WEBHOOK_URL production
+```
+
+Discord webhooks and Zapier catch hooks work the same way.
+
+**What gets sent:** the message, which page the sender was on, whether they had
+a resume / posting / match report / letter, their viewport and user agent, and a
+screenshot only if they attached one. Never the resume, posting or letter text.
 
 Do not set `OPENAI_API_KEY` in Vercel unless you are also deliberately setting
 `ALLOW_SERVER_OPENAI_KEY=true`.
