@@ -81,9 +81,29 @@ export default function DocumentPreview({
           </a>
         </div>
       ) : isPdf && fileUrl ? (
-        <div className="rounded-lg border border-[var(--color-border-subtle)] overflow-hidden" style={{ height: 320 }}>
-          <embed src={fileUrl} type="application/pdf" width="100%" height="100%" />
-        </div>
+        <>
+          {/* iOS Safari won't render an inline PDF through <embed> — it leaves a
+              blank grey box — so small screens get a link out instead. */}
+          <div
+            className="hidden sm:block rounded-lg border border-[var(--color-border-subtle)] overflow-hidden"
+            style={{ height: 320 }}
+          >
+            <embed src={fileUrl} type="application/pdf" width="100%" height="100%" />
+          </div>
+          <div className="sm:hidden rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 text-center">
+            <p className="text-xs text-[var(--color-text-secondary)] mb-3">
+              Open the PDF to view it on this device.
+            </p>
+            <a
+              href={fileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-secondary text-xs py-1.5 px-3 inline-flex"
+            >
+              Open {fileName ?? "PDF"} ↗
+            </a>
+          </div>
+        </>
       ) : fileUrl ? (
         <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 text-center">
           <p className="text-xs text-[var(--color-text-secondary)] mb-3">
@@ -97,11 +117,11 @@ export default function DocumentPreview({
 
       {expanded && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-6"
           onClick={() => setExpanded(false)}
         >
           <div
-            className="glass-panel w-full max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden"
+            className="glass-panel w-full max-w-2xl max-h-[85dvh] flex flex-col p-0 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-subtle)] shrink-0">

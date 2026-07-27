@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import type { AppSettings } from "@/lib/settings";
-import { getTabId, type UsageEndpoint, type UsageEntry } from "@/lib/usage";
+import { type UsageEndpoint, type UsageEntry } from "@/lib/usage";
 import SettingsModal from "./SettingsModal";
 
 type Props = {
   entries: UsageEntry[];
+  /** Only spend belonging to this application is counted. */
+  sessionId: string;
   settings: AppSettings;
   onSettingsSave: (settings: AppSettings) => void;
 };
@@ -23,10 +25,16 @@ function formatUsd(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
-export default function SessionCostSummary({ entries, settings, onSettingsSave }: Props) {
+export default function SessionCostSummary({
+  entries,
+  sessionId,
+  settings,
+  onSettingsSave,
+}: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const tabId = getTabId();
-  const sessionEntries = entries.filter((e) => e.tabId === tabId);
+  // Attributed by application, not by browser tab. Tab attribution silently
+  // summed every application worked on in that tab.
+  const sessionEntries = entries.filter((e) => e.sessionId === sessionId);
   if (sessionEntries.length === 0) return null;
 
   const total = sessionEntries.reduce((sum, e) => sum + e.costUsd, 0);
@@ -39,7 +47,7 @@ export default function SessionCostSummary({ entries, settings, onSettingsSave }
     <div className="glass-panel p-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <p className="text-xs text-[var(--color-text-muted)] mb-1">This session cost</p>
+          <p className="text-xs text-[var(--color-text-muted)] mb-1">This application cost</p>
           <p className="text-lg font-semibold">{formatUsd(total)}</p>
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--color-text-secondary)]">

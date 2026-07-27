@@ -59,7 +59,9 @@ export default function LetterEditor({ html, onChange }: Props) {
 
   return (
     <div className="rounded-lg border border-[var(--color-border-subtle)] overflow-hidden">
-      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
+      {/* Wraps rather than overflowing: seven tool buttons plus Copy are a few
+          pixels wider than a phone screen. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
         <div className="flex items-center gap-1">
           <ToolbarButton
             active={editor.isActive("bold")}
@@ -109,7 +111,7 @@ export default function LetterEditor({ html, onChange }: Props) {
           {copied ? "Copied!" : "Copy"}
         </button>
       </div>
-      <div className="bg-[var(--color-surface)] p-5 max-h-[500px] overflow-y-auto">
+      <div className="bg-[var(--color-surface)] p-4 sm:p-5 max-h-[500px] overflow-y-auto">
         <EditorContent editor={editor as Editor} />
       </div>
     </div>

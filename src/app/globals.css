@@ -71,15 +71,29 @@
    * apart (header and two pages at 1152px, the letter page at 768px), which
    * left most of a wide window empty and made the pages look unrelated.
    *
-   * The inline padding is deliberately a constant 1.5rem at every breakpoint:
-   * the sticky StepNav bleeds its surface across it with `-mx-6 px-6`, so a
-   * responsive value here would misalign that bar.
+   * The inline padding is published as `--app-pad` so anything needing to bleed
+   * across it can read the real value instead of hardcoding one. That is what
+   * lets the padding shrink on a phone — 24px a side costs an eighth of a 390px
+   * screen — without knocking the sticky footer out of alignment.
    */
   .app-container {
+    --app-pad: 1rem;
     width: 100%;
     max-width: 1700px;
     margin-inline: auto;
-    padding-inline: 1.5rem;
+    padding-inline: var(--app-pad);
+  }
+
+  @media (min-width: 640px) {
+    .app-container {
+      --app-pad: 1.5rem;
+    }
+  }
+
+  /* Stretches a child's background across the container's inline padding. */
+  .app-bleed {
+    margin-inline: calc(var(--app-pad) * -1);
+    padding-inline: var(--app-pad);
   }
 
   .glass-panel {
@@ -114,6 +128,26 @@
 
   .input-base::placeholder {
     color: var(--color-text-muted);
+  }
+
+  /* iOS Safari zooms the page whenever a focused field's text is under 16px,
+     and never zooms back out. 16px on small screens is the fix — a
+     maximum-scale lock would also disable pinch-zoom for everyone. */
+  @media (max-width: 639px) {
+    .input-base,
+    .input-base::placeholder {
+      font-size: 1rem;
+    }
+  }
+
+  /* Comfortable touch targets. Pointer-coarse rather than a width query, so a
+     tablet gets them too and a small desktop window doesn't. 44px is Apple's
+     minimum; the compact `py-1.5 px-3` buttons land around 30px without this. */
+  @media (pointer: coarse) {
+    .btn-primary,
+    .btn-secondary {
+      min-height: 44px;
+    }
   }
 
   .btn-primary {

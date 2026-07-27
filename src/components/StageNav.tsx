@@ -19,11 +19,14 @@ export default function StageNav() {
   const steps = getJourneySteps(state);
 
   return (
-    <div className="hidden md:flex items-center gap-2">
+    // Scrolls rather than hiding below md: three pills are a little wider than a
+    // phone, and knowing where you are in the journey matters more on the screen
+    // with the least room for context.
+    <div className="flex items-center gap-2 max-w-full overflow-x-auto">
       {steps.map((step, i) => {
         const active = pathname === step.href;
         const base =
-          "flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-full transition-colors";
+          "flex items-center gap-1.5 whitespace-nowrap text-xs font-medium px-3 py-2 rounded-full transition-colors";
         const tone = active
           ? "bg-[var(--color-accent-muted)] text-[var(--color-accent)]"
           : step.enabled
@@ -55,7 +58,7 @@ export default function StageNav() {
         );
 
         return (
-          <div key={step.id} className="flex items-center gap-2">
+          <div key={step.id} className="flex items-center gap-2 shrink-0">
             {step.enabled ? (
               <Link href={step.href} className={`${base} ${tone}`} title={step.label}>
                 {content}
@@ -65,7 +68,9 @@ export default function StageNav() {
                 {content}
               </span>
             )}
-            {i < steps.length - 1 && <div className="w-4 h-px bg-[var(--color-border)]" />}
+            {i < steps.length - 1 && (
+              <div className="w-2 sm:w-4 h-px bg-[var(--color-border)] shrink-0" />
+            )}
           </div>
         );
       })}

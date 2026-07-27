@@ -70,6 +70,7 @@ export default function MatchPage() {
         appendUsageEntry({
           endpoint: "analyze-match",
           model: data.usage.model,
+          sessionId: state.id,
           usage: data.usage,
         });
       }
@@ -79,7 +80,10 @@ export default function MatchPage() {
       analyzingRef.current = false;
       setAnalyzing(false);
     }
-  }, [state.resumeText, state.jobDescription, settings, setState]);
+    // state.id is load-bearing: without it a stale closure would file this
+    // application's spend against whichever one was open when the callback
+    // was created.
+  }, [state.id, state.resumeText, state.jobDescription, settings, setState]);
 
   // Latest-ref so the auto-analyze effect doesn't depend on the callback
   // identity (which changes whenever state/settings do).
@@ -201,14 +205,14 @@ export default function MatchPage() {
 
   if (!hydrated) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-dvh flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-[var(--color-accent)] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <AppHeader
         subtitle="Match report"
         settings={settings}
@@ -258,6 +262,7 @@ export default function MatchPage() {
                 resumeText={state.resumeText}
                 jobDescription={state.jobDescription}
                 apiKey={settings.apiKey}
+                sessionId={state.id}
                 attachedItem={
                   state.matchReport
                     ? state.matchReport.items.find((i) => i.id === attachedItemId) ??

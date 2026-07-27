@@ -63,6 +63,7 @@ export default function LetterPage() {
         const entries = appendUsageEntry({
           endpoint: "generate-email",
           model: data.usage.model,
+          sessionId: state.id,
           usage: data.usage,
         });
         setUsageEntries(entries);
@@ -78,14 +79,14 @@ export default function LetterPage() {
 
   if (!hydrated) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-dvh flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-[var(--color-accent)] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <AppHeader
         subtitle="Write your outreach letter"
         settings={settings}
@@ -159,6 +160,7 @@ export default function LetterPage() {
             {state.generatedBody && (
               <SessionCostSummary
                 entries={usageEntries}
+                sessionId={state.id}
                 settings={settings}
                 onSettingsSave={handleSettingsSave}
               />

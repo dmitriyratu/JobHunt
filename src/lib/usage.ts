@@ -3,7 +3,6 @@ import { getTaskModel, type TaskId } from "./models";
 import { computeCost } from "./pricing";
 
 export const USAGE_STORAGE_KEY = "jobhunt-usage";
-const TAB_ID_KEY = "jobhunt-tab-id";
 
 /** Each endpoint is one task, so the two names index the same thing. */
 export type UsageEndpoint = TaskId;
@@ -13,25 +12,21 @@ export type UsageEntry = {
   timestamp: string;
   endpoint: UsageEndpoint;
   model: string;
-  tabId: string;
+  /**
+   * Which application this spend belongs to.
+   *
+   * Replaces an earlier browser-tab id. Attributing by tab meant the letter
+   * page's cost summary added up every application worked on in that tab, so a
+   * line labelled "this session" could read 3x the cost of the application you
+   * were actually looking at. Entries written before this field exists have no
+   * sessionId and are simply not attributed to any application.
+   */
+  sessionId: string;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
   costUsd: number;
 };
-
-// One id per browser TAB (distinct from an application Session), for the lifetime of that tab (sessionStorage, not
-// localStorage) — a natural fit for "how much did this session cost," and it
-// carries across the 3-page flow since they're all the same tab.
-export function getTabId(): string {
-  if (typeof window === "undefined") return "";
-  let id = sessionStorage.getItem(TAB_ID_KEY);
-  if (!id) {
-    id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    sessionStorage.setItem(TAB_ID_KEY, id);
-  }
-  return id;
-}
 
 export function loadUsageLog(): UsageEntry[] {
   if (typeof window === "undefined") return [];
@@ -57,6 +52,7 @@ function saveUsageLog(entries: UsageEntry[]): void {
 export function appendUsageEntry(params: {
   endpoint: UsageEndpoint;
   model: string;
+  sessionId: string;
   usage: UsageStats;
 }): UsageEntry[] {
   const pricing = getTaskModel(params.endpoint).pricing;
@@ -65,7 +61,7 @@ export function appendUsageEntry(params: {
     timestamp: new Date().toISOString(),
     endpoint: params.endpoint,
     model: params.model,
-    tabId: getTabId(),
+    sessionId: params.sessionId,
     promptTokens: params.usage.promptTokens,
     completionTokens: params.usage.completionTokens,
     totalTokens: params.usage.totalTokens,

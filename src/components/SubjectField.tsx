@@ -32,7 +32,8 @@ export default function SubjectField({ value, onChange }: Props) {
           value={value}
           onChange={(e) => onChange(e.target.value)}
           aria-label="Email subject"
-          className="w-full bg-transparent border-0 outline-none text-sm text-[var(--color-text-primary)]"
+          // text-base below sm: iOS zooms the page on focusing a sub-16px field.
+          className="w-full bg-transparent border-0 outline-none text-base sm:text-sm text-[var(--color-text-primary)]"
         />
       </div>
     </div>

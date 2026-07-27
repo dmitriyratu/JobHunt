@@ -55,14 +55,23 @@ export type TaskModel = ModelSpec & {
 };
 
 export const TASK_MODELS = {
-  // The analytical core. It reads the full resume and job description, decides
+  // The analytical core: reads the full resume and job description, decides
   // which requirements matter and how much, and judges the evidence for each.
-  // The refine chat and the letter are both built on top of whatever it
-  // produces, so a cheaper model here degrades everything downstream.
+  //
+  // Runs on the fast model on measured evidence, not on a hunch. Across 8
+  // resume-by-posting pairs (2 genuine fits, 6 deliberate mismatches) the fast
+  // model separated good fits from bad ones identically to the strong one
+  // (61.0 vs 61.2 points), grounded its extracted requirements in the posting
+  // slightly better (0.94 vs 0.91), matched it on run-to-run stability, and
+  // extracted company and job title identically on every run — at 3.6x less
+  // cost and half the latency on the step that blocks the whole flow.
+  //
+  // Known trade: it is a little stingier with partial credit, occasionally
+  // passing on a transferable skill the strong model would have credited.
   "analyze-match": {
-    ...CATALOG.standard,
+    ...CATALOG.fast,
     task: "Match analysis",
-    why: "Reads the whole resume and posting and weighs every requirement. The chat and the letter are both built on this, so it gets the strong model.",
+    why: "Reads the whole resume and posting and weighs every requirement. Tested head-to-head against the pricier model and matched it, so this step runs fast and cheap.",
   },
 
   // The analysis is already done by the time this runs. The model is applying

@@ -47,30 +47,39 @@ function JobSourceValue({ jobSource, charCount }: { jobSource: string; charCount
     // Not a URL — a filename or pasted text.
   }
 
-  const suffix = ` · ${charCount.toLocaleString()} chars, sent in full`;
+  // The source and its size go on separate lines. Kept inline, the narrow
+  // column truncated the whole value and the character count — the part that
+  // says the posting is sent in full — was the first thing to disappear.
+  const meta = (
+    <span className="block text-[var(--color-text-muted)]">
+      {charCount.toLocaleString()} chars, sent in full
+    </span>
+  );
 
   if (!url) {
     return (
-      <span className="truncate inline-block max-w-full align-bottom" title={jobSource}>
-        {jobSource}
-        {suffix}
-      </span>
+      <>
+        <span className="block truncate" title={jobSource}>
+          {jobSource}
+        </span>
+        {meta}
+      </>
     );
   }
 
   return (
-    <span className="truncate inline-block max-w-full align-bottom">
+    <>
       <a
         href={url.href}
         target="_blank"
         rel="noopener noreferrer"
         title={url.href}
-        className="text-[var(--color-accent)] hover:underline"
+        className="block truncate text-[var(--color-accent)] hover:underline"
       >
         {url.hostname.replace(/^www\./, "")} ↗
       </a>
-      {suffix}
-    </span>
+      {meta}
+    </>
   );
 }
 
@@ -97,7 +106,7 @@ export default function ContextRecap({
         </Link>
       </div>
 
-      <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-3 text-xs items-baseline">
+      <dl className="grid grid-cols-[5rem_minmax(0,1fr)] sm:grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 sm:gap-x-4 gap-y-3 text-xs items-baseline">
         {jobTitle && <Row label="Role">{jobTitle}</Row>}
 
         {detectedCompany ? (
@@ -113,18 +122,20 @@ export default function ContextRecap({
                 value={companyName}
                 onChange={(e) => onCompanyNameChange(e.target.value)}
                 placeholder="Not detected — type it here"
-                className="input-base py-1.5 text-xs"
+                // text-base below sm: a sub-16px field makes iOS zoom the whole
+                // page on focus and never zoom back out.
+                className="input-base py-1.5 text-base sm:text-xs"
               />
             </dd>
           </>
         )}
 
         <Row label="Resume">
-          <span
-            className="truncate inline-block max-w-full align-bottom"
-            title={resumeFilename || undefined}
-          >
-            {resumeFilename || "—"} · {resumeText.length.toLocaleString()} chars, sent in full
+          <span className="block truncate" title={resumeFilename || undefined}>
+            {resumeFilename || "—"}
+          </span>
+          <span className="block text-[var(--color-text-muted)]">
+            {resumeText.length.toLocaleString()} chars, sent in full
           </span>
         </Row>
         <Row label="Job description">

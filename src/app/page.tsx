@@ -59,14 +59,14 @@ export default function HomePage() {
 
   if (!hydrated) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-dvh flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-[var(--color-accent)] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <AppHeader
         subtitle="Resume & job description"
         settings={settings}

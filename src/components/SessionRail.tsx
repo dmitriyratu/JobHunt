@@ -1,18 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { resolveCompany, sessionTitle } from "@/lib/session";
 import { useJobHuntState } from "@/lib/useAppState";
 import CompanyLogo from "./CompanyLogo";
-import SessionCard from "./SessionCard";
+import SessionList from "./SessionList";
 
 const COLLAPSED_KEY = "jobhunt-rail-collapsed";
 
 function ChevronIcon({ pointsRight }: { pointsRight: boolean }) {
   return (
     <svg
-      className={`h-4 w-4 transition-transform ${pointsRight ? "" : "rotate-180"}`}
+      className={`h-4 w-4 ${pointsRight ? "" : "rotate-180"}`}
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
@@ -29,13 +29,15 @@ function ChevronIcon({ pointsRight }: { pointsRight: boolean }) {
  * journey (resume & job → match report → letter) rather than remounting per
  * page.
  *
+ * Desktop only — below `lg` there isn't room for a permanent 320px column, so
+ * MobileSessionDrawer presents the same list from the header instead.
+ *
  * Collapses to a strip of company logos. The collapsed choice is remembered,
  * because a rail you have to re-collapse on every visit is worse than one that
  * never collapsed.
  */
 export default function SessionRail() {
-  const { sessions, currentSessionId, hydrated, newSession, switchSession, deleteSession } =
-    useJobHuntState();
+  const { sessions, currentSessionId, hydrated, newSession, switchSession } = useJobHuntState();
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -45,14 +47,6 @@ export default function SessionRail() {
    * seen sliding shut on every page load.
    */
   const [prefLoaded, setPrefLoaded] = useState(false);
-  /**
-   * Which card is showing its details. Deliberately separate from
-   * `currentSessionId`: the active application stays highlighted at all times,
-   * but its details collapse as soon as you look elsewhere, so the rail stays
-   * a scannable list rather than one permanently open card.
-   */
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const expandedRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     try {
@@ -73,54 +67,21 @@ export default function SessionRail() {
       }
       return next;
     });
-    setExpandedId(null);
   }, []);
 
-  // Clicking anywhere outside the open card minimises it. Uses a ref rather
-  // than an attribute selector so generated session ids never need escaping.
-  useEffect(() => {
-    if (!expandedId) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (target && expandedRef.current?.contains(target)) return;
-      setExpandedId(null);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setExpandedId(null);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [expandedId]);
-
-  const handleNew = useCallback(async () => {
+  const handleNewCollapsed = useCallback(async () => {
     setCreating(true);
     try {
       await newSession();
-      setExpandedId(null);
-      // A brand-new application has nothing to analyze or write yet.
       router.push("/");
     } finally {
       setCreating(false);
     }
   }, [newSession, router]);
 
-  const handleSelect = useCallback(
-    (id: string) => {
-      switchSession(id);
-      // Re-clicking the open card closes it, so the same control both opens
-      // and dismisses the details.
-      setExpandedId((prev) => (prev === id ? null : id));
-    },
-    [switchSession]
-  );
-
   return (
     <aside
-      className={`hidden lg:flex flex-col shrink-0 border-l border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] sticky top-0 h-screen ${
+      className={`hidden lg:flex flex-col shrink-0 border-l border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] sticky top-0 h-dvh ${
         collapsed ? "w-[68px]" : "w-[320px]"
       } ${prefLoaded ? "transition-[width] duration-200 ease-out" : ""}`}
       aria-label="Applications"
@@ -138,7 +99,7 @@ export default function SessionRail() {
               <ChevronIcon pointsRight={false} />
             </button>
             <button
-              onClick={handleNew}
+              onClick={handleNewCollapsed}
               disabled={creating}
               title="New application"
               aria-label="New application"
@@ -173,7 +134,7 @@ export default function SessionRail() {
                   >
                     {/* CompanyLogo renders nothing without a company name, so
                         fall back to the first letter of the card's own title —
-                        an empty tile would be unclickable-looking. */}
+                        an empty tile would look unclickable. */}
                     {company ? (
                       <CompanyLogo company={company} variant="tile" />
                     ) : (
@@ -188,46 +149,24 @@ export default function SessionRail() {
         </>
       ) : (
         <>
-          <div className="px-4 py-5 border-b border-[var(--color-border-subtle)]">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <h2 className="font-medium text-sm">Applications</h2>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-[var(--color-text-muted)]">
-                  {hydrated ? sessions.length : ""}
-                </span>
-                <button
-                  onClick={toggleCollapsed}
-                  title="Collapse applications"
-                  aria-label="Collapse applications"
-                  aria-expanded
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-primary)] transition-colors"
-                >
-                  <ChevronIcon pointsRight />
-                </button>
-              </div>
+          <div className="flex items-center justify-between gap-2 px-4 pt-5 pb-1">
+            <h2 className="font-medium text-sm">Applications</h2>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-[var(--color-text-muted)]">
+                {hydrated ? sessions.length : ""}
+              </span>
+              <button
+                onClick={toggleCollapsed}
+                title="Collapse applications"
+                aria-label="Collapse applications"
+                aria-expanded
+                className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-primary)] transition-colors"
+              >
+                <ChevronIcon pointsRight />
+              </button>
             </div>
-            <button onClick={handleNew} disabled={creating} className="btn-primary w-full">
-              {creating ? "Creating…" : "+ New application"}
-            </button>
-            <p className="text-xs text-[var(--color-text-muted)] mt-2">
-              Your resume carries over; the job details start fresh.
-            </p>
           </div>
-
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
-            {hydrated &&
-              sessions.map((session) => (
-                <div key={session.id} ref={session.id === expandedId ? expandedRef : undefined}>
-                  <SessionCard
-                    session={session}
-                    active={session.id === currentSessionId}
-                    expanded={session.id === expandedId}
-                    onSelect={() => handleSelect(session.id)}
-                    onDelete={() => deleteSession(session.id)}
-                  />
-                </div>
-              ))}
-          </div>
+          <SessionList />
         </>
       )}
     </aside>

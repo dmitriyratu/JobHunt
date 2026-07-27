@@ -17,6 +17,8 @@ type Props = {
   resumeText: string;
   jobDescription: string;
   apiKey: string;
+  /** Application this chat belongs to, so its spend is attributed correctly. */
+  sessionId: string;
   /** Requirement or standout the user clicked in the report, to scope the next question. */
   attachedItem: ReportEntry | null;
   onClearAttachment: () => void;
@@ -31,6 +33,7 @@ export default function ReportChat({
   resumeText,
   jobDescription,
   apiKey,
+  sessionId,
   attachedItem,
   onClearAttachment,
   onNewMessage,
@@ -96,6 +99,7 @@ export default function ReportChat({
         appendUsageEntry({
           endpoint: "report-chat",
           model: data.usage.model,
+          sessionId,
           usage: data.usage,
         });
       }
@@ -112,8 +116,10 @@ export default function ReportChat({
   return (
     // The cap matters because this column is sticky and the Back/Next bar is
     // pinned to the bottom of the viewport: without it, a short window would
-    // leave the message input hidden underneath that bar.
-    <div className="glass-panel flex flex-col h-[560px] max-h-[calc(100vh-11rem)]">
+    // leave the message input hidden underneath that bar. dvh rather than vh —
+    // iOS Safari's `100vh` includes the collapsing address bar, so a vh-based
+    // cap is taller than what you can actually see.
+    <div className="glass-panel flex flex-col h-[560px] max-h-[calc(100dvh-11rem)]">
       <div className="px-5 py-4 border-b border-[var(--color-border-subtle)]">
         <h3 className="font-medium text-sm">Refine the report</h3>
         <p className="text-xs text-[var(--color-text-muted)] mt-0.5">

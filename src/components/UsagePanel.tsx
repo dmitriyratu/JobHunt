@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { TASK_MODELS, type TaskId, type TaskModel } from "@/lib/models";
 import { clearUsageLog, loadUsageLog, type UsageEntry } from "@/lib/usage";
 
 /**
@@ -14,10 +15,10 @@ type Props = {
 
 const BILLING_URL = "https://platform.openai.com/settings/organization/billing/overview";
 
-const ENDPOINT_LABEL: Record<UsageEntry["endpoint"], string> = {
-  "analyze-match": "Analyze match",
+const STEP_LABEL: Record<UsageEntry["endpoint"], string> = {
+  "analyze-match": "Match report",
   "report-chat": "Refine chat",
-  "generate-email": "Generate letter",
+  "generate-email": "Letter",
 };
 
 function formatUsd(amount: number): string {
@@ -31,15 +32,30 @@ function isSameMonth(iso: string, ref: Date): boolean {
   return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth();
 }
 
-function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Disclosure({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
-      <p className="text-xs text-[var(--color-text-muted)] mb-1">{label}</p>
-      <p className="text-2xl font-semibold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
-        {value}
-      </p>
-      {hint && <p className="text-xs text-[var(--color-text-muted)] mt-1">{hint}</p>}
-    </div>
+    <details className="group rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
+      <summary className="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-3 text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+        <svg
+          className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+          aria-hidden
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        {label}
+      </summary>
+      <div className="px-4 pb-4 pt-1">{children}</div>
+    </details>
   );
 }
 
@@ -74,7 +90,7 @@ export default function UsagePanel({ adminApiKey }: Props) {
       .then(async (r) => {
         const data = await r.json();
         if (cancelled) return;
-        if (!r.ok) setReportError(data.error ?? "Could not read OpenAI costs.");
+        if (!r.ok) setReportError(data.error ?? "Could not read your OpenAI spend.");
         else setReported(data);
       })
       .catch(() => {
@@ -106,167 +122,157 @@ export default function UsagePanel({ adminApiKey }: Props) {
     [entries]
   );
 
+  if (entries.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-[var(--color-border)] p-8 text-center">
+        <p className="text-sm text-[var(--color-text-secondary)]">Nothing spent yet.</p>
+        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+          Costs appear here once you run a match report or write a letter.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-5">
-      {/* Remaining credit is not exposed by any API key — see the route comment
-          in /api/openai-costs. Be explicit rather than guessing. */}
-      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="min-w-0">
-            <p className="text-xs text-[var(--color-text-muted)] mb-1">Remaining account credit</p>
-            <p className="text-sm text-[var(--color-text-secondary)]">
-              OpenAI doesn&rsquo;t expose your balance to any API key — the only endpoint that did
-              is browser-session-only. It has to be checked on their dashboard.
-            </p>
-          </div>
-          <a
-            href={BILLING_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-secondary text-xs py-1.5 px-3 shrink-0"
-          >
-            Open OpenAI billing ↗
-          </a>
-        </div>
+    <div className="space-y-4">
+      {/* One number, stated plainly. The four-tile grid made the reader do the
+          work of deciding which figure mattered. */}
+      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-5 text-center">
+        <p className="text-xs text-[var(--color-text-muted)]">Spent this month</p>
+        <p className="mt-1 text-4xl font-semibold [font-variant-numeric:tabular-nums]">
+          {formatUsd(estMonth)}
+        </p>
+        <p className="mt-1.5 text-xs text-[var(--color-text-secondary)]">
+          {thisMonth.length} {thisMonth.length === 1 ? "request" : "requests"} this month ·{" "}
+          {formatUsd(estAll)} since you started
+        </p>
       </div>
 
-      {adminApiKey ? (
-        <div>
-          <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">
-            Reported by OpenAI (authoritative)
-          </p>
+      {adminApiKey && (
+        <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3">
           {loadingReported ? (
-            <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 flex items-center gap-2">
-              <div className="w-4 h-4 border-2 border-[var(--color-accent)] border-t-transparent rounded-full animate-spin" />
-              <p className="text-xs text-[var(--color-text-secondary)]">
-                Reading your OpenAI costs…
-              </p>
-            </div>
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              Checking your OpenAI account…
+            </p>
           ) : reportError ? (
-            <div className="rounded-lg bg-[var(--color-danger-muted)] border border-[var(--color-danger)]/20 px-4 py-3">
-              <p className="text-[var(--color-danger)] text-xs">{reportError}</p>
-            </div>
+            <p className="text-xs text-[var(--color-danger)]">{reportError}</p>
           ) : reported ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <StatTile
-                label="Spent this month (all OpenAI usage)"
-                value={formatUsd(reported.monthToDate)}
-                hint={`Since ${reported.periodStart} · ${reported.currency.toUpperCase()}`}
-              />
-              <StatTile
-                label="This app's share (estimated)"
-                value={formatUsd(estMonth)}
-                hint={
-                  reported.monthToDate > 0
-                    ? `${Math.round((estMonth / reported.monthToDate) * 100)}% of your OpenAI spend`
-                    : "No OpenAI spend recorded yet"
-                }
-              />
-            </div>
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              OpenAI reports{" "}
+              <strong className="text-[var(--color-text-primary)]">
+                {formatUsd(reported.monthToDate)}
+              </strong>{" "}
+              across your whole account this month
+              {reported.monthToDate > 0 && (
+                <> — JobHunt is about {Math.round((estMonth / reported.monthToDate) * 100)}% of it</>
+              )}
+              .
+            </p>
           ) : null}
-        </div>
-      ) : (
-        <div className="rounded-lg border border-dashed border-[var(--color-border)] p-4">
-          <p className="text-xs text-[var(--color-text-secondary)]">
-            Add an OpenAI <strong>Admin key</strong> above to show OpenAI&rsquo;s own spend figures
-            here instead of the local estimates below.
-          </p>
         </div>
       )}
 
-      <div>
-        <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">
-          Estimated from this app&rsquo;s own token counts
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3">
+        <p className="text-xs text-[var(--color-text-secondary)]">
+          Your remaining balance lives on OpenAI&rsquo;s site — they don&rsquo;t share it with apps.
         </p>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatTile label="This month" value={formatUsd(estMonth)} />
-          <StatTile label="All time" value={formatUsd(estAll)} />
-          <StatTile label="Calls this month" value={String(thisMonth.length)} />
-          <StatTile label="Calls all time" value={String(entries.length)} />
-        </div>
-        <p className="text-xs text-[var(--color-text-muted)] mt-2">
-          Token counts are exact; the dollar figures use the per-model rates in this app, so treat
-          them as close estimates.
-        </p>
+        <a
+          href={BILLING_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn-secondary shrink-0 px-3 py-1.5 text-xs"
+        >
+          Check balance ↗
+        </a>
       </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-medium text-[var(--color-text-secondary)]">Recent calls</p>
-          {entries.length > 0 &&
-            (confirmingClear ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[var(--color-text-muted)]">Clear all history?</span>
-                <button
-                  onClick={handleClear}
-                  className="btn-secondary text-xs py-1.5 px-3 text-[var(--color-danger)]"
+      <Disclosure label="Recent activity">
+        <div className="max-h-[280px] overflow-y-auto overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-[var(--color-surface)]">
+              <tr className="border-b border-[var(--color-border-subtle)] text-left text-xs text-[var(--color-text-muted)]">
+                <th className="py-2 pr-4 font-medium">When</th>
+                <th className="py-2 pr-4 font-medium">Step</th>
+                <th className="py-2 text-right font-medium">Cost</th>
+              </tr>
+            </thead>
+            <tbody className="[font-variant-numeric:tabular-nums]">
+              {recent.map((entry) => (
+                <tr
+                  key={entry.id}
+                  className="border-b border-[var(--color-border-subtle)] last:border-0"
                 >
-                  Confirm clear
-                </button>
-                <button
-                  onClick={() => setConfirmingClear(false)}
-                  className="btn-secondary text-xs py-1.5 px-3"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setConfirmingClear(true)}
-                className="btn-secondary text-xs py-1.5 px-3"
-              >
-                Clear log
-              </button>
-            ))}
-        </div>
-
-        {recent.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-[var(--color-border)] p-8 text-center">
-            <p className="text-sm text-[var(--color-text-muted)]">
-              No usage recorded yet — analyze a match, refine it, or generate a letter.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto max-h-[320px] overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-[var(--color-surface-raised)]">
-                <tr className="text-left text-xs text-[var(--color-text-muted)] border-b border-[var(--color-border-subtle)]">
-                  <th className="font-medium py-2 pr-4">Date</th>
-                  <th className="font-medium py-2 pr-4">Action</th>
-                  <th className="font-medium py-2 pr-4">Model</th>
-                  <th className="font-medium py-2 pr-4 text-right">Tokens</th>
-                  <th className="font-medium py-2 text-right">Cost</th>
+                  <td className="whitespace-nowrap py-2 pr-4 text-xs text-[var(--color-text-secondary)]">
+                    {new Date(entry.timestamp).toLocaleString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </td>
+                  <td className="py-2 pr-4 text-xs">{STEP_LABEL[entry.endpoint]}</td>
+                  <td className="py-2 text-right text-xs font-medium">
+                    {formatUsd(entry.costUsd)}
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="[font-variant-numeric:tabular-nums]">
-                {recent.map((entry) => (
-                  <tr
-                    key={entry.id}
-                    className="border-b border-[var(--color-border-subtle)] last:border-0"
-                  >
-                    <td className="py-2 pr-4 text-[var(--color-text-secondary)] whitespace-nowrap">
-                      {new Date(entry.timestamp).toLocaleString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                    </td>
-                    <td className="py-2 pr-4">{ENDPOINT_LABEL[entry.endpoint]}</td>
-                    <td className="py-2 pr-4 text-[var(--color-text-secondary)] font-mono text-xs">
-                      {entry.model}
-                    </td>
-                    <td className="py-2 pr-4 text-right text-[var(--color-text-secondary)]">
-                      {entry.totalTokens.toLocaleString()}
-                    </td>
-                    <td className="py-2 text-right font-medium">{formatUsd(entry.costUsd)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-3 flex items-center justify-end">
+          {confirmingClear ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[var(--color-text-muted)]">Clear this history?</span>
+              <button
+                onClick={handleClear}
+                className="btn-secondary px-3 py-1.5 text-xs text-[var(--color-danger)]"
+              >
+                Yes, clear
+              </button>
+              <button
+                onClick={() => setConfirmingClear(false)}
+                className="btn-secondary px-3 py-1.5 text-xs"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmingClear(true)}
+              className="btn-secondary px-3 py-1.5 text-xs"
+            >
+              Clear history
+            </button>
+          )}
+        </div>
+      </Disclosure>
+
+      <Disclosure label="Why does it cost this?">
+        <p className="mb-3 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+          Each step uses the model best suited to it, so you aren&rsquo;t paying top rates for
+          simple work. Nothing here is adjustable.
+        </p>
+        <ul className="space-y-2">
+          {(Object.entries(TASK_MODELS) as [TaskId, TaskModel][]).map(([task, meta]) => (
+            <li
+              key={task}
+              className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-3"
+            >
+              <div className="mb-1 flex items-baseline justify-between gap-3">
+                <span className="text-sm font-medium">{meta.task}</span>
+                <span className="shrink-0 font-mono text-xs text-[var(--color-text-secondary)]">
+                  {meta.label}
+                </span>
+              </div>
+              <p className="text-xs leading-relaxed text-[var(--color-text-muted)]">{meta.why}</p>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 text-xs text-[var(--color-text-muted)]">
+          These figures are close estimates based on OpenAI&rsquo;s published rates.
+        </p>
+      </Disclosure>
     </div>
   );
 }

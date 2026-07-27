@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AppSettings } from "@/lib/settings";
 import { useJobHuntState } from "@/lib/useAppState";
+import MobileSessionDrawer from "./MobileSessionDrawer";
 import SettingsModal from "./SettingsModal";
 import StageNav from "./StageNav";
 
@@ -28,7 +29,10 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
   return (
     <>
       <header className="border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)]">
-        <div className="app-container py-4 flex items-center justify-between gap-4">
+        {/* flex-wrap so the buttons drop to a second line instead of pushing the
+            page into horizontal scroll — at 320px the title plus both buttons
+            are ~11px wider than the viewport. */}
+        <div className="app-container py-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <button
             onClick={goHome}
             title="Start a new application"
@@ -39,13 +43,15 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             </div>
-            <div>
+            <div className="min-w-0">
               <h1 className="font-semibold text-base tracking-tight">JobHunt</h1>
-              <p className="text-xs text-[var(--color-text-muted)]">{subtitle}</p>
+              {/* The per-page subtitle is the first thing to go on a phone —
+                  the journey pills below already say where you are. */}
+              <p className="hidden sm:block text-xs text-[var(--color-text-muted)]">{subtitle}</p>
             </div>
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setSettingsOpen(true)}
               title={
@@ -57,7 +63,8 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-              AI settings
+              <span className="hidden sm:inline">AI settings</span>
+              <span className="sm:hidden">Settings</span>
               {!settings.apiKey && (
                 <span
                   className="h-1.5 w-1.5 rounded-full bg-[var(--color-warning)]"
@@ -65,13 +72,17 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
                 />
               )}
             </button>
+
+            <MobileSessionDrawer />
           </div>
         </div>
 
         {/* The journey gets its own centered panel below the title rather than
             competing with the utility buttons for room in the top row. */}
         <div className="border-t border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
-          <div className="app-container py-2.5 flex justify-center">
+          {/* justify-start below sm because centring a horizontally scrollable
+              flex row clips its leading edge, making the first pill unreachable. */}
+          <div className="app-container py-2.5 flex justify-start sm:justify-center">
             <StageNav />
           </div>
         </div>

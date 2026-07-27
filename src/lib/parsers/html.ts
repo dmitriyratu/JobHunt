@@ -96,6 +96,43 @@ function extractLinkedInJob($: cheerio.CheerioAPI): string | null {
   return parts.join("\n\n");
 }
 
+/**
+ * The identifying segment of a job URL — the numeric id or uuid that names one
+ * specific posting, e.g. "8450776002" in /remesh/jobs/8450776002.
+ */
+function postingId(pathname: string): string | null {
+  const segments = pathname.split("/").filter(Boolean);
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const s = segments[i];
+    if (/^\d{4,}$/.test(s) || /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(s)) return s;
+  }
+  return null;
+}
+
+/**
+ * True when a link to one specific posting ended up somewhere else.
+ *
+ * Job boards quietly 302 expired or filled postings to a board index or the
+ * company's careers marketing page. `fetch` follows that without complaint, so
+ * without this check the app extracts whatever it landed on and analyses the
+ * candidate against the wrong document — a silently wrong report, which is far
+ * worse than an error. Only fires when the original URL actually named a
+ * posting, so ordinary redirects (http→https, trailing slash, canonical host)
+ * pass through untouched.
+ */
+function redirectedAwayFromPosting(requested: string, final: string): boolean {
+  let a: URL, b: URL;
+  try {
+    a = new URL(requested);
+    b = new URL(final);
+  } catch {
+    return false;
+  }
+  const id = postingId(a.pathname);
+  if (!id) return false;
+  return !b.pathname.includes(id);
+}
+
 export async function fetchAndExtractText(rawUrl: string): Promise<FetchedJobDescription> {
   const url = canonicalizeLinkedInUrl(rawUrl);
 
@@ -113,6 +150,14 @@ export async function fetchAndExtractText(rawUrl: string): Promise<FetchedJobDes
     throw new Error(`Failed to fetch URL (${response.status}): ${url}`);
   }
 
+  // Track where we actually ended up, not where we aimed.
+  const finalUrl = response.url || url;
+  if (redirectedAwayFromPosting(url, finalUrl)) {
+    throw new Error(
+      "That link redirected away from the job posting — the listing has probably been filled or removed. Open the link to check, or paste the job description text instead."
+    );
+  }
+
   const contentType = response.headers.get("content-type") ?? "";
   const body = await response.text();
 
@@ -123,7 +168,7 @@ export async function fetchAndExtractText(rawUrl: string): Promise<FetchedJobDes
   }
 
   if (contentType.includes("text/plain")) {
-    return { text: body.trim(), url };
+    return { text: body.trim(), url: finalUrl };
   }
 
   const $ = cheerio.load(body);
@@ -135,7 +180,7 @@ export async function fetchAndExtractText(rawUrl: string): Promise<FetchedJobDes
   if (isLinkedInHostname(new URL(url).hostname.toLowerCase())) {
     const linkedInJob = extractLinkedInJob($);
     if (linkedInJob) {
-      return { text: linkedInJob, url };
+      return { text: linkedInJob, url: finalUrl };
     }
   }
 
@@ -155,5 +200,5 @@ export async function fetchAndExtractText(rawUrl: string): Promise<FetchedJobDes
     );
   }
 
-  return { text: cleaned, url };
+  return { text: cleaned, url: finalUrl };
 }
