@@ -28,6 +28,14 @@ export type UsageEntry = {
   costUsd: number;
 };
 
+/**
+ * Fired whenever a call is recorded, so the step bar's running total updates
+ * without every page having to thread usage state down into it. A plain event
+ * rather than a store: the log already lives in localStorage, and this only has
+ * to say "re-read it".
+ */
+export const USAGE_CHANGED_EVENT = "jobhunt:usage-changed";
+
 export function loadUsageLog(): UsageEntry[] {
   if (typeof window === "undefined") return [];
   try {
@@ -69,10 +77,19 @@ export function appendUsageEntry(params: {
   };
   const entries = [...loadUsageLog(), entry];
   saveUsageLog(entries);
+  window.dispatchEvent(new CustomEvent(USAGE_CHANGED_EVENT));
   return entries;
+}
+
+/** Total spend attributed to one application. */
+export function sessionCost(entries: UsageEntry[], sessionId: string): number {
+  return entries
+    .filter((e) => e.sessionId === sessionId)
+    .reduce((sum, e) => sum + e.costUsd, 0);
 }
 
 export function clearUsageLog(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(USAGE_STORAGE_KEY);
+  window.dispatchEvent(new CustomEvent(USAGE_CHANGED_EVENT));
 }

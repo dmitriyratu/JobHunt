@@ -21,7 +21,7 @@ export function getOpenAIClient(apiKey?: string): OpenAI {
   const key = apiKey?.trim() || serverFallbackKey();
   if (!key) {
     throw new Error(
-      "Add your OpenAI API key in AI settings to use this app. It stays in your browser."
+      "Add your OpenAI API key in Settings to use this app. It stays in your browser."
     );
   }
   return new OpenAI({ apiKey: key });

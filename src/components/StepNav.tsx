@@ -1,9 +1,76 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { getJourneySteps } from "@/lib/journey";
+import { getJourneySteps, type StepId } from "@/lib/journey";
 import { useJobHuntState } from "@/lib/useAppState";
+import { loadUsageLog, USAGE_CHANGED_EVENT, type UsageEndpoint } from "@/lib/usage";
+
+/**
+ * Which step of the journey each call belongs to.
+ *
+ * Spend is recorded per endpoint, but it is read per step — "what did the
+ * resume cost me" is the question, not "what did resume-chat cost me". Several
+ * endpoints roll up into one step.
+ */
+const STEP_OF: Record<UsageEndpoint, StepId> = {
+  "analyze-match": "match",
+  "report-chat": "match",
+  "triage-document": "resume",
+  "tailor-resume": "resume",
+  "verify-grounding": "resume",
+  "repair-grounding": "resume",
+  "resume-chat": "resume",
+  "generate-email": "letter",
+};
+
+/**
+ * What this application has cost so far, broken down by step, live.
+ *
+ * In the step bar rather than a panel of its own: spend accrues a step at a
+ * time as you move through the journey, and this is the one piece of chrome
+ * that's on screen at every step. Reads the log on mount and whenever a call is
+ * recorded — see USAGE_CHANGED_EVENT — so it ticks up as you go.
+ */
+function useSessionCosts(sessionId: string): { byStep: Map<StepId, number>; total: number } {
+  const [state, setState] = useState<{ byStep: Map<StepId, number>; total: number }>(() => ({
+    byStep: new Map(),
+    total: 0,
+  }));
+
+  useEffect(() => {
+    const read = () => {
+      const byStep = new Map<StepId, number>();
+      let total = 0;
+      for (const entry of loadUsageLog()) {
+        if (entry.sessionId !== sessionId) continue;
+        const step = STEP_OF[entry.endpoint];
+        if (!step) continue;
+        byStep.set(step, (byStep.get(step) ?? 0) + entry.costUsd);
+        total += entry.costUsd;
+      }
+      setState({ byStep, total });
+    };
+    read();
+    window.addEventListener(USAGE_CHANGED_EVENT, read);
+    // Another tab working on the same application.
+    window.addEventListener("storage", read);
+    return () => {
+      window.removeEventListener(USAGE_CHANGED_EVENT, read);
+      window.removeEventListener("storage", read);
+    };
+  }, [sessionId]);
+
+  return state;
+}
+
+/** Sub-cent spend is the norm here, so two decimals would read as "$0.00". */
+function formatCost(usd: number): string {
+  if (usd >= 1) return `$${usd.toFixed(2)}`;
+  if (usd >= 0.01) return `$${usd.toFixed(3)}`;
+  return `$${usd.toFixed(4)}`;
+}
 
 /**
  * Prev/next footer for moving through the journey. Navigation is purely
@@ -21,6 +88,7 @@ import { useJobHuntState } from "@/lib/useAppState";
 export default function StepNav({ hint }: { hint?: string }) {
   const { state } = useJobHuntState();
   const pathname = usePathname();
+  const costs = useSessionCosts(state.id);
   const steps = getJourneySteps(state);
   const i = steps.findIndex((s) => s.href === pathname);
   if (i === -1) return null;
@@ -30,7 +98,10 @@ export default function StepNav({ hint }: { hint?: string }) {
   const current = steps[i];
 
   return (
-    <nav className="app-bleed sticky bottom-0 z-30 mt-8 -mb-8 py-3 bg-[var(--color-surface)] border-t border-[var(--color-border)] flex items-center justify-between gap-3">
+    // h-16 rather than padding: the applications rail's own footer is 64px
+    // (p-3 + a 40px button), and the two top borders sit side by side at the
+    // bottom of the screen — a few pixels apart reads as a mistake.
+    <nav className="app-bleed sticky bottom-0 z-30 mt-8 -mb-8 h-16 bg-[var(--color-surface)] border-t border-[var(--color-border)] flex items-center justify-between gap-3">
       <div className="min-w-0">
         {prev ? (
           <Link
@@ -50,28 +121,56 @@ export default function StepNav({ hint }: { hint?: string }) {
         )}
       </div>
 
+      {/* Per-step, then the total. Hidden on narrow screens, where the two
+          navigation controls already fill the bar and a breakdown is the first
+          thing to give up. */}
+      {costs.total > 0 && (
+        <dl className="hidden shrink-0 items-center gap-4 text-xs md:flex">
+          {steps
+            .filter((s) => (costs.byStep.get(s.id) ?? 0) > 0)
+            .map((s) => (
+              <div key={s.id} className="text-center leading-tight">
+                <dt className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
+                  {s.label}
+                </dt>
+                <dd className="tabular-nums text-[var(--color-text-secondary)]">
+                  {formatCost(costs.byStep.get(s.id) ?? 0)}
+                </dd>
+              </div>
+            ))}
+          <div className="border-l border-[var(--color-border)] pl-4 text-center leading-tight">
+            <dt className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
+              Total
+            </dt>
+            <dd className="tabular-nums font-semibold text-[var(--color-text-primary)]">
+              {formatCost(costs.total)}
+            </dd>
+          </div>
+        </dl>
+      )}
+
       <div className="flex flex-col items-end gap-1.5 min-w-0">
+        {/* One line rather than a stacked "NEXT / label": the arrow already
+            says which direction this goes, and the two-line version was the
+            tallest thing in a 64px bar. */}
         {next && next.enabled ? (
-          <Link href={next.href} className="btn-primary px-5 py-2.5">
-            <span className="text-left">
-              <span className="block text-[10px] uppercase tracking-wide opacity-80">Next</span>
-              {next.label}
-            </span>
+          <Link href={next.href} className="btn-primary px-4 py-2 text-sm">
+            {next.label}
             <span aria-hidden>→</span>
           </Link>
         ) : next ? (
-          <>
-            <button disabled className="btn-primary px-5 py-2.5 opacity-45 cursor-not-allowed">
-              <span className="text-left">
-                <span className="block text-[10px] uppercase tracking-wide opacity-80">Next</span>
-                {next.label}
-              </span>
-              <span aria-hidden>→</span>
-            </button>
-            <p className="text-xs text-[var(--color-text-muted)]">
-              {hint ?? "Add your resume and a job description to continue"}
-            </p>
-          </>
+          // The reason is a tooltip, not a second line. The bar is a fixed 64px
+          // so its rule lines up with the rail's, and a two-line right column
+          // came to ~67px — it spilled past the bar's own background while the
+          // page was still settling, which read as the bar changing size.
+          <button
+            disabled
+            title={hint ?? "Add your resume and a job description to continue"}
+            className="btn-primary cursor-not-allowed px-4 py-2 text-sm opacity-45"
+          >
+            {next.label}
+            <span aria-hidden>→</span>
+          </button>
         ) : (
           <span
             className={`text-xs ${current.complete ? "text-[var(--color-success)]" : "text-[var(--color-text-muted)]"}`}

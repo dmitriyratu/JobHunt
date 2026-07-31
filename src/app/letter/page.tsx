@@ -4,12 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 import ContextRecap from "@/components/ContextRecap";
-import LetterComposer from "@/components/LetterComposer";
+import GenerateEmailModal from "@/components/GenerateEmailModal";
 import LetterOutput from "@/components/LetterOutput";
-import SessionCostSummary from "@/components/SessionCostSummary";
 import StepNav from "@/components/StepNav";
 import { plainTextToHtml } from "@/lib/plainTextToHtml";
 import { resolveCompany } from "@/lib/session";
+import { resumeToPlainText } from "@/lib/tailoredResume";
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -17,18 +17,17 @@ import {
   type AppSettings,
 } from "@/lib/settings";
 import { useJobHuntState } from "@/lib/useAppState";
-import { appendUsageEntry, loadUsageLog, type UsageEntry } from "@/lib/usage";
+import { appendUsageEntry } from "@/lib/usage";
 
 export default function LetterPage() {
   const { state, update, patch, hydrated } = useJobHuntState();
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
-  const [usageEntries, setUsageEntries] = useState<UsageEntry[]>([]);
+  const [composerOpen, setComposerOpen] = useState(false);
 
   useEffect(() => {
     setSettings(loadSettings());
-    setUsageEntries(loadUsageLog());
   }, []);
 
   const handleSettingsSave = useCallback((next: AppSettings) => {
@@ -50,6 +49,9 @@ export default function LetterPage() {
           letterContext: state.letterContext || undefined,
           recipientName: state.recipientName || undefined,
           companyName: resolveCompany(state) || undefined,
+          tailoredResumeText: state.tailoredResume
+            ? resumeToPlainText(state.tailoredResume)
+            : undefined,
           apiKey: settings.apiKey || undefined,
         }),
       });
@@ -60,13 +62,14 @@ export default function LetterPage() {
         generatedBody: plainTextToHtml(data.body ?? ""),
       });
       if (data.usage) {
-        const entries = appendUsageEntry({
+        // The running total lives in the step bar now and refreshes off the
+        // event this fires, so there's nothing to hold here.
+        appendUsageEntry({
           endpoint: "generate-email",
           model: data.usage.model,
           sessionId: state.id,
           usage: data.usage,
         });
-        setUsageEntries(entries);
       }
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : "Generation failed");
@@ -105,11 +108,12 @@ export default function LetterPage() {
           </div>
         ) : (
           <>
-            {/* Two columns on wide screens, the same shape as the match page:
-                what's carried over and what you're adding sit beside the
-                letter instead of pushing it below the fold. */}
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)] gap-6 items-start">
-              <div className="space-y-6 xl:sticky xl:top-6">
+            {/* Same shape as the resume step: what's carried over and the one
+                action on a single line, so the letter itself gets the width.
+                See that page for why the button is a fixed 78px rather than
+                stretched to the row. */}
+            <div className="flex flex-wrap items-start gap-3">
+              <div className="min-w-[16rem] flex-1">
                 <ContextRecap
                   resumeFilename={state.resumeFilename}
                   resumeText={state.resumeText}
@@ -121,55 +125,75 @@ export default function LetterPage() {
                   companyName={state.companyName}
                   onCompanyNameChange={(v) => update("companyName", v)}
                 />
-
-                {!state.matchReport && (
-                  <div className="glass-panel p-4 flex items-center justify-between gap-3">
-                    <p className="text-xs text-[var(--color-text-secondary)]">
-                      No match report yet — the letter is much stronger with one.
-                    </p>
-                    <Link href="/match" className="btn-secondary text-xs py-1.5 px-3 shrink-0">
-                      Run the analysis
-                    </Link>
-                  </div>
-                )}
-
-                <LetterComposer
-                  loading={generating}
-                  error={generateError}
-                  canGenerate={canGenerate}
-                  hasBody={Boolean(state.generatedBody)}
-                  recipientName={state.recipientName}
-                  letterContext={state.letterContext}
-                  onRecipientNameChange={(v) => update("recipientName", v)}
-                  onLetterContextChange={(v) => update("letterContext", v)}
-                  onGenerate={handleGenerate}
-                />
               </div>
 
-              {/* Keyed on the session so the rich-text editor drops its
-                  internal document when you switch applications. */}
-              <LetterOutput
-                key={state.id}
-                subject={state.generatedSubject}
-                body={state.generatedBody}
-                onSubjectChange={(v) => update("generatedSubject", v)}
-                onBodyChange={(html) => update("generatedBody", html)}
-              />
+              <button
+                onClick={() => setComposerOpen(true)}
+                disabled={!canGenerate || generating}
+                className="btn-primary h-[78px] shrink-0 px-8 text-base font-medium"
+              >
+                {generating ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Generating…
+                  </span>
+                ) : state.generatedBody ? (
+                  "Regenerate email"
+                ) : (
+                  "Generate email"
+                )}
+              </button>
             </div>
 
-            {state.generatedBody && (
-              <SessionCostSummary
-                entries={usageEntries}
-                sessionId={state.id}
-                settings={settings}
-                onSettingsSave={handleSettingsSave}
-              />
+            {!state.matchReport && (
+              <div className="glass-panel flex items-center justify-between gap-3 p-4">
+                <p className="text-xs text-[var(--color-text-secondary)]">
+                  No match report yet — the letter is much stronger with one.
+                </p>
+                <Link href="/match" className="btn-secondary shrink-0 px-3 py-1.5 text-xs">
+                  Run the analysis
+                </Link>
+              </div>
             )}
+
+            {generateError && (
+              <div className="rounded-lg border border-[var(--color-danger)]/20 bg-[var(--color-danger-muted)] px-4 py-3">
+                <p className="text-sm text-[var(--color-danger)]">{generateError}</p>
+              </div>
+            )}
+
+            {/* Keyed on the session so the rich-text editor drops its internal
+                document when you switch applications. */}
+            <LetterOutput
+              key={state.id}
+              subject={state.generatedSubject}
+              body={state.generatedBody}
+              onSubjectChange={(v) => update("generatedSubject", v)}
+              onBodyChange={(html) => update("generatedBody", html)}
+            />
           </>
         )}
 
         <StepNav />
       </main>
+
+      <GenerateEmailModal
+        open={composerOpen}
+        recipientName={state.recipientName}
+        letterContext={state.letterContext}
+        companyName={resolveCompany(state)}
+        hasBody={Boolean(state.generatedBody)}
+        onRecipientNameChange={(v) => update("recipientName", v)}
+        onLetterContextChange={(v) => update("letterContext", v)}
+        onGenerate={() => {
+          setComposerOpen(false);
+          void handleGenerate();
+        }}
+        onClose={() => setComposerOpen(false)}
+      />
     </div>
   );
 }

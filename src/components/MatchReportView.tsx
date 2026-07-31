@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type {
   MatchReport,
   MatchReportItem,
@@ -19,17 +20,107 @@ type Props = {
   onAttachItem: (id: string) => void;
 };
 
-const IMPORTANCE_ORDER: Record<RequirementImportance, number> = {
-  critical: 0,
-  important: 1,
-  "nice-to-have": 2,
+/**
+ * The one scale the report is colour-coded on.
+ *
+ * `status` and `strength` are two fields but they read as a single four-step
+ * verdict — nothing matches *and* exceeds — so they are collapsed here and
+ * every colour decision downstream keys off this instead of off either field.
+ */
+type Outcome = "gap" | "partial" | "match" | "exceeds";
+
+function outcomeOf(status: MatchStatus, strength?: RequirementStrength): Outcome {
+  return status === "match" && strength === "exceeds" ? "exceeds" : status;
+}
+
+/** Worst first: the thing you have to do something about should be read first. */
+const OUTCOME_ORDER: Outcome[] = ["gap", "partial", "match", "exceeds"];
+
+/**
+ * 20×20 glyphs, drawn in `currentColor`.
+ *
+ * Colour is never the only channel — each outcome carries a shape too, so the
+ * report survives a red/green colour deficiency and a black-and-white print.
+ */
+const OUTCOME_ICON: Record<Outcome, ReactNode> = {
+  gap: <path strokeLinecap="round" d="M6.5 6.5l7 7M13.5 6.5l-7 7" />,
+  // Outline circle, right half filled: "some of this, not all of it".
+  partial: (
+    <>
+      <circle cx="10" cy="10" r="5.5" />
+      <path d="M10 4.5a5.5 5.5 0 0 1 0 11Z" fill="currentColor" stroke="none" />
+    </>
+  ),
+  match: <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 10.5l3 3 6-6.5" />,
+  exceeds: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M10 15.5V5m0 0L5.5 9.5M10 5l4.5 4.5" />
+  ),
 };
 
-const STATUS_ORDER: Record<MatchStatus, number> = {
-  gap: 0,
-  partial: 1,
-  match: 2,
+/**
+ * One tinted surface per outcome, and nothing else.
+ *
+ * An earlier pass had the fill *and* a 4px coloured left edge *and* a white
+ * box around the evidence — three devices saying what one says perfectly well.
+ * The fill already covers the whole card, which is a stronger scanning signal
+ * than any bar down its side, so the card is now a tinted surface with a
+ * hairline, one saturated pill, and a rule between the quote and the verdict.
+ */
+type OutcomeStyle = {
+  label: string;
+  /** Card fill and hairline. */
+  card: string;
+  /** The rule under the title — same hue as the border, so it recedes. */
+  rule: string;
+  /** Solid pill: small, saturated, and the only loud thing on the card. */
+  pill: string;
 };
+
+const OUTCOME: Record<Outcome, OutcomeStyle> = {
+  gap: {
+    label: "Gap",
+    card: "bg-[var(--color-danger-surface)] border-[var(--color-danger-line)]",
+    rule: "border-[var(--color-danger-line)]",
+    pill: "bg-[var(--color-danger)]",
+  },
+  partial: {
+    label: "Partial",
+    card: "bg-[var(--color-warning-surface)] border-[var(--color-warning-line)]",
+    rule: "border-[var(--color-warning-line)]",
+    pill: "bg-[var(--color-warning)]",
+  },
+  match: {
+    label: "Match",
+    card: "bg-[var(--color-success-surface)] border-[var(--color-success-line)]",
+    rule: "border-[var(--color-success-line)]",
+    pill: "bg-[var(--color-success)]",
+  },
+  exceeds: {
+    label: "Exceeds",
+    card: "bg-[var(--color-accent-surface)] border-[var(--color-accent-line)]",
+    rule: "border-[var(--color-accent-line)]",
+    pill: "bg-[var(--color-accent)]",
+  },
+};
+
+/**
+ * Blue is "above and beyond" throughout — an exceeded requirement and a
+ * standout are the same idea, so they get the same colour and the same star.
+ */
+const STANDOUT_STYLE: OutcomeStyle = {
+  label: "Standout",
+  card: "bg-[var(--color-accent-surface)] border-[var(--color-accent-line)]",
+  rule: "border-[var(--color-accent-line)]",
+  pill: "bg-[var(--color-accent)]",
+};
+
+const STANDOUT_ICON = (
+  <path
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    d="M10 3.5l2 4.2 4.5.6-3.3 3.2.8 4.5L10 13.9 6 16l.8-4.5L3.5 8.3l4.5-.6z"
+  />
+);
 
 const IMPORTANCE_LABEL: Record<RequirementImportance, string> = {
   critical: "Critical",
@@ -37,63 +128,44 @@ const IMPORTANCE_LABEL: Record<RequirementImportance, string> = {
   "nice-to-have": "Nice to have",
 };
 
-const STATUS_LABEL: Record<MatchStatus, string> = {
-  match: "Match",
-  partial: "Partial",
-  gap: "Gap",
-};
-
-function sortItems(items: MatchReportItem[]): MatchReportItem[] {
-  return [...items].sort(
-    (a, b) =>
-      IMPORTANCE_ORDER[a.importance] - IMPORTANCE_ORDER[b.importance] ||
-      STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
-  );
-}
-
-const RULE_CLASS: Record<MatchStatus, string> = {
-  match: "border-[var(--color-success)]",
-  partial: "border-[var(--color-warning)]",
-  gap: "border-[var(--color-danger)]",
-};
-
-function ruleClass(status: MatchStatus, strength?: RequirementStrength): string {
-  if (status === "match" && strength === "exceeds") return "border-[var(--color-accent)]";
-  return RULE_CLASS[status];
-}
+const IMPORTANCE_GROUPS: RequirementImportance[] = ["critical", "important", "nice-to-have"];
 
 /**
- * A labelled, rule-marked block of supporting text.
+ * Requirements bucketed by importance, each bucket ordered worst-first.
  *
- * The requirement, the resume evidence, and the verdict are three different
- * kinds of statement, and unlabelled they read as one grey paragraph. Every
- * block shares the same indent so they line up; the rule colour is what says
- * which is which.
+ * Importance used to be a pill on every card, which repeated the same three
+ * words down the whole report and competed with the outcome colours. As a
+ * group heading it is said once, in greyscale, and the cards get the width and
+ * the palette back.
  */
-function DetailBlock({
-  label,
-  text,
-  rule,
-  muted = false,
-}: {
-  label: string;
-  text: string;
-  rule: string;
-  muted?: boolean;
-}) {
+function groupItems(items: MatchReportItem[]): [RequirementImportance, MatchReportItem[]][] {
+  return IMPORTANCE_GROUPS.map(
+    (importance) =>
+      [
+        importance,
+        items
+          .filter((item) => item.importance === importance)
+          .sort(
+            (a, b) =>
+              OUTCOME_ORDER.indexOf(outcomeOf(a.status, a.strength)) -
+              OUTCOME_ORDER.indexOf(outcomeOf(b.status, b.strength))
+          ),
+      ] as [RequirementImportance, MatchReportItem[]]
+  ).filter(([, group]) => group.length > 0);
+}
+
+function OutcomeIcon({ icon, className = "" }: { icon: ReactNode; className?: string }) {
   return (
-    <div className={`border-l-2 pl-2.5 ${rule}`}>
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)] mb-0.5">
-        {label}
-      </p>
-      <p
-        className={`text-xs leading-relaxed ${
-          muted ? "text-[var(--color-text-tertiary)]" : "text-[var(--color-text-secondary)]"
-        }`}
-      >
-        {text}
-      </p>
-    </div>
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      className={className}
+      aria-hidden
+    >
+      {icon}
+    </svg>
   );
 }
 
@@ -109,39 +181,230 @@ export function ResultPill({
   status: MatchStatus;
   strength?: RequirementStrength;
 }) {
-  if (status === "match" && strength === "exceeds") {
-    return (
-      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-accent)] text-white">
-        Exceeds
-      </span>
-    );
-  }
-  return <StatusPill status={status} />;
+  const outcome = outcomeOf(status, strength);
+  return <Pill style={OUTCOME[outcome]} icon={OUTCOME_ICON[outcome]} />;
 }
 
 export function StatusPill({ status }: { status: MatchStatus }) {
-  const classes: Record<MatchStatus, string> = {
-    match: "bg-[var(--color-success-muted)] text-[var(--color-success)]",
-    partial: "bg-[var(--color-warning)]/20 text-[var(--color-warning)]",
-    gap: "bg-[var(--color-danger-muted)] text-[var(--color-danger)]",
-  };
+  return <ResultPill status={status} />;
+}
+
+/**
+ * Solid rather than tinted: it sits on an already-tinted card, and a wash on a
+ * wash reads as neither. White on all four fills clears AA.
+ */
+function Pill({ style, icon }: { style: OutcomeStyle; icon: ReactNode }) {
   return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${classes[status]}`}>
-      {STATUS_LABEL[status]}
+    <span
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full py-0.5 pl-1.5 pr-2.5 text-[11px] font-semibold text-white ${style.pill}`}
+    >
+      <OutcomeIcon icon={icon} className="h-3.5 w-3.5" />
+      {style.label}
     </span>
   );
 }
 
+/**
+ * Importance in greyscale weight, deliberately: the colours are spoken for by
+ * the outcome scale, and a second hue-coded axis would make neither legible.
+ */
 export function ImportancePill({ importance }: { importance: RequirementImportance }) {
   const classes: Record<RequirementImportance, string> = {
-    critical: "bg-[var(--color-accent-muted)] text-[var(--color-accent)]",
+    critical: "bg-[var(--color-text-primary)] text-white",
     important: "bg-[var(--color-surface-overlay)] text-[var(--color-text-secondary)]",
     "nice-to-have": "bg-[var(--color-surface-overlay)] text-[var(--color-text-muted)]",
   };
   return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${classes[importance]}`}>
+    <span
+      className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${classes[importance]}`}
+    >
       {IMPORTANCE_LABEL[importance]}
     </span>
+  );
+}
+
+/** Section rule for one importance bucket: dot, label, count, hairline. */
+function GroupHeading({
+  importance,
+  count,
+}: {
+  importance: RequirementImportance;
+  count: number;
+}) {
+  const dot: Record<RequirementImportance, string> = {
+    critical: "bg-[var(--color-text-primary)]",
+    important: "bg-[var(--color-text-muted)]",
+    "nice-to-have": "bg-[var(--color-border)]",
+  };
+  const label: Record<RequirementImportance, string> = {
+    critical: "text-[var(--color-text-primary)]",
+    important: "text-[var(--color-text-secondary)]",
+    "nice-to-have": "text-[var(--color-text-muted)]",
+  };
+  return (
+    <div className="flex items-center gap-2 mb-2">
+      <span className={`h-2 w-2 rounded-full shrink-0 ${dot[importance]}`} />
+      <p
+        className={`text-[11px] font-semibold uppercase tracking-wide ${label[importance]}`}
+      >
+        {IMPORTANCE_LABEL[importance]}
+      </p>
+      <span className="text-[11px] text-[var(--color-text-muted)]">{count}</span>
+      <span className="h-px flex-1 bg-[var(--color-border-subtle)]" />
+    </div>
+  );
+}
+
+/**
+ * The clickable chrome every entry shares: outcome fill, outcome hairline, and
+ * nothing else.
+ *
+ * `h-full` matters — grid rows are already as tall as their tallest card, so
+ * letting the short ones stretch costs nothing and stops the row bottoms from
+ * coming out ragged. `flex flex-col` is what keeps the content pinned to the
+ * top once it does stretch: a button centres its contents vertically, so the
+ * short cards in a row would otherwise float mid-box.
+ *
+ * Selection is a near-black ring, not a colour — every hue on this page is
+ * already saying something about the match.
+ */
+function EntryCard({
+  style,
+  attached,
+  onClick,
+  children,
+}: {
+  style: OutcomeStyle;
+  attached: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={attached}
+      // 12px to match the panel it sits in, rather than a third radius on the page.
+      className={`flex h-full w-full flex-col items-stretch rounded-xl border p-3.5 text-left transition-shadow ${
+        style.card
+      } ${
+        attached
+          ? "ring-2 ring-[var(--color-text-primary)] ring-offset-1 ring-offset-[var(--color-surface-raised)]"
+          : "hover:shadow-[0_2px_10px_rgba(22,24,34,0.09)]"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * One labelled block of a card's body.
+ *
+ * The verdict leads and the resume line supports it. You already know what
+ * your resume says; the reason to open a card is what it means against this
+ * requirement, so that answer comes first and the source it rests on follows.
+ *
+ * The two are told apart without reading, on three axes at once: the label
+ * opens its own line (a run-in label left no mark of where one block ended and
+ * the next began, and the pair read as one paragraph), the verdict is
+ * near-black at 12px against the source's grey 11px, and the source carries a
+ * document mark. Neither is boxed — a fenced-off panel inside an already
+ * tinted card just punches a hole in it.
+ *
+ * Deliberately not set as a quotation. The analysis prompt asks the model to
+ * quote *or closely paraphrase* the supporting line, so quote marks would
+ * assert a fidelity the text does not have. It is an attribution, not a quote.
+ */
+function Block({
+  label,
+  text,
+  tone,
+}: {
+  label: string;
+  text: string;
+  tone: "source" | "verdict";
+}) {
+  const verdict = tone === "verdict";
+  return (
+    <div>
+      <p
+        className={`flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.07em] ${
+          verdict ? "text-[var(--color-text-secondary)]" : "text-[var(--color-text-muted)]"
+        }`}
+      >
+        {!verdict && (
+          <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.7}
+            className="h-3 w-3 shrink-0"
+            aria-hidden
+          >
+            <path
+              strokeLinejoin="round"
+              d="M11.5 3H6.75A1.75 1.75 0 0 0 5 4.75v10.5A1.75 1.75 0 0 0 6.75 17h6.5A1.75 1.75 0 0 0 15 15.25V6.5z"
+            />
+            <path strokeLinejoin="round" d="M11.5 3v3.5H15" />
+          </svg>
+        )}
+        {label}
+      </p>
+      <p
+        className={`mt-1 leading-relaxed ${
+          verdict
+            ? "text-xs text-[var(--color-text-primary)]"
+            : "text-[11px] text-[var(--color-text-tertiary)]"
+        }`}
+      >
+        {text}
+      </p>
+    </div>
+  );
+}
+
+function AttachedNote() {
+  return (
+    <p className="mt-2 text-[10px] font-semibold text-[var(--color-text-primary)]">
+      Attached to your next chat message
+    </p>
+  );
+}
+
+/**
+ * Cards side by side: three across on a wide window, two on a laptop, one on a
+ * phone. The breakpoints are set by the narrowest a card can get and still hold
+ * a requirement and its outcome pill on one line — around 350px.
+ */
+const CARD_GRID = "grid gap-2.5 md:grid-cols-2 xl:grid-cols-3";
+
+/**
+ * The whole report in one line: how many of each outcome.
+ *
+ * The score says how you did; this says what it is made of, which is the
+ * question anyone actually has next. Sits right under the summary so the
+ * answer is above the fold whatever the report contains.
+ */
+function OutcomeTally({ items }: { items: MatchReportItem[] }) {
+  const counts = items.reduce<Partial<Record<Outcome, number>>>((acc, item) => {
+    const key = outcomeOf(item.status, item.strength);
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <div className="mt-2.5 flex flex-wrap gap-1.5">
+      {OUTCOME_ORDER.filter((key) => counts[key]).map((key) => (
+        <span
+          key={key}
+          className={`inline-flex items-center gap-1 rounded-full py-0.5 pl-1.5 pr-2.5 text-[11px] font-semibold text-white ${OUTCOME[key].pill}`}
+        >
+          <OutcomeIcon icon={OUTCOME_ICON[key]} className="h-3.5 w-3.5" />
+          {counts[key]} {OUTCOME[key].label.toLowerCase()}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -239,7 +502,7 @@ export default function MatchReportView({
     );
   }
 
-  const sorted = sortItems(report.items);
+  const groups = groupItems(report.items);
   // Reports saved before standouts existed have no array here.
   const standouts = report.standouts ?? [];
 
@@ -250,148 +513,121 @@ export default function MatchReportView({
     // bar at the page bottom instead, so a long report never puts the nav out
     // of reach.
     <div className="glass-panel p-5">
-      <div className="flex items-start gap-4">
+      {/* Score, summary and the re-run control on one line: stacked, the three
+          of them were 200px of header above a report that wanted the height. */}
+      <div className="flex flex-wrap items-start gap-4">
         <ScoreRing score={report.overallScore} />
         <div className="min-w-0 flex-1">
           <h3 className="font-medium text-sm mb-1">Match report</h3>
           <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
             {report.summary}
           </p>
+          <OutcomeTally items={report.items} />
           {error && <p className="text-[var(--color-danger)] text-xs mt-2">{error}</p>}
         </div>
+        <div className="shrink-0 sm:max-w-[200px] sm:text-right">
+          <button onClick={onAnalyze} disabled={loading} className="btn-secondary text-xs">
+            {loading ? "Re-analyzing…" : "Re-analyze match"}
+          </button>
+          <p className="text-[10px] text-[var(--color-text-muted)] mt-1.5">
+            Replaces this report, including any accepted chat edits.
+          </p>
+        </div>
       </div>
-
-      {/* Full panel width so it lines up with the requirement cards below,
-          rather than reading as a control that belongs to the summary text. */}
-      <button
-        onClick={onAnalyze}
-        disabled={loading}
-        className="btn-secondary w-full text-xs mt-4"
-      >
-        {loading ? "Re-analyzing…" : "Re-analyze match"}
-      </button>
-      <p className="text-[10px] text-[var(--color-text-muted)] mt-2 text-center">
-        Replaces this report, including any accepted chat edits.
-      </p>
 
       <p className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide mt-5 mb-2">
         Click any entry to ask the chat about it
       </p>
 
-      <div>
-        <div className="space-y-2">
-        {sorted.map((item) => {
-          const attached = item.id === attachedItemId;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onAttachItem(item.id)}
-              aria-pressed={attached}
-              className={`w-full text-left rounded-lg border p-3 transition-colors ${
-                attached
-                  ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)]"
-                  : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-text-muted)]"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-semibold text-[var(--color-text-primary)] leading-snug min-w-0">
-                  {item.requirement}
-                </p>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <ImportancePill importance={item.importance} />
-                  <ResultPill status={item.status} strength={item.strength} />
-                </div>
-              </div>
+      <div className="space-y-4">
+        {groups.map(([importance, items]) => (
+          <div key={importance}>
+            <GroupHeading importance={importance} count={items.length} />
+            <div className={CARD_GRID}>
+              {items.map((item) => {
+                const outcome = outcomeOf(item.status, item.strength);
+                const attached = item.id === attachedItemId;
+                return (
+                  <EntryCard
+                    key={item.id}
+                    style={OUTCOME[outcome]}
+                    attached={attached}
+                    onClick={() => onAttachItem(item.id)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="min-w-0 text-sm font-semibold leading-snug text-[var(--color-text-primary)]">
+                        {item.requirement}
+                      </p>
+                      <Pill style={OUTCOME[outcome]} icon={OUTCOME_ICON[outcome]} />
+                    </div>
 
-              {(item.evidence || item.note) && (
-                <div className="mt-2.5 pt-2.5 border-t border-[var(--color-border-subtle)] space-y-2">
-                  {item.evidence && (
-                    <DetailBlock
-                      label="From your resume"
-                      text={item.evidence}
-                      rule={ruleClass(item.status, item.strength)}
-                    />
-                  )}
-                  {item.note && (
-                    <DetailBlock
-                      label="Assessment"
-                      text={item.note}
-                      rule="border-[var(--color-text-muted)]"
-                      muted
-                    />
-                  )}
-                </div>
-              )}
+                    {(item.evidence || item.note) && (
+                      <div className={`mt-2.5 space-y-3 border-t pt-2.5 ${OUTCOME[outcome].rule}`}>
+                        {item.note && (
+                          <Block label="Assessment" text={item.note} tone="verdict" />
+                        )}
+                        {item.evidence && (
+                          <Block label="From your resume" text={item.evidence} tone="source" />
+                        )}
+                      </div>
+                    )}
 
-              {attached && (
-                <p className="text-[10px] font-medium text-[var(--color-accent)] mt-2">
-                  Attached to your next chat message
-                </p>
-              )}
-            </button>
-          );
-        })}
+                    {attached && <AttachedNote />}
+                  </EntryCard>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
       {standouts.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-[var(--color-border-subtle)]">
-          <p className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide mb-1">
-            Standouts
-          </p>
-          <p className="text-xs text-[var(--color-text-secondary)] mb-2">
-            This posting never asked for these — the letter uses at most one.
-          </p>
-          <div className="space-y-2">
+        <div className="mt-5 pt-4 border-t border-[var(--color-border-subtle)]">
+          <div className="flex flex-wrap items-baseline gap-x-2 mb-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-primary)]">
+              Standouts
+            </p>
+            <p className="text-xs text-[var(--color-text-muted)]">
+              This posting never asked for these — the letter uses at most one.
+            </p>
+          </div>
+          <div className={CARD_GRID}>
             {standouts.map((standout) => {
               const attached = standout.id === attachedItemId;
               return (
-                <button
+                <EntryCard
                   key={standout.id}
-                  type="button"
+                  style={STANDOUT_STYLE}
+                  attached={attached}
                   onClick={() => onAttachItem(standout.id)}
-                  aria-pressed={attached}
-                  className={`w-full text-left rounded-lg border p-3 transition-colors ${
-                    attached
-                      ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)]"
-                      : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-text-muted)]"
-                  }`}
                 >
-                  <p className="text-sm font-semibold text-[var(--color-text-primary)] leading-snug">
-                    {standout.credential}
-                  </p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 text-sm font-semibold leading-snug text-[var(--color-text-primary)]">
+                      {standout.credential}
+                    </p>
+                    <Pill style={STANDOUT_STYLE} icon={STANDOUT_ICON} />
+                  </div>
                   {(standout.evidence || standout.whyValuable) && (
-                    <div className="mt-2.5 pt-2.5 border-t border-[var(--color-border-subtle)] space-y-2">
-                      {standout.evidence && (
-                        <DetailBlock
-                          label="From your resume"
-                          text={standout.evidence}
-                          rule="border-[var(--color-accent)]"
-                        />
-                      )}
+                    <div className={`mt-2.5 space-y-3 border-t pt-2.5 ${STANDOUT_STYLE.rule}`}>
                       {standout.whyValuable && (
-                        <DetailBlock
+                        <Block
                           label="Why it matters"
                           text={standout.whyValuable}
-                          rule="border-[var(--color-text-muted)]"
-                          muted
+                          tone="verdict"
                         />
+                      )}
+                      {standout.evidence && (
+                        <Block label="From your resume" text={standout.evidence} tone="source" />
                       )}
                     </div>
                   )}
-                  {attached && (
-                    <p className="text-[10px] font-medium text-[var(--color-accent)] mt-2">
-                      Attached to your next chat message
-                    </p>
-                  )}
-                </button>
+                  {attached && <AttachedNote />}
+                </EntryCard>
               );
             })}
           </div>
         </div>
       )}
-
-      </div>
     </div>
   );
 }

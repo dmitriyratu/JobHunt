@@ -33,7 +33,10 @@ export default function SubjectField({ value, onChange }: Props) {
           onChange={(e) => onChange(e.target.value)}
           aria-label="Email subject"
           // text-base below sm: iOS zooms the page on focusing a sub-16px field.
-          className="w-full bg-transparent border-0 outline-none text-base sm:text-sm text-[var(--color-text-primary)]"
+          // min-h-11 below sm: the line box alone is 24px tall, which is the bare
+          // WCAG minimum for something this important to hit. A single-line input
+          // centres its text vertically, so the extra height costs no layout.
+          className="w-full min-h-11 bg-transparent border-0 outline-none text-base sm:min-h-0 sm:text-sm text-[var(--color-text-primary)]"
         />
       </div>
     </div>

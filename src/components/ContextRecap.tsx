@@ -1,7 +1,18 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import type { MatchReport } from "@/types";
+
+/**
+ * What the next step will be given, folded away.
+ *
+ * This is provenance rather than input — it says nothing you didn't already
+ * decide on an earlier step — so it opens collapsed and stays out of the way of
+ * the work. The exception is the company field: when nothing was detected,
+ * there is a blank here that actually needs filling, and hiding it behind a
+ * disclosure would hide the one thing on this panel that isn't just a recap.
+ */
 
 type Props = {
   resumeFilename: string;
@@ -94,19 +105,58 @@ export default function ContextRecap({
   companyName,
   onCompanyNameChange,
 }: Props) {
+  const needsCompany = !detectedCompany && !companyName.trim();
+  const [open, setOpen] = useState(needsCompany);
+
+  // The line answers "which application am I in?", which is the only thing
+  // worth knowing at a glance. Shown open or closed, so the header's height
+  // never changes — the action beside it in the top bar is sized to match, and
+  // a header that grew on expand dragged the button's height with it.
+  const summary = [jobTitle, detectedCompany || companyName].map((s) => s.trim()).filter(Boolean);
+
   return (
     <div className="glass-panel p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-medium text-sm">Context carried over</h3>
-        <Link
-          href="/match"
-          className="text-xs font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent-muted)] hover:underline rounded-md px-2 py-1.5 -mx-2 -my-1.5"
+      <div className="flex items-center justify-between gap-2">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="-my-1 flex min-w-0 flex-1 items-center gap-2 rounded-md py-1 text-left"
         >
-          Edit match report
-        </Link>
+          <svg
+            aria-hidden
+            className={`h-3.5 w-3.5 shrink-0 text-[var(--color-text-muted)] transition-transform ${
+              open ? "rotate-90" : ""
+            }`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+          <span className="min-w-0">
+            <span className="block text-sm font-medium">Context carried over</span>
+            {summary.length > 0 && (
+              <span className="block truncate text-xs text-[var(--color-text-muted)]">
+                {summary.join(" · ")}
+              </span>
+            )}
+          </span>
+        </button>
+
+        {open && (
+          <Link
+            href="/match"
+            className="shrink-0 text-xs font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent-muted)] hover:underline rounded-md px-2 py-1.5 -my-1.5"
+          >
+            Edit match report
+          </Link>
+        )}
       </div>
 
-      <dl className="grid grid-cols-[5rem_minmax(0,1fr)] sm:grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 sm:gap-x-4 gap-y-3 text-xs items-baseline">
+      {!open ? null : (
+        <>
+      <dl className="mt-4 grid grid-cols-[5rem_minmax(0,1fr)] sm:grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 sm:gap-x-4 gap-y-3 text-xs items-baseline">
         {jobTitle && <Row label="Role">{jobTitle}</Row>}
 
         {detectedCompany ? (
@@ -162,9 +212,11 @@ export default function ContextRecap({
       </dl>
 
       <p className="text-[10px] text-[var(--color-text-muted)] leading-relaxed mt-4 pt-3 border-t border-[var(--color-border-subtle)]">
-        Everything above is passed to the letter in full, plus the recipient, the company and any
-        notes you add below.
+        Everything above is passed on in full, plus the recipient, the company and any notes you
+        add below.
       </p>
+        </>
+      )}
     </div>
   );
 }

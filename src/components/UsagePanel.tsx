@@ -5,7 +5,7 @@ import { TASK_MODELS, type TaskId, type TaskModel } from "@/lib/models";
 import { clearUsageLog, loadUsageLog, type UsageEntry } from "@/lib/usage";
 
 /**
- * Lives inside the AI settings dialog, which returns null while closed — so
+ * Lives inside the settings dialog, which returns null while closed — so
  * this remounts on every open and its effects double as "refresh on open".
  */
 type Props = {
@@ -16,8 +16,13 @@ type Props = {
 const BILLING_URL = "https://platform.openai.com/settings/organization/billing/overview";
 
 const STEP_LABEL: Record<UsageEntry["endpoint"], string> = {
+  "triage-document": "Document type",
   "analyze-match": "Match report",
   "report-chat": "Refine chat",
+  "tailor-resume": "Resume",
+  "verify-grounding": "Grounding check",
+  "repair-grounding": "Grounding repair",
+  "resume-chat": "Resume chat",
   "generate-email": "Letter",
 };
 

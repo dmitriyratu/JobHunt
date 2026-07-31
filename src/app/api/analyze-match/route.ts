@@ -183,6 +183,7 @@ export async function POST(request: NextRequest) {
       schema: MATCH_REPORT_SCHEMA,
       temperature: 0.3,
       supportsTemperature: taskModel.supportsTemperature,
+      reasoning: taskModel.reasoning,
       maxTokens: 3000,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },

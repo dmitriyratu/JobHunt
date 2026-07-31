@@ -20,7 +20,7 @@ export default function LetterOutput({
     // Capped rather than filling the column: this is prose meant to be read,
     // and a line of text 150 characters wide is hard to track back from. The
     // cap is on the panel so the toolbar and the text share one edge.
-    <div className="glass-panel p-5 w-full max-w-[900px]">
+    <div className="glass-panel w-full p-5">
       <div className="mb-4">
         <h3 className="font-medium text-sm">Outreach email</h3>
         <p className="text-xs text-[var(--color-text-muted)] mt-0.5">

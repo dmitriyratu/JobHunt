@@ -2,12 +2,72 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useChatDock } from "@/lib/chatDock";
 import { resolveCompany, sessionTitle } from "@/lib/session";
 import { useJobHuntState } from "@/lib/useAppState";
 import CompanyLogo from "./CompanyLogo";
 import SessionList from "./SessionList";
 
 const COLLAPSED_KEY = "jobhunt-rail-collapsed";
+
+function ChatIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M8 12h8m-8-4h5m-5 8h3m-6.5 5.5V6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H8l-4.5 4.5Z"
+      />
+    </svg>
+  );
+}
+
+/**
+ * The assistant's toggle, pinned to the foot of the rail.
+ *
+ * Which chat it opens is the current step's business, not the rail's — the rail
+ * only knows there is one, what it's called, and how many suggestions are
+ * waiting on a decision. Renders nothing on steps that have no chat.
+ */
+function RefineButton({ collapsed }: { collapsed: boolean }) {
+  const { available, label, pendingCount, open, toggle } = useChatDock();
+  if (!available) return null;
+
+  return (
+    // h-16 including the border, matching StepNav exactly — the two top rules
+    // are adjacent at the bottom of the screen.
+    <div className="mt-auto flex h-16 items-center border-t border-[var(--color-border-subtle)] px-3">
+      <button
+        onClick={toggle}
+        aria-expanded={open}
+        aria-label={collapsed ? label : undefined}
+        title={collapsed ? label : undefined}
+        // h-10 in both states, not padding: 12px of wrapper padding either side
+        // of a 40px control is exactly the 64px of StepNav, and the two top
+        // borders meet at the bottom of the screen where any mismatch shows.
+        className={`relative flex h-10 items-center rounded-lg border transition-colors ${
+          collapsed ? "w-10 justify-center" : "w-full gap-2 px-3"
+        } ${
+          open
+            ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)] text-[var(--color-accent)]"
+            : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)]"
+        }`}
+      >
+        <ChatIcon className="h-4 w-4 shrink-0" />
+        {!collapsed && <span className="text-sm font-medium">{label}</span>}
+        {pendingCount > 0 &&
+          (collapsed ? (
+            // No room for a number beside the icon at 40px, so it becomes a dot.
+            <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--color-surface-raised)] bg-[var(--color-accent)]" />
+          ) : (
+            <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-accent)] px-1.5 text-[11px] font-semibold text-white">
+              {pendingCount}
+            </span>
+          ))}
+      </button>
+    </div>
+  );
+}
 
 function ChevronIcon({ pointsRight }: { pointsRight: boolean }) {
   return (
@@ -56,6 +116,13 @@ export default function SessionRail() {
     }
     setPrefLoaded(true);
   }, []);
+
+  // Published for anything viewport-fixed that has to sit clear of the rail —
+  // see --rail-w in globals.css. Written here rather than derived in CSS
+  // because the width lives in this component's state.
+  useEffect(() => {
+    document.documentElement.style.setProperty("--rail-w-lg", collapsed ? "68px" : "320px");
+  }, [collapsed]);
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
@@ -113,7 +180,11 @@ export default function SessionRail() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col items-center gap-2">
+          {/* overflow-x-hidden is load-bearing: setting only overflow-y makes
+              the computed overflow-x `auto`, so once enough applications bring
+              up a vertical scrollbar the 44px tiles no longer fit the 44px
+              content box and the rail grows a horizontal scrollbar too. */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 flex flex-col items-center gap-2">
             {hydrated &&
               sessions.map((session) => {
                 const company = resolveCompany(session);
@@ -146,6 +217,8 @@ export default function SessionRail() {
                 );
               })}
           </div>
+
+          <RefineButton collapsed />
         </>
       ) : (
         <>
@@ -167,6 +240,7 @@ export default function SessionRail() {
             </div>
           </div>
           <SessionList />
+          <RefineButton collapsed={false} />
         </>
       )}
     </aside>

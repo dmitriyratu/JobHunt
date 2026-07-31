@@ -6,6 +6,7 @@ import JobDescriptionInput from "@/components/JobDescriptionInput";
 import ResumeUpload from "@/components/ResumeUpload";
 import SectionHeader from "@/components/SectionHeader";
 import StepNav from "@/components/StepNav";
+import { seedProfile } from "@/lib/contactExtract";
 import { fileKey } from "@/lib/fileStore";
 import { JOB_CHANGE_RESET, RESUME_CHANGE_RESET } from "@/lib/session";
 import {
@@ -40,6 +41,16 @@ export default function HomePage() {
         resumeFilename: filename,
         ...(text !== prev.resumeText ? RESUME_CHANGE_RESET : {}),
       }));
+
+      // Fills only blanks, so this is safe to run on every upload — a value
+      // you corrected by hand in Settings always outranks the regex.
+      setSettings((prev) => {
+        const profile = seedProfile(prev.profile, text);
+        if (profile === prev.profile) return prev;
+        const next = { ...prev, profile };
+        saveSettings(next);
+        return next;
+      });
     },
     [setState],
   );

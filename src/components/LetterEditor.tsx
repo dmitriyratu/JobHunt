@@ -139,7 +139,12 @@ function ToolbarButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`h-7 w-7 flex items-center justify-center rounded text-sm transition-colors ${
+      // 44px on a phone, 28px from sm: up. Seven of these sit in a row under
+      // the email body, and at 28px they are a thumb-width apart on a touch
+      // screen — under both the Apple HIG target and what WCAG 2.5.8 asks for.
+      // Mobile-first rather than a pointer-coarse variant so the size is
+      // decided by available room, which is the thing that actually varies.
+      className={`h-11 w-11 sm:h-7 sm:w-7 flex items-center justify-center rounded text-sm transition-colors ${
         active
           ? "bg-[var(--color-accent-muted)] text-[var(--color-accent)]"
           : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-overlay)]"

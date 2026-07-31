@@ -89,7 +89,7 @@ export default function SessionList({ onNavigate }: Props) {
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-2">
         {hydrated && sessions.length === 0 && (
           <p className="text-xs text-[var(--color-text-muted)] text-center py-6">
             No applications yet. They appear here once you reach the match report.

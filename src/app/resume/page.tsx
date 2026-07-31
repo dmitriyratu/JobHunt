@@ -1,0 +1,549 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import AppHeader from "@/components/AppHeader";
+import ChatPanel, { ChatToggle } from "@/components/ChatPanel";
+import ContextRecap from "@/components/ContextRecap";
+import GenerateResumeModal from "@/components/GenerateResumeModal";
+import ResumeChat from "@/components/ResumeChat";
+import ResumeDocumentPane from "@/components/ResumeDocumentPane";
+import StepNav from "@/components/StepNav";
+import { resumeFilename } from "@/lib/filePaths";
+import { saveToDownloads } from "@/lib/saveDownload";
+import { buildResumeBlob } from "@/lib/resumeDocx";
+import { useChatDock, useRegisterChat } from "@/lib/chatDock";
+import { applyTexProposal, renderResumeLatex } from "@/lib/resumeLatex";
+import { resolveCompany } from "@/lib/session";
+import {
+  DEFAULT_SETTINGS,
+  loadSettings,
+  saveSettings,
+  type AppSettings,
+} from "@/lib/settings";
+import { draftToResume } from "@/lib/tailoredResume";
+import { useJobHuntState } from "@/lib/useAppState";
+import { useLatexCompile } from "@/lib/useLatexCompile";
+import { getTaskModel } from "@/lib/models";
+import { appendUsageEntry } from "@/lib/usage";
+import { allowsPageTarget } from "@/lib/documentShape";
+import type { DocumentShape, ResumeChatMessage } from "@/types";
+
+export default function ResumePage() {
+  const { state, update, patch, setState, hydrated } = useJobHuntState();
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState("");
+  const [downloading, setDownloading] = useState(false);
+  const [savedPath, setSavedPath] = useState("");
+  // Shared with the applications rail, which is where the toggle lives.
+  const { open: chatOpen, setOpen: setChatOpen, toggle: toggleChat } = useChatDock();
+  const [engineHint, setEngineHint] = useState("");
+  const [triageError, setTriageError] = useState("");
+  const [triageNonce, setTriageNonce] = useState(0);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // What the grounding pass did to the last generation, so corrections
+  // aren't made silently behind the applicant.
+  const [grounding, setGrounding] = useState<{
+    checked: number;
+    repaired: number;
+    reverted: number;
+    skillsRemoved: number;
+    unverified: number;
+  } | null>(null);
+
+  const { resumeTex } = state;
+  const compile = useLatexCompile(resumeTex, Boolean(resumeTex) && !engineHint);
+
+  useEffect(() => {
+    setSettings(loadSettings());
+  }, []);
+
+  // Asked once on mount so a machine with no TeX engine says so up front,
+  // rather than letting the first keystroke fail with what reads like a
+  // problem in the document.
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/compile-latex")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled && !d.available) setEngineHint(d.hint ?? "");
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleSettingsSave = useCallback((next: AppSettings) => {
+    setSettings(next);
+    saveSettings(next);
+  }, []);
+
+  // --- Document triage ------------------------------------------------------
+
+  /**
+   * Reads the posting to decide resume vs CV, once per application.
+   *
+   * Runs on arrival rather than at generation because the answer is needed
+   * before then: the tailoring route builds its section schema from the shape,
+   * and the Length control only applies to one of the two. Gated on a null
+   * shape, so switching between saved applications doesn't re-spend on one
+   * that has already been read.
+   */
+  const { id: sessionId, resumeText, jobDescription, recommendedShape } = state;
+  const needsTriage = Boolean(resumeText && jobDescription) && recommendedShape === null;
+
+  useEffect(() => {
+    if (!hydrated || !needsTriage) return;
+
+    let cancelled = false;
+    setTriageError("");
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/triage-document", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            resumeText,
+            jobDescription,
+            apiKey: settings.apiKey || undefined,
+          }),
+        });
+        const data = await res.json();
+        if (cancelled) return;
+        if (!res.ok) throw new Error(data.error ?? "Could not pick a document type");
+
+        patch({
+          recommendedShape: data.shape,
+          recommendedShapeReason: data.rationale ?? "",
+          recommendedShapeConfident: data.confident !== false,
+        });
+
+        if (data.usage) {
+          appendUsageEntry({
+            endpoint: "triage-document",
+            model: data.usage.model,
+            sessionId,
+            usage: data.usage,
+          });
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setTriageError(err instanceof Error ? err.message : "Could not pick a document type");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // settings.apiKey is read, not depended on: it is already loaded by the
+    // time this can run, and re-firing on a settings save would re-spend.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, needsTriage, resumeText, jobDescription, sessionId, patch, triageNonce]);
+
+  const handleRetryTriage = useCallback(() => {
+    setTriageError("");
+    setTriageNonce((n) => n + 1);
+  }, []);
+
+  // --- Generation -----------------------------------------------------------
+
+  /**
+   * Generates against an explicitly chosen shape.
+   *
+   * The shape is a parameter rather than read from state because it arrives
+   * from the picker in the same tick this runs — a setState wouldn't have
+   * landed yet, and generating against the previous shape would build the
+   * document from the wrong section skeleton.
+   */
+  const runGenerate = useCallback(
+    async (shape: DocumentShape) => {
+    setGenerateError("");
+    setSavedPath("");
+    setGrounding(null);
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/tailor-resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resumeText: state.resumeText,
+          jobDescription: state.jobDescription,
+          matchReport: state.matchReport,
+          emphasis: state.resumeEmphasis || undefined,
+          shape,
+          pageTarget: allowsPageTarget(shape) ? state.resumePageTarget : undefined,
+          apiKey: settings.apiKey || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Tailoring failed");
+
+      // The structured draft is generated first and kept: it carries each
+      // bullet's source line, which is what makes the rewrites checkable, and
+      // it is what the letter step reads. The .tex is rendered from it once,
+      // and is the working copy from here on.
+      const resume = draftToResume(data.draft, shape, data.pageTarget ?? null);
+
+      // The transcript's patches refer to source text that no longer exists.
+      patch({
+        tailoredResume: resume,
+        resumeTex: renderResumeLatex(resume, settings.profile),
+        resumeChatMessages: [],
+        resumeSkipped: false,
+        documentShape: shape,
+      });
+
+      if (data.usage) {
+        appendUsageEntry({
+          endpoint: "tailor-resume",
+          model: data.usage.model,
+          sessionId: state.id,
+          usage: data.usage,
+        });
+      }
+
+      // The grounding pass runs one or three calls of its own; each is
+      // attributed to the model that made it rather than folded into the
+      // tailoring's cost.
+      for (const call of data.groundingUsage ?? []) {
+        appendUsageEntry({
+          endpoint: call.model === getTaskModel("repair-grounding").id
+            ? "repair-grounding"
+            : "verify-grounding",
+          model: call.model,
+          sessionId: state.id,
+          usage: call.usage,
+        });
+      }
+
+      setGrounding(data.grounding ?? null);
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : "Tailoring failed");
+    } finally {
+      setGenerating(false);
+    }
+    },
+    [state, settings, patch]
+  );
+
+  const handlePickShape = useCallback(
+    (shape: DocumentShape) => {
+      setPickerOpen(false);
+      void runGenerate(shape);
+    },
+    [runGenerate]
+  );
+
+  const handleTexChange = useCallback(
+    (next: string) => update("resumeTex", next),
+    [update]
+  );
+
+  // --- Chat -----------------------------------------------------------------
+
+  const handleNewChatMessage = useCallback(
+    (userMsg: ResumeChatMessage, assistantMsg: ResumeChatMessage) =>
+      setState((prev) => ({
+        ...prev,
+        resumeChatMessages: [...prev.resumeChatMessages, userMsg, assistantMsg],
+      })),
+    [setState]
+  );
+
+  const handleAcceptProposal = useCallback(
+    (messageIndex: number, proposalId: string) =>
+      setState((prev) => {
+        const msg = prev.resumeChatMessages[messageIndex];
+        if (!msg?.proposals) return prev;
+        const proposal = msg.proposals.find((p) => p.id === proposalId);
+        if (!proposal || proposal.resolution !== "pending") return prev;
+
+        // The passage may have been edited since the proposal was made. Marking
+        // it accepted anyway would claim a change the document never got.
+        const nextTex = applyTexProposal(prev.resumeTex, proposal);
+        if (nextTex === null) return prev;
+
+        const messages = [...prev.resumeChatMessages];
+        messages[messageIndex] = {
+          ...msg,
+          proposals: msg.proposals.map((p) =>
+            p.id === proposalId ? { ...p, resolution: "accepted" as const } : p
+          ),
+        };
+
+        return { ...prev, resumeTex: nextTex, resumeChatMessages: messages };
+      }),
+    [setState]
+  );
+
+  const handleRejectProposal = useCallback(
+    (messageIndex: number, proposalId: string) =>
+      setState((prev) => {
+        const msg = prev.resumeChatMessages[messageIndex];
+        if (!msg?.proposals) return prev;
+        const messages = [...prev.resumeChatMessages];
+        messages[messageIndex] = {
+          ...msg,
+          proposals: msg.proposals.map((p) =>
+            p.id === proposalId ? { ...p, resolution: "rejected" as const } : p
+          ),
+        };
+        return { ...prev, resumeChatMessages: messages };
+      }),
+    [setState]
+  );
+
+  // --- Download -------------------------------------------------------------
+
+  /** Shared spine for both formats. */
+  const saveAs = useCallback(
+    async (build: () => Promise<Blob>, extension: string) => {
+      setDownloading(true);
+      setSavedPath("");
+      try {
+        const blob = await build();
+        const result = await saveToDownloads(
+          blob,
+          resolveCompany(state),
+          state.detectedJobTitle,
+          resumeFilename(settings.profile.fullName, extension)
+        );
+        setSavedPath(result.path);
+      } catch (err) {
+        setGenerateError(err instanceof Error ? err.message : "Could not save the file");
+      } finally {
+        setDownloading(false);
+      }
+    },
+    [state, settings.profile]
+  );
+
+  const handleDownloadPdf = useCallback(() => {
+    if (!compile.pdfUrl) return;
+    // The bytes already on screen, not a fresh compile — you send what you
+    // reviewed.
+    return saveAs(() => fetch(compile.pdfUrl).then((r) => r.blob()), "pdf");
+  }, [compile.pdfUrl, saveAs]);
+
+  const handleDownloadDocx = useCallback(() => {
+    if (!state.tailoredResume) return;
+    const resume = state.tailoredResume;
+    return saveAs(() => buildResumeBlob(resume, settings.profile), "docx");
+  }, [state.tailoredResume, settings.profile, saveAs]);
+
+  // --- Skipping -------------------------------------------------------------
+
+  const handleSkip = useCallback(() => {
+    update("resumeSkipped", true);
+  }, [update]);
+
+  const canGenerate = Boolean(state.resumeText && state.jobDescription);
+  const hasResume = Boolean(state.resumeTex);
+  // Badged on the toggle: a suggestion made while the panel is closed would
+  // otherwise sit unseen behind it.
+  const pendingProposals = state.resumeChatMessages.reduce(
+    (n, m) =>
+      n +
+      (m.proposals?.filter(
+        (p) => p.resolution === "pending" && state.resumeTex.includes(p.find)
+      ).length ?? 0),
+    0
+  );
+
+  useRegisterChat({ available: hasResume, label: "Refine", pendingCount: pendingProposals });
+
+  if (!hydrated) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-[var(--color-accent)] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-dvh">
+      <AppHeader
+        subtitle="Tailor your resume"
+        settings={settings}
+        onSettingsSave={handleSettingsSave}
+      />
+
+      <main className="app-container py-8 space-y-6">
+        {!canGenerate ? (
+          <div className="glass-panel p-8 text-center">
+            <p className="text-sm text-[var(--color-text-secondary)] mb-4">
+              You need a resume and job description before tailoring one.
+            </p>
+            <Link href="/" className="btn-primary inline-block px-6 py-3">
+              ← Back to resume &amp; job
+            </Link>
+          </div>
+        ) : (
+          <>
+            {/* Everything that isn't the document lives on one line, so the
+                document itself gets the whole width beneath it.
+
+                items-start, not items-stretch: the recap grows tall when it is
+                expanded, and a stretched button grew with it. The button is
+                given the recap's *collapsed* height instead — 78px, which is
+                fixed because that header is always exactly two single-line rows
+                (the summary truncates rather than wrapping) inside p-5 and a
+                1px border. */}
+            <div className="flex flex-wrap items-start gap-3">
+              <div className="min-w-[16rem] flex-1">
+                <ContextRecap
+                  resumeFilename={state.resumeFilename}
+                  resumeText={state.resumeText}
+                  jobSource={state.jobSource}
+                  jobDescription={state.jobDescription}
+                  report={state.matchReport}
+                  jobTitle={state.detectedJobTitle}
+                  detectedCompany={state.detectedCompany}
+                  companyName={state.companyName}
+                  onCompanyNameChange={(v) => update("companyName", v)}
+                />
+              </div>
+
+              {/* Below lg the applications rail is hidden, and with it the
+                  assistant's toggle — so it falls back to the page. */}
+              {hasResume && (
+                <div className="lg:hidden">
+                  <ChatToggle
+                    label="Refine"
+                    open={chatOpen}
+                    pendingCount={pendingProposals}
+                    onClick={toggleChat}
+                  />
+                </div>
+              )}
+
+              <button
+                onClick={() => setPickerOpen(true)}
+                disabled={generating}
+                className="btn-primary h-[78px] shrink-0 px-8 text-base font-medium"
+              >
+                {generating ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Tailoring…
+                  </span>
+                ) : hasResume ? (
+                  "Regenerate resume"
+                ) : (
+                  "Generate resume"
+                )}
+              </button>
+            </div>
+
+            {!state.matchReport && (
+              <div className="glass-panel flex items-center justify-between gap-3 p-4">
+                <p className="text-xs text-[var(--color-text-secondary)]">
+                  No match report yet — without one the tailoring is guesswork.
+                </p>
+                <Link href="/match" className="btn-secondary shrink-0 px-3 py-1.5 text-xs">
+                  Run the analysis
+                </Link>
+              </div>
+            )}
+
+            {generateError && (
+              <div className="rounded-lg border border-[var(--color-danger)]/20 bg-[var(--color-danger-muted)] px-4 py-3">
+                <p className="text-sm text-[var(--color-danger)]">{generateError}</p>
+              </div>
+            )}
+
+            {!hasResume && !state.resumeSkipped && (
+              <p className="text-center">
+                <button
+                  onClick={handleSkip}
+                  className="text-xs text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-secondary)]"
+                >
+                  Skip this — apply with my original resume
+                </button>
+              </p>
+            )}
+
+            {state.resumeSkipped && !hasResume && (
+              <p className="rounded-lg bg-[var(--color-surface-overlay)] px-3 py-2 text-center text-[11px] text-[var(--color-text-secondary)]">
+                Skipped. The letter will argue from your original resume. Generate one any time
+                to change your mind.
+              </p>
+            )}
+
+            <ResumeDocumentPane
+              key={state.id}
+              tex={state.resumeTex}
+              onTexChange={handleTexChange}
+              compile={compile}
+              pageTarget={
+                state.documentShape && allowsPageTarget(state.documentShape)
+                  ? state.resumePageTarget
+                  : null
+              }
+              loading={generating}
+              hasResume={hasResume}
+              engineHint={engineHint}
+              downloading={downloading}
+              savedPath={savedPath}
+              grounding={grounding}
+              onDownloadPdf={handleDownloadPdf}
+              onDownloadDocx={handleDownloadDocx}
+            />
+
+          </>
+        )}
+
+        <StepNav />
+      </main>
+
+      {hasResume && chatOpen && (
+        <ChatPanel
+          title="Refine"
+          subtitle="Ask for changes to this resume"
+          onClose={() => setChatOpen(false)}
+        >
+          <ResumeChat
+            key={state.id}
+            tex={state.resumeTex}
+            resume={state.tailoredResume}
+            messages={state.resumeChatMessages}
+            resumeText={state.resumeText}
+            jobDescription={state.jobDescription}
+            apiKey={settings.apiKey}
+            sessionId={state.id}
+            onNewMessage={handleNewChatMessage}
+            onAcceptProposal={handleAcceptProposal}
+            onRejectProposal={handleRejectProposal}
+          />
+        </ChatPanel>
+      )}
+
+      <GenerateResumeModal
+        open={pickerOpen}
+        profile={settings.profile}
+        emphasis={state.resumeEmphasis}
+        pageTarget={state.resumePageTarget}
+        recommended={state.recommendedShape}
+        recommendedReason={state.recommendedShapeReason}
+        recommendedConfident={state.recommendedShapeConfident}
+        current={state.documentShape}
+        recommendationFailed={Boolean(triageError)}
+        onRetryRecommendation={handleRetryTriage}
+        // Saved as you type, so a correction made here survives whether or not
+        // you go on to generate.
+        onProfileChange={(profile) => handleSettingsSave({ ...settings, profile })}
+        onEmphasisChange={(v) => update("resumeEmphasis", v)}
+        onPageTargetChange={(v) => update("resumePageTarget", v)}
+        onGenerate={handlePickShape}
+        onClose={() => setPickerOpen(false)}
+      />
+    </div>
+  );
+}

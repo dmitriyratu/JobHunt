@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { maskApiKey, type AppSettings } from "@/lib/settings";
+import {
+  isProfileUsable,
+  maskApiKey,
+  type AppSettings,
+  type ResumeProfile,
+} from "@/lib/settings";
 import { AdminKeyGuide, ApiKeyGuide } from "./KeyGuide";
+import ProfileFields from "./ProfileFields";
 import UsagePanel from "./UsagePanel";
 
 type Props = {
@@ -12,7 +18,11 @@ type Props = {
   onSave: (settings: AppSettings) => void;
 };
 
-type Tab = "setup" | "usage";
+/**
+ * "Your details" first: it is the tab you come back to. The key is entered once
+ * and then forgotten, and spend is something you check rather than change.
+ */
+export type Tab = "details" | "setup" | "usage";
 
 function EyeIcon({ off }: { off: boolean }) {
   return (
@@ -29,10 +39,16 @@ function EyeIcon({ off }: { off: boolean }) {
   );
 }
 
-export default function SettingsModal({ open, onClose, settings, onSave }: Props) {
-  const [tab, setTab] = useState<Tab>("setup");
+export default function SettingsModal({
+  open,
+  onClose,
+  settings,
+  onSave,
+}: Props) {
+  const [tab, setTab] = useState<Tab>("details");
   const [draftKey, setDraftKey] = useState(settings.apiKey);
   const [draftAdminKey, setDraftAdminKey] = useState(settings.adminApiKey);
+  const [draftProfile, setDraftProfile] = useState<ResumeProfile>(settings.profile);
   const [showKey, setShowKey] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [editingKey, setEditingKey] = useState(!settings.apiKey);
@@ -43,8 +59,9 @@ export default function SettingsModal({ open, onClose, settings, onSave }: Props
     if (!open) return;
     setDraftKey(settings.apiKey);
     setDraftAdminKey(settings.adminApiKey);
+    setDraftProfile(settings.profile);
     setEditingKey(!settings.apiKey);
-    setTab("setup");
+    setTab("details");
   }, [open, settings]);
 
   useEffect(() => {
@@ -62,6 +79,7 @@ export default function SettingsModal({ open, onClose, settings, onSave }: Props
     onSave({
       apiKey: draftKey.trim(),
       adminApiKey: draftAdminKey.trim(),
+      profile: draftProfile,
       ...next,
     });
     setSavedFlash(true);
@@ -69,6 +87,7 @@ export default function SettingsModal({ open, onClose, settings, onSave }: Props
   }
 
   const hasKey = Boolean(settings.apiKey);
+  const profileReady = isProfileUsable(settings.profile);
 
   return (
     <div
@@ -80,17 +99,18 @@ export default function SettingsModal({ open, onClose, settings, onSave }: Props
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label="AI settings"
+        aria-label="Settings"
       >
         <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] px-5 py-4">
-          <h2 className="text-sm font-medium">AI settings</h2>
+          <h2 className="text-sm font-medium">Settings</h2>
           <button onClick={onClose} className="btn-secondary px-3 py-1.5 text-xs">
             Close
           </button>
         </div>
 
-        {/* Two jobs, two tabs. Setting up a key and watching what you've spent
-            were competing for the same scroll and neither read clearly. */}
+        {/* Separate jobs, separate tabs. Setting up a key, entering the details
+            that head your resume, and watching what you've spent were competing
+            for the same scroll and none of them read clearly. */}
         <div
           role="tablist"
           aria-label="Settings sections"
@@ -98,6 +118,7 @@ export default function SettingsModal({ open, onClose, settings, onSave }: Props
         >
           {(
             [
+              ["details", "Your details"],
               ["setup", "Setup"],
               ["usage", "What you've spent"],
             ] as [Tab, string][]
@@ -114,7 +135,7 @@ export default function SettingsModal({ open, onClose, settings, onSave }: Props
               }`}
             >
               {label}
-              {id === "setup" && !hasKey && (
+              {((id === "setup" && !hasKey) || (id === "details" && !profileReady)) && (
                 <span
                   className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--color-warning)] align-middle"
                   title="Not set up yet"
@@ -125,7 +146,30 @@ export default function SettingsModal({ open, onClose, settings, onSave }: Props
         </div>
 
         <div className="p-4 sm:p-5">
-          {tab === "setup" ? (
+          {tab === "details" ? (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-medium">The header on your resumes</h3>
+                <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                  These sit at the top of every resume JobHunt generates. We fill them in
+                  from your first upload, but PDF text extraction mangles phone numbers and
+                  links often enough that it&rsquo;s worth a look. Correct anything wrong
+                  here and it stays fixed for every application.
+                </p>
+              </div>
+
+              <ProfileFields value={draftProfile} onChange={setDraftProfile} />
+
+              <p className="text-xs text-[var(--color-text-muted)]">
+                Saved only in this browser, and kept out of every AI request except the one
+                that writes your resume.
+              </p>
+
+              <button onClick={() => save({})} className="btn-primary w-full">
+                {savedFlash ? "Saved!" : "Save details"}
+              </button>
+            </div>
+          ) : tab === "setup" ? (
             <div className="space-y-4">
               {hasKey && !editingKey ? (
                 <>

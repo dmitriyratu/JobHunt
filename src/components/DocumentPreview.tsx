@@ -52,7 +52,7 @@ export default function DocumentPreview({
               onClick={() => setExpanded(true)}
               aria-label="Expand full text"
               title="Expand full text"
-              className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-overlay)]"
+              className="flex h-11 w-11 items-center justify-center rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-overlay)] sm:h-7 sm:w-7"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 3h6m0 0v6m0-6l-7 7M9 21H3m0 0v-6m0 6l7-7" />
@@ -143,7 +143,8 @@ export default function DocumentPreview({
 }
 
 function tabClass(active: boolean) {
-  return `text-xs font-medium py-1.5 px-3 rounded-md transition-colors ${
+  // py-2.5 clears 40px on a phone; sm: puts it back to the compact desktop size.
+  return `text-xs font-medium py-2.5 px-3 sm:py-1.5 rounded-md transition-colors ${
     active
       ? "bg-[var(--color-surface-overlay)] text-[var(--color-text-primary)]"
       : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"

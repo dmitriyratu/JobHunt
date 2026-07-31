@@ -3,10 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "node -e \"const f=require('fs');for(const n of ['pdf.min.mjs','pdf.worker.min.mjs'])f.copyFileSync('node_modules/pdfjs-dist/legacy/build/'+n,'public/'+n)\"",
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start -p 3001",
-    "lint": "next lint"
+    "lint": "next lint",
+    "check:templates": "tsx scripts/check-templates.mjs",
+    "check:grounding": "tsx scripts/probe-sources.mts",
+    "check:models": "tsx scripts/probe-tier.ts"
   },
   "dependencies": {
     "@tiptap/extension-underline": "^3.29.0",
@@ -14,10 +18,13 @@
     "@tiptap/react": "^3.29.0",
     "@tiptap/starter-kit": "^3.29.0",
     "cheerio": "^1.0.0",
+    "docx": "^9.7.1",
+    "docx-preview": "^0.4.0",
     "mammoth": "^1.9.0",
     "next": "^15.3.3",
     "openai": "^4.104.0",
     "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^5.4.624",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
@@ -31,6 +38,7 @@
     "eslint": "^9.27.0",
     "eslint-config-next": "^15.3.3",
     "tailwindcss": "^4.1.8",
+    "tsx": "^4.23.1",
     "typescript": "^5.8.3"
   }
 }

@@ -13,6 +13,7 @@ import {
 } from "react";
 import { copyFile, deleteFilesForSession, fileKey, pruneOrphanFiles } from "./fileStore";
 import { createSession, EMPTY_SESSION } from "./session";
+import { normalizeTailoredResume } from "./tailoredResume";
 import {
   loadStore,
   saveStore,
@@ -56,7 +57,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const loaded = loadStore();
-    setStore(loaded);
+    // Repairs resumes saved before skills were grouped — see
+    // normalizeTailoredResume. Done here rather than in loadStore so the
+    // storage layer stays free of resume-shaped knowledge.
+    setStore({
+      ...loaded,
+      sessions: loaded.sessions.map((s) => ({
+        ...s,
+        tailoredResume: normalizeTailoredResume(s.tailoredResume),
+        // Absent on anything saved before the LaTeX document existed. Reading
+        // back as undefined would put the editor into an uncontrolled state on
+        // the first keystroke.
+        resumeTex: s.resumeTex ?? "",
+        resumeSkipped: s.resumeSkipped ?? false,
+        // Anything saved before the picker existed carried a shape chosen from
+        // the old two-button control, with no recommendation behind it. The
+        // absent reason is the marker: null both, and the posting is re-read
+        // and the choice re-offered once, next time that application is opened.
+        documentShape: s.recommendedShapeReason ? s.documentShape ?? null : null,
+        recommendedShape: s.recommendedShapeReason ? s.recommendedShape ?? null : null,
+        recommendedShapeReason: s.recommendedShapeReason ?? "",
+        recommendedShapeConfident: s.recommendedShapeConfident ?? true,
+      })),
+    });
     setHydrated(true);
     void pruneOrphanFiles(loaded.sessions.map((s) => s.id));
   }, []);

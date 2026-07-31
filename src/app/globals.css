@@ -24,12 +24,53 @@
   --color-warning-muted: #b4530926;
   --color-danger: #dc2626;
   --color-danger-muted: #dc262624;
+
+  /*
+   * Match-outcome surfaces: the fill and hairline for a requirement card.
+   *
+   * Hue carries exactly one meaning in the report — how well the resume answers
+   * a requirement, on the Gap / Partial / Match / Exceeds scale — so these four
+   * own the palette outright and importance is left to greyscale weight. Two
+   * scales competing for the same colours is what made the old report need
+   * reading rather than scanning.
+   *
+   * The fill is weak on purpose: it is meant to be recognised in peripheral
+   * vision, not read through. The saturated step above is spent on the card's
+   * left edge and its pill, both small enough to stay loud without shouting.
+   * Every fill clears 7:1 against --color-text-tertiary.
+   */
+  --color-danger-surface: #fdf3f3;
+  --color-danger-line: #f3c9c9;
+  --color-warning-surface: #fdf8ee;
+  --color-warning-line: #ecd6a9;
+  --color-success-surface: #f1faf4;
+  --color-success-line: #b6ddc4;
+  --color-accent-surface: #f1f5fe;
+  --color-accent-line: #c4d5fb;
+
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer base {
   * {
     box-sizing: border-box;
+  }
+
+  /*
+   * How much room the applications rail is taking on the right.
+   *
+   * Published so viewport-fixed things — the floating assistant — can sit
+   * clear of it. The rail writes `--rail-w-lg` as it collapses and expands;
+   * this stays 0 below `lg`, where the rail isn't rendered at all.
+   */
+  :root {
+    --rail-w: 0px;
+  }
+
+  @media (min-width: 1024px) {
+    :root {
+      --rail-w: var(--rail-w-lg, 320px);
+    }
   }
 
   html {

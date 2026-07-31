@@ -1,0 +1,69 @@
+import { NextRequest, NextResponse } from "next/server";
+import { compileLatex, findEngine, INSTALL_HINT } from "@/lib/latexEngine";
+
+export const runtime = "nodejs";
+
+/** Max source size. A two-page resume is ~6KB; this is a runaway guard. */
+const MAX_TEX_BYTES = 400_000;
+
+/**
+ * Whether the machine can typeset at all.
+ *
+ * Called on mount so the editor can show install instructions up front instead
+ * of letting the first keystroke fail with a compile error that looks like the
+ * document's fault.
+ */
+export async function GET() {
+  const engine = await findEngine();
+  return NextResponse.json(
+    engine ? { available: true } : { available: false, hint: INSTALL_HINT }
+  );
+}
+
+/**
+ * LaTeX in, PDF out.
+ *
+ * JSON both ways, with the PDF base64-encoded.
+ *
+ * This used to answer with raw PDF bytes, which was tidier, but a compile now
+ * produces two things: the document and the SyncTeX map that lets a click on
+ * the preview find its line in the source. They are generated together in a
+ * temp directory that is deleted immediately afterwards, so they have to be
+ * returned together — there is nothing to come back for. Base64 costs a third
+ * more bytes over localhost, against a second compile to fetch the other half.
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const { tex } = (await request.json()) as { tex?: string };
+
+    if (!tex?.trim()) {
+      return NextResponse.json({ error: "No LaTeX source provided." }, { status: 400 });
+    }
+    if (tex.length > MAX_TEX_BYTES) {
+      return NextResponse.json(
+        { error: "That document is too large to compile." },
+        { status: 413 }
+      );
+    }
+
+    const result = await compileLatex(tex);
+
+    if (!result.ok) {
+      // 422, not 500: the request was fine, the document didn't build. The
+      // editor shows this inline rather than as a failure of the app.
+      return NextResponse.json({ error: result.message, log: result.log }, { status: 422 });
+    }
+
+    return NextResponse.json(
+      {
+        pdf: result.pdf.toString("base64"),
+        pages: result.pages,
+        synctex: result.synctex,
+      },
+      { status: 200, headers: { "Cache-Control": "no-store" } }
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Compilation failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

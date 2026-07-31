@@ -115,21 +115,11 @@ export default function ReportChat({
 
   const disabled = !report;
 
+  // No frame or heading of its own: ChatPanel supplies both, and this renders
+  // only the transcript and composer that fill it.
   return (
-    // The cap matters because this column is sticky and the Back/Next bar is
-    // pinned to the bottom of the viewport: without it, a short window would
-    // leave the message input hidden underneath that bar. dvh rather than vh —
-    // iOS Safari's `100vh` includes the collapsing address bar, so a vh-based
-    // cap is taller than what you can actually see.
-    <div className="glass-panel flex flex-col h-[560px] max-h-[calc(100dvh-11rem)]">
-      <div className="px-5 py-4 border-b border-[var(--color-border-subtle)]">
-        <h3 className="font-medium text-sm">Refine the report</h3>
-        <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-          Tell it what&rsquo;s wrong or missing — it&rsquo;ll propose edits for you to accept or reject
-        </p>
-      </div>
-
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+    <>
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {disabled && (
           <div className="text-center py-8">
             <p className="text-sm text-[var(--color-text-muted)]">
@@ -231,7 +221,7 @@ export default function ReportChat({
         )}
       </div>
 
-      <div className="px-5 py-4 border-t border-[var(--color-border-subtle)]">
+      <div className="px-4 py-3 border-t border-[var(--color-border-subtle)]">
         {attachedItem && (
           <div className="flex items-start gap-2 mb-2 rounded-lg border border-[var(--color-accent)] bg-[var(--color-accent-muted)] px-3 py-2">
             <div className="min-w-0 flex-1">
@@ -272,7 +262,7 @@ export default function ReportChat({
           </button>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

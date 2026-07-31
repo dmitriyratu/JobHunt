@@ -12,6 +12,16 @@ export function createSession(carryOver?: Partial<Session>): Session {
     jobDescription: "",
     jobSource: "",
     jobSourceType: "",
+    tailoredResume: null,
+    resumeTex: "",
+    resumeChatMessages: [],
+    resumeSkipped: false,
+    documentShape: null,
+    recommendedShape: null,
+    recommendedShapeReason: "",
+    recommendedShapeConfident: true,
+    resumeEmphasis: "",
+    resumePageTarget: 1,
     matchReport: null,
     reportChatMessages: [],
     detectedCompany: "",
@@ -38,6 +48,16 @@ export const EMPTY_SESSION: Session = Object.freeze({
   jobDescription: "",
   jobSource: "",
   jobSourceType: "" as const,
+  tailoredResume: null,
+  resumeTex: "",
+  resumeChatMessages: [],
+  resumeSkipped: false,
+  documentShape: null,
+  recommendedShape: null,
+  recommendedShapeReason: "",
+  recommendedShapeConfident: true,
+  resumeEmphasis: "",
+  resumePageTarget: 1 as const,
   matchReport: null,
   reportChatMessages: [],
   detectedCompany: "",
@@ -58,6 +78,9 @@ export const EMPTY_SESSION: Session = Object.freeze({
 export const RESUME_CHANGE_RESET = {
   matchReport: null,
   reportChatMessages: [],
+  tailoredResume: null,
+  resumeTex: "",
+  resumeChatMessages: [],
   generatedSubject: "",
   generatedBody: "",
 } satisfies Partial<Session>;
@@ -65,17 +88,34 @@ export const RESUME_CHANGE_RESET = {
 /** Job changed: the above, plus everything job-identity-specific. */
 export const JOB_CHANGE_RESET = {
   ...RESUME_CHANGE_RESET,
+  // A different posting is a fresh decision about whether to tailor at all.
+  resumeSkipped: false,
+  // The recommendation is read off the posting, so a new posting has to be
+  // re-read — and the format the user picked for the old one no longer stands.
+  // Deliberately absent from RESUME_CHANGE_RESET: uploading a different resume
+  // doesn't change what this employer expects to receive.
+  documentShape: null,
+  recommendedShape: null,
+  recommendedShapeReason: "",
+  recommendedShapeConfident: true,
   detectedCompany: "",
   detectedJobTitle: "",
   detectedCompanyDomain: "",
   companyName: "",
   recipientName: "",
   letterContext: "",
+  resumeEmphasis: "",
 } satisfies Partial<Session>;
 
-/** Report replaced: chat proposals reference item ids that no longer exist. */
+/**
+ * Report replaced: chat proposals reference item ids that no longer exist, and
+ * the tailored resume was built from the outgoing report's weighting.
+ */
 export const ANALYSIS_RESET = {
   reportChatMessages: [],
+  tailoredResume: null,
+  resumeTex: "",
+  resumeChatMessages: [],
   generatedSubject: "",
   generatedBody: "",
 } satisfies Partial<Session>;
@@ -116,10 +156,13 @@ export function sessionTitle(session: Session): string {
   return "New application";
 }
 
-export type SessionStage = "draft" | "analyzed" | "letter";
+export type SessionStage = "draft" | "analyzed" | "tailored" | "letter";
 
+// Checked in reverse journey order: the stage is how far you got, so the
+// furthest artefact wins even if you doubled back and skipped one.
 export function sessionStage(session: Session): SessionStage {
   if (session.generatedBody) return "letter";
+  if (session.tailoredResume) return "tailored";
   if (session.matchReport) return "analyzed";
   return "draft";
 }
@@ -127,6 +170,7 @@ export function sessionStage(session: Session): SessionStage {
 export const STAGE_LABEL: Record<SessionStage, string> = {
   draft: "Draft",
   analyzed: "Analyzed",
+  tailored: "Resume ready",
   letter: "Letter drafted",
 };
 

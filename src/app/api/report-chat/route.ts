@@ -233,6 +233,7 @@ export async function POST(request: NextRequest) {
       schema: REPORT_CHAT_SCHEMA,
       temperature: 0.4,
       supportsTemperature: taskModel.supportsTemperature,
+      reasoning: taskModel.reasoning,
       maxTokens: 1200,
       messages,
     });

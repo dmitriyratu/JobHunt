@@ -110,7 +110,10 @@ export default function FeedbackModal() {
         onClick={() => setOpen(true)}
         title="Send feedback"
         aria-label="Send feedback"
-        className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)]"
+        // The label is hidden below sm:, which leaves a 39x31 icon button — the
+        // smallest target in the header. min-h/w restore a real one without
+        // disturbing the size once the label is back.
+        className="flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-[var(--color-border)] px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)] sm:min-h-0 sm:min-w-0"
       >
         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path

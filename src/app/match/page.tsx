@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 import MatchReportView from "@/components/MatchReportView";
+import ChatPanel, { ChatToggle } from "@/components/ChatPanel";
 import ReportChat from "@/components/ReportChat";
 import SectionHeader from "@/components/SectionHeader";
 import StepNav from "@/components/StepNav";
+import { useChatDock, useRegisterChat } from "@/lib/chatDock";
 import { computeOverallScore } from "@/lib/matchReport";
 import { ANALYSIS_RESET } from "@/lib/session";
 import {
@@ -26,6 +28,8 @@ export default function MatchPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState("");
   const [attachedItemId, setAttachedItemId] = useState<string | null>(null);
+  // Shared with the applications rail, which is where the toggle lives.
+  const { open: chatOpen, setOpen: setChatOpen, toggle: toggleChat } = useChatDock();
 
   useEffect(() => {
     setSettings(loadSettings());
@@ -115,6 +119,19 @@ export default function MatchPage() {
     if (!hydrated || !canAnalyze || state.committed) return;
     commitSession();
   }, [hydrated, canAnalyze, state.committed, commitSession]);
+
+  // Badged on the toggle so a proposal made while the panel is closed isn't
+  // stranded behind it.
+  const pendingProposals = state.reportChatMessages.reduce(
+    (n, m) => n + (m.proposals?.filter((p) => p.resolution === "pending").length ?? 0),
+    0
+  );
+
+  useRegisterChat({
+    available: state.matchReport !== null,
+    label: "Refine",
+    pendingCount: pendingProposals,
+  });
 
   const handleNewChatMessage = useCallback(
     (userMsg: ReportChatMessage, assistantMsg: ReportChatMessage) => {
@@ -230,13 +247,29 @@ export default function MatchPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-            <section>
-              <SectionHeader
-                step={3}
-                title="Match report"
-                subtitle="Weighted by how important each requirement is"
-              />
+          // Full width: the report is a long table of requirements and
+          // evidence, and the assistant floats over it rather than taking a
+          // column from it.
+          <section>
+            <div className="mb-2 flex items-start justify-between gap-3">
+                <SectionHeader
+                  step={3}
+                  title="Match report"
+                  subtitle="Weighted by how important each requirement is"
+                />
+                {/* Below lg the applications rail is hidden, and with it the
+                    assistant's toggle — so it falls back to the page. */}
+                {state.matchReport && (
+                  <div className="lg:hidden">
+                    <ChatToggle
+                      label="Refine"
+                      open={chatOpen}
+                      pendingCount={pendingProposals}
+                      onClick={toggleChat}
+                    />
+                  </div>
+                )}
+              </div>
               <MatchReportView
                 report={state.matchReport}
                 canAnalyze={canAnalyze}
@@ -244,46 +277,44 @@ export default function MatchPage() {
                 error={analyzeError}
                 onAnalyze={runAnalyze}
                 attachedItemId={attachedItemId}
-                onAttachItem={(id) =>
-                  setAttachedItemId((prev) => (prev === id ? null : id))
-                }
+                onAttachItem={(id) => {
+                  const next = attachedItemId === id ? null : id;
+                  setAttachedItemId(next);
+                  // Open the panel when attaching, or the click looks inert.
+                  if (next) setChatOpen(true);
+                }}
               />
-            </section>
-
-            <section className="lg:sticky lg:top-6">
-              <SectionHeader
-                step={4}
-                title="Refine"
-                subtitle="Chat proposes edits, you approve them"
-              />
-              <ReportChat
-                report={state.matchReport}
-                messages={state.reportChatMessages}
-                resumeText={state.resumeText}
-                jobDescription={state.jobDescription}
-                apiKey={settings.apiKey}
-                sessionId={state.id}
-                attachedItem={
-                  state.matchReport
-                    ? state.matchReport.items.find((i) => i.id === attachedItemId) ??
-                      (state.matchReport.standouts ?? []).find(
-                        (s) => s.id === attachedItemId
-                      ) ??
-                      null
-                    : null
-                }
-                onClearAttachment={() => setAttachedItemId(null)}
-                onNewMessage={handleNewChatMessage}
-                onAcceptProposal={handleAcceptProposal}
-                onRejectProposal={handleRejectProposal}
-              />
-
-            </section>
-          </div>
+          </section>
         )}
 
         <StepNav />
       </main>
+
+      {state.matchReport && chatOpen && (
+        <ChatPanel
+          title="Refine"
+          subtitle="Correct or question this report"
+          onClose={() => setChatOpen(false)}
+        >
+          <ReportChat
+            report={state.matchReport}
+            messages={state.reportChatMessages}
+            resumeText={state.resumeText}
+            jobDescription={state.jobDescription}
+            apiKey={settings.apiKey}
+            sessionId={state.id}
+            attachedItem={
+              state.matchReport.items.find((i) => i.id === attachedItemId) ??
+              (state.matchReport.standouts ?? []).find((s) => s.id === attachedItemId) ??
+              null
+            }
+            onClearAttachment={() => setAttachedItemId(null)}
+            onNewMessage={handleNewChatMessage}
+            onAcceptProposal={handleAcceptProposal}
+            onRejectProposal={handleRejectProposal}
+          />
+        </ChatPanel>
+      )}
     </div>
   );
 }
