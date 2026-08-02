@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { removeDashTells } from "@/lib/deAiText";
+import { removeDashTells, stripFiller } from "@/lib/deAiText";
 import {
   SHAPE_DESCRIPTION,
   SHAPE_LABEL,
   allowsPageTarget,
+  prefersLatestTitle,
   specsFor,
+  toShape,
 } from "@/lib/documentShape";
 import { formatMatchReport } from "@/lib/matchReportPrompt";
+import { usedCitations } from "@/lib/grounding";
 import { runGroundingPass } from "@/lib/groundingPass";
 import { getTaskModel } from "@/lib/models";
 import { getOpenAIClient } from "@/lib/openai";
-import { expandCitation, logicalLines } from "@/lib/sourceLines";
+import { fitToPages } from "@/lib/fitToPages";
+import { checkFacts } from "@/lib/factCheck";
+import { reviewFacts } from "@/lib/factTriage";
+import { formatIndexed, indexSource, resolveCitations, unusedLines } from "@/lib/sourceIndex";
 import { createStructuredCompletion } from "@/lib/structuredCompletion";
+import type { ResumeProfile } from "@/lib/settings";
 import type {
   DocumentShape,
   MatchReport,
@@ -76,27 +83,35 @@ ENTRIES ARE POSITIONS A PERSON HELD. In an entries section "heading" is the job 
 - One entry per position at one organization over one continuous period. If someone was a Fellow and also Chief Fellow and also Social Chair within the same fellowship, that is ONE entry. Use the senior title, and let the others be bullets if they are worth a line.
 - Never emit two entries with the same organization and overlapping dates. A joint appointment across two named institutions is one entry: put both names in "organization".
 - A research project, study, paper or grant is NOT a position. "Targeting CD30 to Overcome Resistance to Immune Checkpoint Inhibitors in Hodgkin Lymphoma" is the name of a project: it belongs under the section key whose description names research, or in a BULLET under the position during which it was done. If the candidate held a named research post, the heading is that post ("Research Fellow"), never the project.
+- A source document almost always follows a project title with a sentence or two about the project. That prose is a BULLET on the entry whose title it sits under. It is never an entry of its own and never a heading: a heading that ends in a full stop is always this mistake, and it costs the real next project its name as well as printing a sentence where a title belongs.
 - Volunteer events, outreach days, committee seats and one-off service are not positions in an experience section either. They belong under the section key whose description names service and leadership, or in a bullet under the position they happened during.
 - Every entry needs real dates. If you cannot find them in the source, leave startDate and endDate empty. Never invent a placeholder, and never write "Current" as a start date: "Current - Current" is not a date range.
 - Never repeat the same bullet under two different entries.
+
+RANK EVERY ENTRY, AND RANK ITS BULLETS. Two orderings matter, and you are the only one who can supply them.
+- "relevance" on each entry, 0 to 10, is how much that entry argues for THIS posting. The role the posting is essentially describing is a 10. Real experience with nothing to do with it — a retail job on a platform engineering application — is a 0. Judge the work, not the recency: a 2016 role that did exactly this job outranks a 2024 role that did not.
+- Within an entry, put the bullets in the order you want them read, strongest evidence for this posting first.
+- Both are load-bearing. If the finished document runs longer than the candidate asked for, the app shortens it by taking the last bullets from the lowest-ranked entries, and by reducing a 0 to a single line of history. It never rewrites anything. So a lazy ranking is not a small mistake: it decides what a hiring manager sees.
 
 BULLETS ARE ACCOMPLISHMENTS, NOT DESCRIPTIONS.
 - A bullet that restates its own entry is worthless. Under "Clinical Fellow, Pediatric Hematology and Oncology" at Memorial Sloan Kettering, the bullet "Current clinical fellowship in Pediatric Hematology and Oncology at Memorial Sloan Kettering" says nothing that the two lines above it did not. Never write one.
 - Say what was done, built, treated, led, published, or changed, and at what scale.
 - If the source genuinely gives you nothing for an entry beyond its existence, emit ZERO bullets for it rather than padding. An entry with no bullets still prints with its heading, organization and dates, which is all the document actually supports.
+- The exception is a project, study or grant, where the heading is a name rather than a role. The sentence the source writes beneath such a title states the question, the method or the finding, and that is precisely what its bullets are for. A bullet is only a worthless description when it restates a job title the two lines above it already gave.
 
-THE GROUNDING RULE. Every bullet and every prose section carries "sources": the line or lines of the original document it is built from, copied verbatim. This is not optional and it is checked mechanically.
-- If you reword a bullet, "value" is your version and "sources" is the one line it came from.
-- YOU MAY COMBINE. If two lines of the original describe one piece of work, write them as one strong bullet and cite both: "Built the ledger pipeline" plus "processed $2B annually" becomes "Built the ledger pipeline processing $2B annually", with both lines in "sources". This is the most valuable thing you can do, and it is not invention — every fact is already the candidate's.
+THE GROUNDING RULE. Every bullet and every prose section carries "sources": the ID or IDs of the lines of the candidate's document it is built from. This is not optional and it is checked mechanically.
+- The candidate's document is given to you below with an ID in front of every line, like [Labc123]. "sources" is a list of those IDs and nothing else. Do not copy the line text into "sources", do not paraphrase it, do not invent an ID.
+- If you reword a bullet, "value" is your version and "sources" is the ID of the one line it came from.
+- YOU MAY COMBINE. If two lines describe one piece of work, write them as one strong bullet and cite both IDs: [La1] "Built the ledger pipeline" plus [Lb2] "processed $2B annually" becomes "Built the ledger pipeline processing $2B annually", with sources ["La1","Lb2"]. This is the most valuable thing you can do, and it is not invention — every fact is already the candidate's.
 - ORPHAN METRICS ARE NOT BULLETS, AND THEY ARE NOT DROPPABLE. A source line that is only a measurement — no verb of its own, or a subject that is a pronoun or the thing named on the line above ("It clears roughly $2B a year", "The pipeline runs in 14 markets", "Reconciliation caught 1,100 mismatched entries") — describes work that another line names. Fold it into that line and cite both. Printing it alone reads as a fragment; leaving it out throws away the strongest evidence the candidate has, because the number IS the evidence. Scan the source for these before you write, and make sure every one of them ends up attached to something.
-- Cite only what you actually used, and never more than three lines. Citing a line you did not draw on is a false claim of support, and the check reads exactly what you cite.
+- Cite only what you actually used, and never more than three IDs. Citing a line you did not draw on is a false claim of support, and the check reads exactly what you cite.
 - Combining facts does not license inferring between them. "Worked at MSK" and "published in Haematologica" do not together support "published while at MSK" unless the document says so.
 - The rewrite may compress, reorder clauses, front-load a metric, or swap a synonym for the posting's vocabulary. It may NOT add a fact absent from the cited lines: no invented numbers, technologies, team sizes, scopes, or outcomes.
 - Do not upgrade the candidate's role. "contributed to" does not become "led". "used" does not become "built". "helped migrate" does not become "owned the migration".
 - If a bullet is already well aimed, return it untouched with that one line as its only source.
 - If you cannot ground a rewrite, return the original unchanged. Unchanged is always better than embellished.
-- To cut a bullet, return it with "dropped": true and the original text as both its value and its only source. Do not delete it from the array. Every bullet you keep has "dropped": false.
-- A prose section is written from several lines at once. Cite the ones it rests on. Never return an empty "sources" — if you cannot point at what a sentence is built from, do not write that sentence.
+- RETURN ONLY WHAT YOU KEEP. A bullet you decided against is simply absent. Do not return it marked as cut, do not return it emptied, do not leave a placeholder. The app tracks what you left behind by comparing your citations against the source, so nothing is lost by omitting it and a long document costs a fraction as much to write.
+- A prose section is written from several lines at once. Cite the IDs it rests on. Never return an empty "sources" — if you cannot point at what a sentence is built from, do not write that sentence.
 
 {{LENGTH}}
 
@@ -116,12 +131,33 @@ WRITE LIKE A PERSON, NOT LIKE AN LLM. Recruiters see AI-written documents consta
 
 Return the complete structure for the sections you have chosen: every entry and every bullet.`;
 
-/** The page budget only exists for a resume; a CV is never trimmed to fit. */
+/** The page budget only exists for the paged shapes; a CV is never trimmed to fit. */
 const RESUME_LENGTH_RULE = `LENGTH. The candidate wants this to fit {{PAGE_TARGET}}. As a working budget, one page is about 18 to 22 total bullets across all entries; two pages about 34 to 40. Cut from the oldest and least relevant entries first. An entry from fifteen years ago may legitimately keep only one bullet. Never drop an entry entirely, and never drop the most recent position below three bullets.`;
 
-const CV_LENGTH_RULE = `LENGTH. A CV has no page target and nothing is cut for space. Dropping a publication, a presentation, a post or an award to save room is a defect on a document whose entire purpose is to be complete. Return every position, degree, licence, publication, presentation, award and language the source document contains, under the key whose description covers it. Mark a bullet "dropped": true only if you would never print it at all, which on a CV is close to nothing: tighten wording instead of deleting material.
+/**
+ * What "no page target" means, per shape.
+ *
+ * All three unpaged shapes are exhaustive, but for different reasons, and the
+ * reason changes what exhaustive means. A clinical CV is complete because the
+ * credentialing file has to be; an academic CV because the publication and
+ * funding record IS the application; a federal resume because a reviewer scores
+ * specialised experience from detail that a page limit would delete. Sharing one
+ * rule between them meant the federal resume was being told not to drop
+ * publications, which is not its failure mode.
+ */
+const UNPAGED_LENGTH_RULE: Partial<Record<DocumentShape, string>> = {
+  cv: `LENGTH. A CV has no page target and nothing is cut for space. Dropping a publication, a presentation, a post or an award to save room is a defect on a document whose entire purpose is to be complete. Return every position, degree, licence, publication, presentation, award and language the source document contains, under the key whose description covers it. Leave a bullet out only if you would never print it at all, which on a CV is close to nothing: tighten wording instead of deleting material.
 
-COMPLETENESS ALSO MEANS PUTTING THINGS IN THE RIGHT PLACE. A research study or named project gets its own entry in the research section, never an entry in clinical experience. A one-day volunteer event, an outreach day or a committee seat gets its own entry in the leadership and service section, never an entry in clinical experience. Clinical experience is for positions delivering patient care and nothing else.`;
+COMPLETENESS ALSO MEANS PUTTING THINGS IN THE RIGHT PLACE. A research study or named project gets its own entry in the research section, never an entry in clinical experience. A one-day volunteer event, an outreach day or a committee seat gets its own entry in the leadership and service section, never an entry in clinical experience. Clinical experience is for positions delivering patient care and nothing else.`,
+
+  academic: `LENGTH. An academic CV has no page target and nothing is cut for space. The publication, presentation and funding record is the substance of the application, so returning a selection of it is a defect. Return every publication, presentation, grant, appointment, course taught and service role the source document contains, under the key whose description covers it.
+
+COMPLETENESS ALSO MEANS PUTTING THINGS IN THE RIGHT PLACE. A position held is an appointment; the work done in it is a research entry. A named project or study gets its own entry under research, never an entry under appointments. Journal refereeing and editorial board seats are service, never publications. A dissertation is a bullet under its degree, not a publication, unless the source document lists it as published.`,
+
+  federal: `LENGTH. A federal resume has no page target and is expected to run three to eight pages. Compressing it is the single most common reason a qualified candidate is scored ineligible: a human-resources reviewer rates specialised experience from what is written under each position, and cannot credit what is not there. Be exhaustive. Return every position the source document contains, including ones a two-page resume would drop, and give recent and relevant positions six to ten bullets rather than three.
+
+WRITE FOR THE RATING PROCESS. Use the announcement's own vocabulary wherever the source document supports the claim, because the first screen is a literal match against the stated qualifications. Where the source states hours per week, pay grade, salary or a supervisor for a position, put them in that entry's first bullet; where it does not, leave them out rather than inventing them. Never inflate a grade, a date range or a duty to reach a qualification the candidate does not have — a false statement on a federal application is a criminal matter, not an embellishment.`,
+};
 
 /**
  * The section skeleton, handed to the model as the only list of keys it may
@@ -169,15 +205,11 @@ const BULLET_SCHEMA = {
     sources: {
       type: "array",
       description:
-        "The line or lines from the uploaded document this draws on, verbatim. One for a reword, two or three when combining facts. Never more than three.",
+        'IDs of the source lines this draws on, e.g. ["Labc123"]. One for a reword, two or three when combining. Never more than three, and never the line text itself.',
       items: { type: "string" },
     },
-    dropped: {
-      type: "boolean",
-      description: "True to cut this bullet from the document. Keep value and source filled.",
-    },
   },
-  required: ["id", "value", "sources", "dropped"],
+  required: ["id", "value", "sources"],
   additionalProperties: false,
 } as const;
 
@@ -197,15 +229,30 @@ const ENTRY_SCHEMA = {
     id: { type: "string" },
     heading: {
       type: "string",
-      description: "Job title, programme or degree, copied from the source.",
+      description:
+        "Job title, programme, degree or project name, copied from the source. A NAME, never a sentence: it does not end in a full stop and it is not a description of the work. If the source follows a project title with a paragraph about it, that paragraph is a bullet on the same entry — it is not the next entry's heading.",
     },
     organization: { type: "string", description: "Employer, institution or lab." },
     location: { type: "string" },
     startDate: { type: "string", description: "As the source wrote it, e.g. 'July 2024'." },
     endDate: { type: "string" },
+    relevance: {
+      type: "integer",
+      description:
+        "0 to 10: how much this entry argues for THIS posting. 10 is the role the posting is essentially describing. 0 is real experience that has nothing to do with it. Used to decide what survives when the document has to be shortened, so rank honestly rather than generously.",
+    },
     bullets: { type: "array", items: BULLET_SCHEMA },
   },
-  required: ["id", "heading", "organization", "location", "startDate", "endDate", "bullets"],
+  required: [
+    "id",
+    "heading",
+    "organization",
+    "location",
+    "startDate",
+    "endDate",
+    "relevance",
+    "bullets",
+  ],
   additionalProperties: false,
 } as const;
 
@@ -258,7 +305,7 @@ const sectionSchema = (shape: DocumentShape) => ({
             sources: {
               type: "array",
               description:
-                "The lines of the uploaded document this is built from, verbatim. A summary draws on several; cite the ones it actually rests on.",
+                "IDs of the source lines this is built from. A summary draws on several; cite the ones it actually rests on.",
               items: { type: "string" },
             },
           },
@@ -380,6 +427,80 @@ function restatesHeading(
   return tokens.every((t) => heading.has(t));
 }
 
+/**
+ * True when a heading arrived as a sentence rather than as a title.
+ *
+ * Research sections in a source document are written as three lines the entry
+ * schema has no shape for:
+ *
+ *     Targeting CD30 to Overcome Resistance ... in Hodgkin Lymphoma
+ *     Roth Laboratory, NYU Langone · New York, NY
+ *     Investigating CD30-directed therapeutic strategies to overcome ...
+ *
+ * Title, affiliation, then a paragraph that is neither. The model reads the
+ * paragraph as the start of the NEXT project and returns it as that project's
+ * heading, so the sentence prints in bold where a title belongs and the real
+ * project loses its name. Both projects come out wrong, and nothing downstream
+ * notices: the fields are all populated and every check passes.
+ *
+ * The schema and the prompt now both say a heading is a title, but a rule the
+ * model can break silently needs something behind it — the same argument as
+ * `restatesHeading` above.
+ *
+ * Deliberately narrow, because a false positive costs an entry its name. Both
+ * signals must fire:
+ *
+ *   A full stop that ends an actual sentence. "M.D." and "Ph.D." end in one
+ *   too, so a capital immediately before the stop does not count.
+ *
+ *   Eight or more content words. Real titles do run long — "Targeting CD30 to
+ *   Overcome Resistance to Immune Checkpoint Inhibitors in Hodgkin Lymphoma" is
+ *   thirteen — but they do not also close with a full stop.
+ *
+ * A description written without a closing full stop is missed. That is the
+ * intended trade: one that slips through costs an ugly entry, and a title taken
+ * by mistake costs the entry its identity.
+ */
+function isProseHeading(heading: string): boolean {
+  const text = heading.trim();
+  if (!/[a-z0-9)]\.$/.test(text)) return false;
+  return contentTokens(text).length >= 8;
+}
+
+/**
+ * Moves a sentence-shaped heading down into the entry's own bullets.
+ *
+ * Demoted rather than deleted: the sentence is real content the candidate
+ * wrote, and it describes work this entry did even when the model attached it
+ * to the wrong one. As a bullet it prints where a description belongs, which is
+ * what the section hints have always asked for ("bullets state the question,
+ * the method and the finding").
+ *
+ * The entry keeps its organisation and dates and loses only its heading; both
+ * renderers promote the organisation into the heading's place when it is empty.
+ * That is honest about what was lost — the project's real title is not
+ * recoverable from here, and inventing one would be worse than printing the lab
+ * it was done in.
+ *
+ * The bullet cites itself, which makes it verbatim (see `isVerbatim`) and keeps
+ * the grounding pass from rewriting a sentence that was copied out of the
+ * source in the first place. Headings are verbatim by contract — `checkFacts`
+ * already verifies them against the upload — so nothing is claimed here that
+ * was not already being claimed one line higher up.
+ */
+function demoteProseHeading(entry: ResumeEntry): ResumeEntry {
+  if (!isProseHeading(entry.heading)) return entry;
+  const value = entry.heading.trim();
+  return {
+    ...entry,
+    heading: "",
+    bullets: [
+      { id: `${entry.id}-lead`, value, sources: [value], dropped: false },
+      ...entry.bullets,
+    ],
+  };
+}
+
 function normKey(...parts: string[]): string {
   return parts.map((p) => p.trim().toLowerCase().replace(/\s+/g, " ")).join("|");
 }
@@ -395,6 +516,23 @@ function yearsOf(...parts: string[]): number[] {
 /** "Present", "Current", "Ongoing": an end date the source left running. */
 function isOngoing(endDate: string): boolean {
   return endDate.trim() !== "" && yearsOf(endDate).length === 0;
+}
+
+/**
+ * Whether one entry starts later than another, by year.
+ *
+ * A tie or an undated side answers false, which leaves whatever is already
+ * stored in place. The model returns entries most recent first, so on a tie
+ * that keeps the more recent of the two.
+ */
+function startsLater(
+  a: Pick<ResumeEntry, "startDate">,
+  b: Pick<ResumeEntry, "startDate">
+): boolean {
+  const ya = yearsOf(a.startDate);
+  const yb = yearsOf(b.startDate);
+  if (ya.length === 0 || yb.length === 0) return false;
+  return Math.min(...ya) > Math.min(...yb);
 }
 
 /**
@@ -445,8 +583,9 @@ function isNestedWithin(
 }
 
 /**
- * Merges entries the model split that are really one position, and drops
- * bullets that only restate their heading.
+ * Merges entries the model split that are really one position, demotes a
+ * heading that arrived as a sentence, and drops bullets that only restate their
+ * heading.
  *
  * Exact key matches merge: same organization over the same dates, or the same
  * heading over the same dates at two named institutions (a joint appointment).
@@ -456,39 +595,81 @@ function isNestedWithin(
  *
  * `seenBullets` is shared across every section so the same fact told twice, once
  * under a fellowship and once under a research post, only prints once.
+ *
+ * `preferLatestTitle` decides which of two nested titles survives the merge.
+ * See prefersLatestTitle: the answer is opposite for a CV and a resume, and the
+ * dates alone cannot tell the two cases apart.
  */
 function consolidateEntries(
   entries: ResumeEntry[],
-  seenBullets: Set<string> = new Set()
+  seenBullets: Set<string> = new Set(),
+  preferLatestTitle = false
 ): ResumeEntry[] {
   const out: ResumeEntry[] = [];
   const byOrgDates = new Map<string, number>();
   const byHeadingDates = new Map<string, number>();
 
-  for (const entry of entries) {
+  // Demoted first, so the merge below keys on what the entry actually is. A
+  // sentence used as a heading is a key nothing else will ever match, which is
+  // its own small reason the split entries never got merged back together.
+  for (const entry of entries.map(demoteProseHeading)) {
     const dated = yearsOf(entry.startDate, entry.endDate).length > 0;
+    const titled = entry.heading.trim() !== "";
     const orgKey = normKey(entry.organization, entry.startDate, entry.endDate);
     const headingKey = normKey(entry.heading, entry.startDate, entry.endDate);
 
+    // An untitled entry is not looked up or stored by heading: after a
+    // demotion the heading is "", and two of those over the same dates would
+    // key identically and merge two unrelated positions into one.
     let target = dated
-      ? byOrgDates.get(orgKey) ?? byHeadingDates.get(headingKey)
+      ? byOrgDates.get(orgKey) ?? (titled ? byHeadingDates.get(headingKey) : undefined)
       : undefined;
 
-    // Longest-running position at that organization wins, so a fellowship
-    // absorbs the Chief Fellow and committee titles held inside it rather than
-    // the reverse.
+    // A stint sitting inside another at the same employer is one position, so
+    // the two collapse into one dated block. Which title that block prints is
+    // the interesting part, and it is decided below.
     if (target === undefined) {
       const nested = out.findIndex(
         (o) => isNestedWithin(entry, o) || isNestedWithin(o, entry)
       );
       if (nested !== -1) {
         const outer = out[nested];
-        if (isNestedWithin(outer, entry) && !isNestedWithin(entry, outer)) {
-          // The one already stored is the shorter stint; promote this one.
-          outer.heading = entry.heading;
+        // Whether the entry already stored is the shorter stint, and this one
+        // the span containing it.
+        const storedIsInner =
+          isNestedWithin(outer, entry) && !isNestedWithin(entry, outer);
+
+        // WHICH TITLE SURVIVES, and why it depends on the document.
+        //
+        // Two roles at one employer with nested dates are the same shape on
+        // paper and mean opposite things. On a CV the inner stint is a title
+        // held *inside* a training post — Chief Fellow within a three year
+        // Clinical Fellowship — and the programme is the position, so the
+        // longer-running title is the right one.
+        //
+        // On a resume the identical dates are a promotion: Staff Engineer from
+        // March 2026 inside Senior Engineer from January 2024. Taking the
+        // longer-running title there printed "Senior Engineer, 2024-2027" over
+        // a span that ended as Staff Engineer, deleting the promotion and
+        // leaving the junior title in the one place a reader scans first.
+        //
+        // Decided before the dates move, because startsLater reads them.
+        //
+        // An empty heading is never adopted either way: a demoted entry carries
+        // one, and taking it would blank a title the other side supplied
+        // correctly.
+        const takeHeading = preferLatestTitle
+          ? startsLater(entry, outer)
+          : storedIsInner;
+        if (takeHeading && titled) outer.heading = entry.heading;
+
+        // The span is always the longer of the two — the person was there for
+        // all of it — whichever title ends up on it.
+        if (storedIsInner) {
           outer.startDate = entry.startDate;
           outer.endDate = entry.endDate;
         }
+
         target = nested;
       }
     }
@@ -502,6 +683,11 @@ function consolidateEntries(
       ) {
         existing.organization = `${existing.organization} / ${entry.organization}`;
       }
+      // A title survives the merge from whichever side has one. Two entries
+      // reach here as one position, and if the surviving side is the one whose
+      // heading was demoted then the other side is holding the only name this
+      // position has left.
+      if (!existing.heading.trim() && titled) existing.heading = entry.heading;
       existing.bullets = [...existing.bullets, ...entry.bullets];
       continue;
     }
@@ -509,7 +695,7 @@ function consolidateEntries(
     const index = out.push({ ...entry, bullets: [...entry.bullets] }) - 1;
     if (dated) {
       byOrgDates.set(orgKey, index);
-      byHeadingDates.set(headingKey, index);
+      if (titled) byHeadingDates.set(headingKey, index);
     }
   }
 
@@ -539,6 +725,13 @@ type TailorRequest = {
   emphasis?: string;
   shape?: DocumentShape;
   pageTarget?: ResumePageTarget;
+  /**
+   * Needed to typeset, and therefore to measure. Without it the route still
+   * returns a draft, just an unfitted one — the header is part of what fills
+   * the first page, so measuring a document rendered without it would be
+   * measuring a different document.
+   */
+  profile?: ResumeProfile;
   apiKey?: string;
 };
 
@@ -550,7 +743,7 @@ const PAGE_TARGET_LABEL: Record<ResumePageTarget, string> = {
 function buildSystemPrompt(shape: DocumentShape, pageTarget: ResumePageTarget | null): string {
   const length =
     pageTarget === null
-      ? CV_LENGTH_RULE
+      ? (UNPAGED_LENGTH_RULE[shape] ?? UNPAGED_LENGTH_RULE.cv!)
       : RESUME_LENGTH_RULE.replace("{{PAGE_TARGET}}", PAGE_TARGET_LABEL[pageTarget]);
 
   return SYSTEM_PROMPT.replace(
@@ -564,10 +757,10 @@ function buildSystemPrompt(shape: DocumentShape, pageTarget: ResumePageTarget | 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as TailorRequest;
-    const { resumeText, jobDescription, matchReport, emphasis, apiKey } = body;
-    const shape: DocumentShape = body.shape === "cv" ? "cv" : "resume";
-    // A CV is never trimmed to a page count, so it carries no target at all
-    // rather than a target the prompt is told to ignore.
+    const { resumeText, jobDescription, matchReport, emphasis, profile, apiKey } = body;
+    const shape: DocumentShape = toShape(body.shape);
+    // An unpaged shape carries no target at all rather than a target the prompt
+    // is told to ignore.
     const pageTarget: ResumePageTarget | null = allowsPageTarget(shape)
       ? body.pageTarget === 2
         ? 2
@@ -588,8 +781,15 @@ export async function POST(request: NextRequest) {
     const client = getOpenAIClient(apiKey);
     const taskModel = getTaskModel("tailor-resume");
 
+    // Built once and used three times: to show the model what it may cite, to
+    // resolve what it cited back into the candidate's own words, and to work
+    // out by subtraction what nothing cited at all.
+    const sourceIndex = indexSource(resumeText);
+
     const contextParts = [
-      "## Candidate Document (the only source of truth for facts)\n" + resumeText.trim(),
+      "## Candidate Document (the only source of truth for facts)\n" +
+        'Every line carries an ID. Cite those IDs in "sources"; never copy the text.\n\n' +
+        formatIndexed(sourceIndex),
       "## Job Description\n" + jobDescription.trim(),
     ];
 
@@ -615,9 +815,11 @@ export async function POST(request: NextRequest) {
       supportsTemperature: taskModel.supportsTemperature,
       reasoning: taskModel.reasoning,
       // A full document is several times the size of an email: every section,
-      // every entry, every bullet and every bullet's source line come back. A
-      // CV carries publication and presentation lists on top of that.
-      maxTokens: shape === "cv" ? 8000 : 4000,
+      // every entry, every bullet and every bullet's source line come back. The
+      // unpaged shapes carry more on top of that — publication and presentation
+      // lists on a CV, six to ten bullets per position on a federal resume — so
+      // the budget follows the same paged/unpaged split the length rule does.
+      maxTokens: allowsPageTarget(shape) ? 4000 : 8000,
       messages: [
         { role: "system", content: buildSystemPrompt(shape, pageTarget) },
         { role: "user", content: userPrompt },
@@ -637,7 +839,35 @@ export async function POST(request: NextRequest) {
     // Line breaks inside a value would render as a paragraph split mid-thought
     // in the document, so they are collapsed here rather than trusted to the
     // prompt.
-    const clean = (s: string) => removeDashTells(s ?? "").replace(/\s*\n+\s*/g, " ").trim();
+    // stripFiller as well as the dash strip: "successfully shipped" is
+    // "shipped", and the prompt's ban on these words is not reliable enough to
+    // be the only thing enforcing it.
+    const clean = (s: string) =>
+      stripFiller(removeDashTells(s ?? "").replace(/\s*\n+\s*/g, " ")).trim();
+
+    /**
+     * The same tidy for text that is a COPY rather than a rewrite.
+     *
+     * A list section is not writing. Publication citations, licence names,
+     * certifications and awards are "print this line as the document wrote it",
+     * which the prompt says explicitly and `checkFacts` verifies. Running
+     * `clean` over them applied a writer's rules to a copyist's output, and
+     * deleted words out of titles the model had reproduced correctly:
+     *
+     *     "The Very Low Birth Weight Infant"  ->  "The Low Birth Weight Infant"
+     *     "A Highly Sensitive Assay for ..."  ->  "A Sensitive Assay for ..."
+     *     "Cost-Benefit Analysis of ..."      ->  "Cost, Benefit Analysis of ..."
+     *
+     * (the last one an en dash between words, which `removeDashTells` reads as
+     * a parenthetical break and replaces with a comma).
+     *
+     * The damage did not stop at the page. `checkFacts` then compared the
+     * mangled line against the upload, failed to find it, and reported it as a
+     * fabrication — an issue the app had manufactured itself and then blamed on
+     * the model. Whitespace only here; nothing else about a copy is ours to
+     * change.
+     */
+    const tidy = (s: string) => (s ?? "").replace(/\s+/g, " ").trim();
 
     // One set for the whole document: a bullet repeated under two entries is
     // the same fact told twice, whichever sections they sit in.
@@ -651,22 +881,12 @@ export async function POST(request: NextRequest) {
      * "support" almost anything. Three is enough to combine two facts and give
      * one of them context.
      */
-    // The uploaded document as whole lines, so a citation cut short by the
-    // wrapping in the source can be grown back to the bullet it came from.
-    const sourceLines = logicalLines(resumeText);
 
-    // A leading list marker is part of how the source document was laid out, not
-    // part of the line. Left on, "- Wrote the guide" never matches the value
-    // "Wrote the guide", so a verbatim copy looks rewritten and gets checked.
-    const citations = (raw: string[] | undefined, cap: number) => {
-      const seen = new Set<string>();
-      return (raw ?? [])
-        .map((s) => expandCitation(s.trim().replace(/^[-*•]\s+/, ""), sourceLines))
-        .filter((s) => s && !seen.has(s) && seen.add(s))
-        // Expansion can collapse two citations onto one line, which is a
-        // duplicate rather than a second piece of evidence.
-        .slice(0, cap);
-    };
+    // IDs in, the candidate's own lines out. Anything addressing nothing is
+    // dropped and the rest de-duplicated, so the fragment, marker and paraphrase
+    // repairs the copy-based version needed are gone along with the copying.
+    const citations = (raw: string[] | undefined, cap: number) =>
+      resolveCitations(raw, sourceIndex).slice(0, cap);
 
     // A bullet rests on one line, or two or three when it combines. A summary
     // rests on the document: capping it at three left the figures in its fourth
@@ -680,7 +900,10 @@ export async function POST(request: NextRequest) {
       key: section.key,
       prose: section.prose && {
         value: clean(section.prose.value),
-        sources: citations(section.prose.sources, PROSE_CITATIONS),
+        sources: usedCitations(
+          clean(section.prose.value),
+          citations(section.prose.sources, PROSE_CITATIONS)
+        ),
       },
       keywords: section.keywords && {
         value: section.keywords.value ?? [],
@@ -691,16 +914,24 @@ export async function POST(request: NextRequest) {
         consolidateEntries(
           section.entries.map((entry) => ({
             ...entry,
+            // Clamped rather than trusted: the schema says 0-10 and strict
+            // mode enforces the type, not the range.
+            relevance: Math.max(0, Math.min(10, Math.round(Number(entry.relevance) || 0))),
             bullets: (entry.bullets ?? []).map((b) => ({
               ...b,
               value: clean(b.value),
-              sources: citations(b.sources, BULLET_CITATIONS),
-              dropped: Boolean(b.dropped),
+              // Filtered against the value, so a line cited but never drawn on
+              // cannot donate its figures to the number check.
+              sources: usedCitations(clean(b.value), citations(b.sources, BULLET_CITATIONS)),
+              // Never the model's call any more. Only the page-fitting pass
+              // cuts a bullet, and it sets this when it does.
+              dropped: false,
             })),
           })),
-          seenBullets
+          seenBullets,
+          prefersLatestTitle(shape)
         ),
-      items: section.items?.map(clean).filter(Boolean),
+      items: section.items?.map(tidy).filter(Boolean),
     }));
 
     // Verified before it is returned, so nothing ungrounded reaches the .tex.
@@ -710,19 +941,117 @@ export async function POST(request: NextRequest) {
     const { sections: grounded, report: grounding } = await runGroundingPass(
       client,
       sections,
-      jobDescription
+      jobDescription,
+      // The whole uploaded document, so fabrication can be decided by exact
+      // matching over everything the candidate wrote rather than by judgement
+      // over the handful of lines a bullet happened to cite.
+      resumeText
     );
 
+    // What this tailoring left behind, derived rather than reported: the source
+    // lines nothing on the finished page draws on. Free, complete, and
+    // impossible for the model to skip — which the old echo-it-back protocol
+    // was not.
+    //
+    // Everything the document prints, not only what its bullets cite. Headings,
+    // employers, dates, keywords and the contact header are copied across
+    // rather than rewritten, so they carry no citations at all; measured
+    // against citations alone they read as material that was thrown away, when
+    // they are in fact the parts reproduced most faithfully.
+    const printed = [
+      profile?.fullName ?? "",
+      profile?.headline ?? "",
+      profile?.email ?? "",
+      profile?.phone ?? "",
+      profile?.location ?? "",
+      ...(profile?.links ?? []).map((l) => l.value),
+      ...grounded.flatMap((section) => [
+        section.prose?.value ?? "",
+        // A citation is the source line verbatim, so it settles the question
+        // for anything a rewrite drew on however heavily it was reworded.
+        ...(section.prose?.sources ?? []),
+        ...(section.keywords?.value ?? []).flatMap((g) => [g.label, ...g.items]),
+        ...(section.items ?? []),
+        ...(section.entries ?? []).flatMap((e) => [
+          e.heading,
+          e.organization,
+          e.location,
+          e.startDate,
+          e.endDate,
+          ...e.bullets.flatMap((b) => [b.value, ...b.sources]),
+        ]),
+      ]),
+    ];
+    const omitted = unusedLines(sourceIndex, printed);
+
+    // The copied fields — employers, titles, dates, locations, and the lines of
+    // a list section — checked against the uploaded document. Nothing else in
+    // the app looks at these, and a fabricated employer would otherwise reach a
+    // finished resume having passed every check there is.
+    const factIssues = checkFacts(grounded, resumeText);
+
+    // Reviewed before anyone is shown them, which every other check in this
+    // route already was. checkFacts is containment, so it fires on arrangement
+    // as loudly as on invention — a fellowship the document lists as two
+    // entries and the resume writes as one is a warning about an employer that
+    // was never in doubt. reviewFacts withholds only the findings a model can
+    // point at the candidate's own lines for, and only when those lines survive
+    // a word-by-word re-check in code. Anything using a word the document never
+    // contains never reaches it.
+    const facts = await reviewFacts(client, factIssues, resumeText);
+
+    // Typeset and trim to the requested length. Skipped when the caller sends
+    // no profile — the header needs one, and a document rendered without it
+    // would be measured at the wrong length.
+    const fitted = profile
+      ? await fitToPages(
+          {
+            shape,
+            sections: grounded,
+            pageTarget,
+            omitted,
+            generatedAt: new Date().toISOString(),
+          },
+          profile,
+          jobDescription
+        )
+      : null;
+
     return NextResponse.json({
-      draft: { sections: grounded } satisfies ResumeDraft,
+      draft: {
+        sections: fitted ? fitted.resume.sections : grounded,
+        omitted,
+        collapsed: fitted?.resume.collapsed ?? [],
+      } satisfies ResumeDraft,
       shape,
       pageTarget,
+      fit: fitted && {
+        pages: fitted.pages,
+        trimmed: fitted.trimmed,
+        collapsed: fitted.collapsed,
+        droppedSections: fitted.droppedSections,
+        skillsTrimmed: fitted.skillsTrimmed,
+        summaryShortened: fitted.summaryShortened,
+        fits: fitted.fits,
+      },
+      // Reported, never silently corrected: the app cannot know whether the
+      // source or the rewrite is right, and quietly rewriting an employer name
+      // would be the same defect from the other direction.
+      factIssues: facts.issues,
+      // Withheld rather than deleted. A pass that removes warnings has to be
+      // auditable, and that needs the warning, the reason and the lines it was
+      // cleared on — the same argument as grounding.decisions.
+      factsCleared: facts.cleared,
       grounding: {
         checked: grounding.checked,
         repaired: grounding.repaired,
         reverted: grounding.reverted,
-        skillsRemoved: grounding.skillsRemoved,
+        removedSkills: grounding.removedSkills,
         unverified: grounding.unverified,
+        flagged: grounding.flagged,
+        // Every line the pass acted on, so the corrections can be reviewed
+        // rather than taken on trust.
+        decisions: grounding.decisions,
       },
       usage: {
         model: taskModel.id,
@@ -731,6 +1060,9 @@ export async function POST(request: NextRequest) {
       // Reported separately so each pass is attributed to its own model rather
       // than folded into the tailoring's cost.
       groundingUsage: grounding.usage,
+      // Empty on any document that raised no copied-field warnings — the
+      // reviewer only runs when there is something to review.
+      factUsage: facts.usage,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to tailor resume";

@@ -166,6 +166,11 @@ export function draftToResume(
     shape,
     sections,
     pageTarget: allowsPageTarget(shape) ? pageTarget : null,
+    // Carried through rather than recomputed: both are the route's findings
+    // about this generation, and the client has neither the source document nor
+    // the page count to derive them from.
+    omitted: draft.omitted ?? [],
+    collapsed: draft.collapsed ?? [],
     generatedAt: new Date().toISOString(),
   };
 }

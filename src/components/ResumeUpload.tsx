@@ -8,7 +8,17 @@ type Props = {
   resumeText: string;
   resumeFilename: string;
   fileKey: string;
-  onParsed: (text: string, filename: string) => void;
+  /** A word from the proofread list to mark and scroll to in the preview. */
+  highlight?: string;
+  /**
+   * Awaited before the upload is shown as done.
+   *
+   * The checks that read the uploaded document run once, here, and their whole
+   * value is being seen before the candidate moves on. Landing a second after
+   * the card said "resume uploaded" is landing after they have looked away, so
+   * the card waits for them.
+   */
+  onParsed: (text: string, filename: string) => void | Promise<void>;
   onClear: () => void;
 };
 
@@ -16,11 +26,16 @@ export default function ResumeUpload({
   resumeText,
   resumeFilename,
   fileKey: FILE_KEY,
+  highlight,
   onParsed,
   onClear,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [loading, setLoading] = useState(false);
+  // Named rather than boolean: reading a file and checking it are different
+  // waits, the second is the longer one, and a spinner that never changes its
+  // mind looks stuck.
+  const [stage, setStage] = useState<"" | "reading" | "checking">("");
+  const loading = stage !== "";
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
@@ -50,7 +65,7 @@ export default function ResumeUpload({
   const uploadFile = useCallback(
     async (file: File) => {
       setError("");
-      setLoading(true);
+      setStage("reading");
       try {
         const formData = new FormData();
         formData.append("file", file);
@@ -68,11 +83,15 @@ export default function ResumeUpload({
         });
         setIsPdf(file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
         void saveFile(FILE_KEY, file);
-        onParsed(data.text, data.filename);
+
+        // Awaited: the caller does not commit the text until its checks have
+        // run, so the uploaded card and the findings appear together.
+        setStage("checking");
+        await onParsed(data.text, data.filename);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Upload failed");
       } finally {
-        setLoading(false);
+        setStage("");
       }
     },
     [onParsed, FILE_KEY]
@@ -124,6 +143,7 @@ export default function ResumeUpload({
           fileUrl={fileUrl ?? undefined}
           fileName={resumeFilename}
           isPdf={isPdf}
+          highlight={highlight}
         />
       </div>
     );
@@ -164,7 +184,9 @@ export default function ResumeUpload({
         {loading ? (
           <div className="flex flex-col items-center gap-2">
             <Spinner />
-            <p className="text-sm text-[var(--color-text-secondary)]">Reading resume…</p>
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              {stage === "checking" ? "Checking spelling and names…" : "Reading resume…"}
+            </p>
           </div>
         ) : (
           <>

@@ -65,6 +65,33 @@ export type FetchedJobDescription = {
   url: string;
 };
 
+/**
+ * A user-facing message for a request that died below HTTP.
+ *
+ * `fetch` rejects with a bare `TypeError: fetch failed` for everything in that
+ * class — DNS, TLS, a reset connection, wifi dropping for a second — and the
+ * route hands `error.message` straight to the UI, so "fetch failed" is what the
+ * user reads. As an error message it's a dead end: it names no cause and gives
+ * no hint that the very same click would likely succeed on a retry. Timeouts
+ * reject separately, as a DOMException with equally opaque wording. Both get
+ * translated here; every other throw in this file already says exactly what
+ * happened and is left alone.
+ */
+function networkErrorMessage(error: unknown, url: string): string {
+  let host: string;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    host = "that site";
+  }
+
+  if (error instanceof Error && error.name === "TimeoutError") {
+    return `${host} took longer than 15 seconds to respond. Try again, or paste the job description text instead.`;
+  }
+
+  return `Couldn't reach ${host} — the network request failed before the page finished loading. Check your connection and try again, or paste the job description text instead.`;
+}
+
 // LinkedIn's logged-out job pages DO serve the full posting — it lives in
 // `.description__text--rich` (with the body copy inside
 // `.show-more-less-html__markup`). The surrounding page is thick with
@@ -141,10 +168,18 @@ export async function fetchAndExtractText(rawUrl: string): Promise<FetchedJobDes
     throw new Error(reason);
   }
 
-  const response = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(15000),
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { "User-Agent": USER_AGENT },
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (error) {
+    // Keep the original as `cause` — the underlying code (ENOTFOUND,
+    // ECONNRESET, ...) is what makes this diagnosable in the server log, and
+    // only the `message` is sent to the browser.
+    throw new Error(networkErrorMessage(error, url), { cause: error });
+  }
 
   if (!response.ok) {
     throw new Error(`Failed to fetch URL (${response.status}): ${url}`);
@@ -159,7 +194,16 @@ export async function fetchAndExtractText(rawUrl: string): Promise<FetchedJobDes
   }
 
   const contentType = response.headers.get("content-type") ?? "";
-  const body = await response.text();
+
+  // The headers arriving doesn't mean the body will. A connection dropped
+  // mid-stream rejects here instead, with its own unhelpful wording
+  // ("terminated"), so it needs the same translation.
+  let body: string;
+  try {
+    body = await response.text();
+  } catch (error) {
+    throw new Error(networkErrorMessage(error, finalUrl), { cause: error });
+  }
 
   if (contentType.includes("application/pdf")) {
     throw new Error(

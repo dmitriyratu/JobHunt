@@ -31,7 +31,7 @@ export default function ChatPanel({ title, subtitle, onClose, children }: Props)
       className="fixed inset-x-3 bottom-20 z-40 sm:inset-x-auto sm:w-[380px]"
       style={{ right: "calc(var(--rail-w) + 1rem)" }}
     >
-      <div className="glass-panel flex h-[min(560px,calc(100dvh-11rem))] flex-col overflow-hidden shadow-xl">
+      <div className="glass-panel flex h-[min(560px,calc(100dvh-11rem))] flex-col overflow-hidden shadow-[var(--shadow-pop)]">
         <div className="flex items-start justify-between gap-2 border-b border-[var(--color-border-subtle)] px-4 py-3">
           <div className="min-w-0">
             <h3 className="text-sm font-medium">{title}</h3>
@@ -88,7 +88,7 @@ export function ChatToggle({
       </svg>
       {label}
       {pendingCount > 0 && (
-        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-accent)] px-1.5 text-[11px] font-semibold text-white">
+        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-accent)] px-1.5 text-[11px] font-semibold text-[var(--color-on-accent)]">
           {pendingCount}
         </span>
       )}

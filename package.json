@@ -10,7 +10,13 @@
     "lint": "next lint",
     "check:templates": "tsx scripts/check-templates.mjs",
     "check:grounding": "tsx scripts/probe-sources.mts",
-    "check:models": "tsx scripts/probe-tier.ts"
+    "check:models": "tsx scripts/probe-tier.ts",
+    "check:fit": "tsx scripts/probe-fit.ts",
+    "check:volume": "tsx scripts/probe-volume.ts",
+    "check:audit": "tsx scripts/probe-audit.ts",
+    "check:facts": "tsx scripts/probe-facts.ts",
+    "check:proofread": "tsx scripts/probe-proofread.ts",
+    "check:consistency": "tsx scripts/probe-consistency.ts"
   },
   "dependencies": {
     "@tiptap/extension-underline": "^3.29.0",

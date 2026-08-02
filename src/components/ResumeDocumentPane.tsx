@@ -3,10 +3,16 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import LatexEditor from "./LatexEditor";
 import ResumePdfPreview from "./ResumePdfPreview";
+import ChangeAuditModal, {
+  changeCount,
+  type FitSummary,
+  type GroundingSummary,
+} from "./ChangeAuditModal";
 import { splitDocument } from "@/lib/resumeLatex";
+import { revealDownload } from "@/lib/saveDownload";
 import { lineAt, parseSyncTex } from "@/lib/synctex";
 import type { CompileState } from "@/lib/useLatexCompile";
-import type { ResumePageTarget } from "@/types";
+import type { ResumePageTarget, TailoredResume } from "@/types";
 
 /**
  * The document half of the resume step: LaTeX source on one side, the PDF it
@@ -36,19 +42,42 @@ type Props = {
   /** Set when the machine has no LaTeX engine; nothing can compile until fixed. */
   engineHint: string;
   downloading: boolean;
-  savedPath: string;
+  /**
+   * The last file written from this pane, or null before anything was saved.
+   *
+   * `usedFolders` decides whether there is somewhere to open: the fallback path
+   * is a flat browser download, whose location the page never learns.
+   */
+  saved: { path: string; usedFolders: boolean } | null;
   /**
    * What the grounding pass did to this generation, or null if none has run in
    * this session. Reported rather than silent: the document says something
-   * different from what the model first wrote, and that is worth one line.
+   * different from what the model first wrote, and that is worth knowing.
+   *
+   * Carries the per-line decisions, not just the counts — see ChangeAuditModal
+   * for why a count is the wrong unit for this.
    */
-  grounding: {
-    checked: number;
-    repaired: number;
-    reverted: number;
-    skillsRemoved: number;
-    unverified: number;
-  } | null;
+  grounding: GroundingSummary | null;
+  /**
+   * What the page-fitting pass cut to reach the length target, or null if it
+   * did not run. Same argument as grounding: the document holds less than the
+   * writer produced, and that should be visible rather than discovered.
+   */
+  fit: FitSummary | null;
+  /**
+   * The structured document, read only for what the fitting pass cut: dropped
+   * bullets stay in the data with their text, and that text is the audit's
+   * whole point.
+   */
+  resume: TailoredResume | null;
+  /**
+   * Copied fields — employers, titles, dates — that the uploaded document does
+   * not state. Reported rather than corrected: the app cannot know which side
+   * is right, and quietly rewriting an employer name would be the same defect
+   * from the other direction. This is the loudest notice on the pane because it
+   * is the only one describing something that might not be true.
+   */
+  factIssues: { where: string; field: string; value: string }[];
   onDownloadPdf: () => void;
   onDownloadDocx: () => void;
 };
@@ -57,6 +86,26 @@ const VIEWS: [DocumentView, string][] = [
   ["split", "Split"],
   ["pdf", "PDF"],
 ];
+
+/**
+ * A saved path split into the two segments worth printing.
+ *
+ * The full path is 60-odd characters of which the last two are the only ones
+ * anybody reads — the rest is their home directory. Both are shown, not just
+ * the folder: a lone folder name reads as "somewhere over there", and what the
+ * link actually does is point at one file inside it.
+ *
+ * Kept as two strings rather than one joined label so the folder can truncate
+ * on a narrow pane while the file name — the more specific half, and the last
+ * thing a CSS truncation would leave standing — always survives.
+ */
+function splitPath(filePath: string): { folder: string; file: string } {
+  const parts = filePath.split(/[\\/]/).filter(Boolean);
+  return {
+    folder: parts.length > 1 ? parts[parts.length - 2] : "",
+    file: parts[parts.length - 1] ?? filePath,
+  };
+}
 
 export default function ResumeDocumentPane({
   tex,
@@ -67,8 +116,11 @@ export default function ResumeDocumentPane({
   hasResume,
   engineHint,
   downloading,
-  savedPath,
+  saved,
   grounding,
+  fit,
+  resume,
+  factIssues,
   onDownloadPdf,
   onDownloadDocx,
 }: Props) {
@@ -79,6 +131,27 @@ export default function ResumeDocumentPane({
   // should land on their own words, not on \usepackage lines.
   const [showFullSource, setShowFullSource] = useState(false);
   const split = useMemo(() => splitDocument(tex), [tex]);
+
+  // What the two automatic passes did, behind a button rather than in a
+  // paragraph. Zero means both passes left the document alone.
+  const [auditOpen, setAuditOpen] = useState(false);
+  const changes = useMemo(() => changeCount(grounding, fit), [grounding, fit]);
+  // Deliberately not folded into `changes`: lines the tailoring never used are
+  // the normal outcome, not something that was done to the document, and
+  // counting them would report a clean generation as forty changes.
+  const unused = resume?.omitted?.length ?? 0;
+
+  // Only set when revealing fails — a file moved since it was written, or a
+  // machine with no file manager on the path. Shown next to the link rather
+  // than thrown, because the save itself already worked.
+  // Tied to the path it happened on, so the next save clears it without an
+  // effect to watch for one.
+  const [revealError, setRevealError] = useState<{ path: string; message: string } | null>(null);
+  const handleReveal = useCallback(async () => {
+    if (!saved) return;
+    const message = await revealDownload(saved.path);
+    setRevealError(message ? { path: saved.path, message } : null);
+  }, [saved]);
 
   // Parsed from whatever the preview is currently showing, so a click is always
   // resolved against the document on screen rather than the source being typed.
@@ -154,33 +227,34 @@ export default function ResumeDocumentPane({
     <div className="glass-panel flex flex-col p-5 sm:p-6">
       <div className="mb-4 space-y-3 border-b border-[var(--color-border-subtle)] pb-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div
-            role="tablist"
-            aria-label="Document view"
-            className="flex gap-1 rounded-lg bg-[var(--color-surface-overlay)] p-1"
-          >
-            {VIEWS.map(([id, label]) => (
-              <button
-                key={id}
-                role="tab"
-                aria-selected={view === id}
-                onClick={() => setView(id)}
-                className={`rounded-md px-3 py-2.5 text-xs font-medium transition-colors sm:py-1.5 ${
-                  view === id
-                    ? "bg-[var(--color-surface-raised)] text-[var(--color-text-primary)] shadow-sm"
-                    : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {/* The length of the document belongs with the view of it, not with
+              the download buttons: it describes what you are looking at, and
+              beside "Download PDF" it read as something about the file you were
+              about to save. */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div
+              role="tablist"
+              aria-label="Document view"
+              className="flex gap-1 rounded-lg bg-[var(--color-surface-overlay)] p-1"
+            >
+              {VIEWS.map(([id, label]) => (
+                <button
+                  key={id}
+                  role="tab"
+                  aria-selected={view === id}
+                  onClick={() => setView(id)}
+                  className={`rounded-md px-3 py-2.5 text-xs font-medium transition-colors sm:py-1.5 ${
+                    view === id
+                      ? "bg-[var(--color-surface-raised)] text-[var(--color-text-primary)] shadow-[var(--shadow-sm)]"
+                      : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
 
-          {/* Downloads live up here beside the view tabs rather than under the
-              document: they're what you came to do, and at the foot of a pane
-              that scrolls they sat below the fold. */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-1 text-xs text-[var(--color-text-muted)]">
+            <span className="text-xs text-[var(--color-text-muted)]">
               {compile.compiling
                 ? "Typesetting…"
                 : compile.pages > 0 && (
@@ -190,6 +264,103 @@ export default function ResumeDocumentPane({
                     </span>
                   )}
             </span>
+
+            {/* Sits with the page count because it is the same kind of fact —
+                what this document is, not something to do about it — and is
+                typeset like it for the same reason. As a bordered chip beside
+                the download buttons it read as a control of equal weight to
+                them, which is three times the emphasis a line that usually says
+                "nothing was wrong" deserves.
+
+                Amber only when the passes changed something. The link colour is
+                the whole distinction from the green saved-file link opposite:
+                one reports on the document, the other opens a folder on disk. */}
+            {(changes > 0 || unused > 0) && (
+              <button
+                type="button"
+                onClick={() => setAuditOpen(true)}
+                title={[
+                  grounding &&
+                    `${grounding.checked} rewritten ${
+                      grounding.checked === 1 ? "line was" : "lines were"
+                    } checked against the document you uploaded.`,
+                  changes > 0
+                    ? `${changes} change${changes === 1 ? "" : "s"} to review.`
+                    : grounding && "Nothing was changed.",
+                  unused > 0 &&
+                    `${unused} line${unused === 1 ? "" : "s"} of your resume ${
+                      unused === 1 ? "is" : "are"
+                    } not used on this page.`,
+                  "Click for the details.",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                className={`text-xs underline decoration-dotted underline-offset-2 transition-colors ${
+                  changes > 0
+                    ? "font-medium text-[var(--color-warning)] hover:text-[var(--color-text-primary)]"
+                    : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+                }`}
+              >
+                {/* Named, not numbered: "4 unused" says nothing about what was
+                    counted, and the count is the less interesting half. */}
+                {[
+                  changes > 0 && `${changes} change${changes === 1 ? "" : "s"}`,
+                  unused > 0 &&
+                    `${unused} unused ${changes > 0 ? "" : "resume "}line${unused === 1 ? "" : "s"}`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </button>
+            )}
+          </div>
+
+          {/* Downloads live up here beside the view tabs rather than under the
+              document: they're what you came to do, and at the foot of a pane
+              that scrolls they sat below the fold. */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* One link, not a link and a caption and a confirmation. It used
+                to be a panel under the document — the full path on its own
+                line, below the fold on a scrolled pane, printed for copying
+                because a page cannot navigate to a file:// URL. The server can
+                do what the page cannot, so the path is a control now rather
+                than a notice, and the folder name is the whole of it: the file
+                name was a second thing to read for something the tick already
+                says, and the path is one hover away.
+
+                Green, matching its tick — the one green thing in the row is the
+                one reporting a success, which is what keeps it from reading as
+                another of the document's statistics. */}
+            {saved && (
+              <span className="flex min-w-0 items-center gap-1 text-xs">
+                <span className="shrink-0 text-[var(--color-success)]">✓</span>
+                {saved.usedFolders ? (
+                  <button
+                    type="button"
+                    onClick={handleReveal}
+                    title={`Saved as ${saved.path}\n\nClick to open the folder.`}
+                    className="max-w-[14rem] truncate font-medium text-[var(--color-success)] underline decoration-dotted underline-offset-2 hover:text-[var(--color-text-primary)]"
+                  >
+                    {splitPath(saved.path).folder || splitPath(saved.path).file}
+                  </button>
+                ) : (
+                  // The browser-download fallback: no folders were made, so
+                  // there is no folder to open — only the name it landed under.
+                  <span
+                    className="max-w-[14rem] truncate text-[var(--color-text-muted)]"
+                    title={`Saved to your browser's download folder as ${saved.path}`}
+                  >
+                    {saved.path}
+                  </span>
+                )}
+              </span>
+            )}
+            {/* Failures only. A successful open announces itself by being a
+                window on your screen, and the confirmation that stood here
+                said, permanently and next to a green tick, something the user
+                could already see. */}
+            {revealError?.path === saved?.path && revealError && (
+              <span className="text-xs text-[var(--color-warning)]">{revealError.message}</span>
+            )}
 
             <button
               onClick={onDownloadPdf}
@@ -227,55 +398,31 @@ export default function ResumeDocumentPane({
           </div>
         </div>
 
-        {/* Only when something actually changed. On a clean generation the
-            check is invisible, which is the right amount of noise for "nothing
-            was wrong". */}
-        {grounding &&
-          grounding.repaired +
-            grounding.reverted +
-            grounding.skillsRemoved +
-            grounding.unverified >
-            0 && (
-            <div className="rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-muted)] px-3 py-2">
-              <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">
-                Checked {grounding.checked} rewritten{" "}
-                {grounding.checked === 1 ? "line" : "lines"} against your original document.{" "}
-                {[
-                  grounding.repaired > 0 &&
-                    `${grounding.repaired} ${
-                      grounding.repaired === 1 ? "was" : "were"
-                    } rewritten to drop a claim it didn't support`,
-                  grounding.reverted > 0 &&
-                    `${grounding.reverted} ${
-                      grounding.reverted === 1 ? "was" : "were"
-                    } put back to your own wording`,
-                  grounding.skillsRemoved > 0 &&
-                    `${grounding.skillsRemoved} ${
-                      grounding.skillsRemoved === 1 ? "skill" : "skills"
-                    } your resume doesn't claim ${
-                      grounding.skillsRemoved === 1 ? "was" : "were"
-                    } removed`,
-                  // The one case worth a second look: flagged, unfixable, and
-                  // with no original line to fall back to, so it stands as
-                  // written rather than being deleted.
-                  grounding.unverified > 0 &&
-                    `${grounding.unverified} couldn't be traced back and ${
-                      grounding.unverified === 1 ? "is" : "are"
-                    } worth checking yourself`,
-                ]
-                  .filter(Boolean)
-                  .join("; ")}
-                .
-              </p>
-            </div>
-          )}
-
-        {savedPath && (
-          <div className="rounded-lg border border-[var(--color-success)]/30 bg-[var(--color-success-muted)] px-3 py-2">
-            <p className="text-xs font-medium text-[var(--color-success)]">✓ Saved</p>
-            <p className="mt-0.5 break-all font-mono text-[11px] text-[var(--color-text-secondary)]">
-              {savedPath}
+        {factIssues.length > 0 && (
+          <div className="rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning-muted)] px-3 py-2">
+            <p className="text-xs font-medium text-[var(--color-warning)]">
+              Check {factIssues.length === 1 ? "this" : "these"} against your own resume
             </p>
+            <p className="mt-0.5 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+              {factIssues.length === 1 ? "This detail is" : "These details are"} on the document
+              but {factIssues.length === 1 ? "does not" : "do not"} appear in the file you
+              uploaded. Employers, titles and dates are meant to be copied exactly, so this is
+              either an extraction problem or something that should not be there.
+            </p>
+            <ul className="mt-1.5 space-y-0.5">
+              {factIssues.slice(0, 6).map((issue, i) => (
+                <li key={i} className="text-xs text-[var(--color-text-secondary)]">
+                  <span className="text-[var(--color-text-muted)]">{issue.field}:</span>{" "}
+                  <span className="font-medium">{issue.value}</span>
+                  <span className="text-[var(--color-text-muted)]"> — {issue.where}</span>
+                </li>
+              ))}
+              {factIssues.length > 6 && (
+                <li className="text-xs text-[var(--color-text-muted)]">
+                  and {factIssues.length - 6} more
+                </li>
+              )}
+            </ul>
           </div>
         )}
 
@@ -365,6 +512,13 @@ export default function ResumeDocumentPane({
         </div>
       )}
 
+      <ChangeAuditModal
+        open={auditOpen}
+        grounding={grounding}
+        fit={fit}
+        resume={resume}
+        onClose={() => setAuditOpen(false)}
+      />
     </div>
   );
 }

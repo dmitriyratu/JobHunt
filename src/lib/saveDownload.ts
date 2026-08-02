@@ -30,6 +30,28 @@ function browserDownload(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+/**
+ * Shows a saved file in the OS file manager. See /api/reveal-download.
+ *
+ * Returns the reason on failure rather than throwing: this is a convenience on
+ * top of a save that already succeeded, and nothing about it is worth
+ * interrupting anyone over.
+ */
+export async function revealDownload(filePath: string): Promise<string> {
+  try {
+    const res = await fetch("/api/reveal-download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: filePath }),
+    });
+    if (res.ok) return "";
+    const data = await res.json().catch(() => ({}));
+    return (data as { error?: string }).error ?? "Could not open the folder";
+  } catch {
+    return "Could not open the folder";
+  }
+}
+
 export async function saveToDownloads(
   blob: Blob,
   company: string,

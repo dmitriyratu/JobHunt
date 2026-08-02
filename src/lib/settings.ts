@@ -1,3 +1,10 @@
+import {
+  isLinkKind,
+  migrateLegacyLinks,
+  type LinkKind,
+  type ProfileLink,
+} from "./profileLinks";
+
 export const SETTINGS_STORAGE_KEY = "jobhunt-settings";
 
 /**
@@ -27,9 +34,31 @@ export type ResumeProfile = {
   headline: string;
   email: string;
   phone: string;
-  linkedin: string;
-  website: string;
   location: string;
+  /**
+   * Everything else in the contact line, as a typed list.
+   *
+   * Replaced fixed `linkedin` and `website` fields. One list rather than a
+   * column per kind because the set is open — see @/lib/profileLinks — and
+   * because it keeps one identity for a person across every document shape:
+   * a physician who also writes code keeps both, and only fills in what they
+   * want on the page.
+   */
+  links: ProfileLink[];
+  /**
+   * Kinds the user has dismissed from the form.
+   *
+   * Only ever affects which empty slots are offered. A suggestion is a guess
+   * about the profession, and a guess you cannot wave away stops being a
+   * suggestion and starts being nagging — an academic with no ORCID would be
+   * asked for one on every visit forever. Persisted rather than held in
+   * component state for exactly that reason: dismissing something that returns
+   * the moment you close the dialog is not dismissing it.
+   *
+   * Never hides a kind that has a value. A field holding text you can see on
+   * the page but cannot edit would be the worst of both.
+   */
+  hiddenLinks: LinkKind[];
 };
 
 export type AppSettings = {
@@ -48,9 +77,9 @@ export const EMPTY_PROFILE: ResumeProfile = {
   headline: "",
   email: "",
   phone: "",
-  linkedin: "",
-  website: "",
   location: "",
+  links: [],
+  hiddenLinks: [],
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -93,6 +122,45 @@ export function isProfileUsable(profile: ResumeProfile): boolean {
   return Boolean(profile.fullName.trim() && (profile.email.trim() || profile.phone.trim()));
 }
 
+/**
+ * A stored profile, brought up to the current shape.
+ *
+ * Field-by-field so settings saved before the profile existed — and any future
+ * field — read back as empty rather than undefined. `links` is the one that
+ * needs real work: profiles saved before the catalogue existed carry `linkedin`
+ * and `website` strings instead, and a stored kind may have come from a build
+ * with a longer catalogue than this one, so both are filtered through the
+ * catalogue rather than trusted.
+ */
+function readProfile(stored: unknown): ResumeProfile {
+  if (!stored || typeof stored !== "object") return EMPTY_PROFILE;
+  const raw = stored as Record<string, unknown>;
+  const str = (key: string) => (typeof raw[key] === "string" ? (raw[key] as string) : "");
+
+  const links: ProfileLink[] = Array.isArray(raw.links)
+    ? (raw.links as unknown[]).flatMap((l) => {
+        if (!l || typeof l !== "object") return [];
+        const { kind, value } = l as { kind?: unknown; value?: unknown };
+        if (!isLinkKind(kind) || typeof value !== "string" || !value.trim()) return [];
+        return [{ kind, value }];
+      })
+    : migrateLegacyLinks(raw);
+
+  const hiddenLinks: LinkKind[] = Array.isArray(raw.hiddenLinks)
+    ? (raw.hiddenLinks as unknown[]).filter(isLinkKind)
+    : [];
+
+  return {
+    fullName: str("fullName"),
+    headline: str("headline"),
+    email: str("email"),
+    phone: str("phone"),
+    location: str("location"),
+    links,
+    hiddenLinks,
+  };
+}
+
 export function loadSettings(): AppSettings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
   try {
@@ -104,9 +172,7 @@ export function loadSettings(): AppSettings {
     return {
       apiKey: parsed.apiKey ?? "",
       adminApiKey: parsed.adminApiKey ?? "",
-      // Field-by-field so settings saved before the profile existed — and any
-      // future field — read back as empty strings rather than undefined.
-      profile: { ...EMPTY_PROFILE, ...(parsed.profile ?? {}) },
+      profile: readProfile(parsed.profile),
     };
   } catch {
     return DEFAULT_SETTINGS;

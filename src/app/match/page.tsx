@@ -229,14 +229,17 @@ export default function MatchPage() {
   }
 
   return (
-    <div className="min-h-dvh">
+    <div className="flex min-h-dvh flex-col">
       <AppHeader
         subtitle="Match report"
         settings={settings}
         onSettingsSave={handleSettingsSave}
       />
 
-      <main className="app-container py-8">
+      {/* See the resume step: the content block grows so the sticky footer has
+          a bottom to sit at on a page shorter than the window. */}
+      <main className="app-container py-8 flex flex-1 flex-col">
+        <div className="flex-1">
         {!canAnalyze ? (
           <div className="glass-panel p-8 text-center">
             <p className="text-sm text-[var(--color-text-secondary)] mb-4">
@@ -286,6 +289,8 @@ export default function MatchPage() {
               />
           </section>
         )}
+
+        </div>
 
         <StepNav />
       </main>

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import AppShell from "@/components/AppShell";
+import { THEME_BOOTSTRAP } from "@/lib/theme";
 import { SessionProvider } from "@/lib/useAppState";
 import "./globals.css";
 
@@ -39,7 +40,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // `suppressHydrationWarning` because the bootstrap script below writes
+    // data-theme onto this element before React hydrates. It is scoped to
+    // <html>'s own attributes and does not extend to the tree inside.
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/*
+          Blocking and inline, ahead of everything: it has to have set the
+          theme before the first paint, or a dark-mode user gets a white flash
+          on every navigation that touches the document.
+        */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
+      </head>
       <body className={`${inter.variable} antialiased`}>
         <SessionProvider>
           <AppShell>{children}</AppShell>

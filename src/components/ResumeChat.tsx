@@ -145,7 +145,7 @@ export default function ResumeChat({
                 <div
                   className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm leading-relaxed ${
                     msg.role === "user"
-                      ? "bg-[var(--color-accent)] text-white"
+                      ? "bg-[var(--color-accent)] text-[var(--color-on-accent)]"
                       : "bg-[var(--color-surface-overlay)] text-[var(--color-text-primary)]"
                   }`}
                 >
@@ -248,9 +248,14 @@ function buildSuggestions(resume: TailoredResume | null): string[] {
   const first = entries.find((e) => e.organization.trim());
   if (first) out.push(`Make ${shorten(first.organization, 20)} the strongest section`);
 
-  // Only offer this when something is actually cut, otherwise it does nothing.
+  // Only offer these when there is actually something to bring back.
   const hasDropped = entries.some((e) => e.bullets.some((b) => b.dropped));
   if (hasDropped) out.push("Put the cut bullets back");
+
+  // Material from the uploaded document that never made the page at all —
+  // different from a bullet trimmed for space, and worth its own prompt.
+  if ((resume.omitted ?? []).length) out.push("What did you leave out?");
+  if ((resume.collapsed ?? []).length) out.push("Expand the earlier roles");
 
   const longest = entries
     .flatMap((e) => visibleBullets(e.bullets))

@@ -1,5 +1,5 @@
 /**
- * Turning a citation into the whole line it came from.
+ * Splitting an uploaded document into the lines that can be cited.
  *
  * An uploaded resume arrives hard-wrapped — PDF and DOCX extraction both break
  * a long bullet across physical lines, and the model can only cite what it can
@@ -13,9 +13,10 @@
  *     employer. Observed on 2 of 8 generations from a wrapped resume, and on 0
  *     of 8 from an unwrapped one.
  *
- * Both are fixed by resolving citations against the source after the fact
- * rather than by rewriting what the model reads: the prompt keeps working on
- * the document as uploaded, and nothing downstream ever sees half a line.
+ * Both are fixed here, by making the logical line — not the physical one — the
+ * unit everything else addresses. sourceIndex hands these to the model with an
+ * id apiece, so a citation is a reference to a whole line and the fragment
+ * cannot be named, let alone reverted to.
  */
 
 /** Bullet markers, including the numbered kinds. */
@@ -37,6 +38,29 @@ function isHeading(line: string): boolean {
 }
 
 /**
+ * A line that is nothing but a date or a date range.
+ *
+ * These sit directly under an entry's title line with no blank line between,
+ * so joining continuations swallowed them: "Principal Engineer, Corvid
+ * Logistics" plus "February 2021 - Present" became one citable line. Which
+ * would be harmless, except the grounding pass falls back to a cited line when
+ * a rewrite fails — and it duly reverted a Summary section to
+ * "Principal Engineer, Corvid Logistics February 2021 - Present", printing a
+ * job header as the candidate's summary.
+ *
+ * Neither piece is prose and neither is ever the source of a rewritten
+ * sentence, so each stands alone and neither can absorb the other.
+ */
+function isDateLine(line: string): boolean {
+  if (line.length > 48) return false;
+  if (!/\d/.test(line)) return false;
+  // Months, years, and the words that join them — and nothing else.
+  return /^[\d\s\-–—/,.]*(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*|to|present|current|ongoing|now|expected|[\d\s\-–—/,.])+$/i.test(
+    line
+  );
+}
+
+/**
  * The document as logical lines: one per bullet, one per paragraph.
  *
  * Blocks are separated by blank lines, and within a block every bullet marker
@@ -54,7 +78,13 @@ export function logicalLines(text: string): string[] {
       const line = raw.trim();
       if (!line) continue;
 
-      if (MARKER.test(raw) || isHeading(line)) {
+      // A bare date line stands alone in both directions: it neither continues
+      // the title above it nor absorbs whatever follows.
+      if (isDateLine(line)) {
+        if (current) out.push(current);
+        out.push(line);
+        current = "";
+      } else if (MARKER.test(raw) || isHeading(line)) {
         if (current) out.push(current);
         current = line.replace(MARKER, "");
         // A heading takes no continuations: the line under it opens the body.
@@ -74,36 +104,4 @@ export function logicalLines(text: string): string[] {
   return out.map(squash).filter(Boolean);
 }
 
-/**
- * A cited fragment, grown back to the line it was cut from.
- *
- * Prefix first, because a wrapped citation is the opening of its line and that
- * is the only match that cannot be a coincidence. Containment second, for a
- * citation taken from the middle of a wrapped bullet. Shortest match wins:
- * where two logical lines both contain the fragment, the tighter one is the
- * more likely origin, and over-growing a citation would hand the check more
- * evidence than the writer actually had.
- *
- * A citation that matches nothing is returned untouched — the model is asked
- * for verbatim lines but paraphrases sometimes, and a citation this cannot
- * place is still the best record of what it drew on.
- */
-export function expandCitation(cited: string, lines: string[]): string {
-  const needle = squash(cited).toLowerCase();
-  if (!needle) return cited;
 
-  let best: string | undefined;
-  for (const line of lines) {
-    const hay = line.toLowerCase();
-    if (hay === needle) return line;
-    if (!hay.startsWith(needle)) continue;
-    if (!best || line.length < best.length) best = line;
-  }
-  if (best) return best;
-
-  for (const line of lines) {
-    if (!line.toLowerCase().includes(needle)) continue;
-    if (!best || line.length < best.length) best = line;
-  }
-  return best ?? cited;
-}

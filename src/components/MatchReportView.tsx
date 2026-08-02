@@ -72,7 +72,13 @@ type OutcomeStyle = {
   card: string;
   /** The rule under the title — same hue as the border, so it recedes. */
   rule: string;
-  /** Solid pill: small, saturated, and the only loud thing on the card. */
+  /**
+   * Solid pill: small, saturated, and the only loud thing on the card.
+   *
+   * Carries its own ink because the four fills are dark in light mode and
+   * light in dark mode — a shared `text-white` was legible in exactly one of
+   * the two themes.
+   */
   pill: string;
 };
 
@@ -81,25 +87,25 @@ const OUTCOME: Record<Outcome, OutcomeStyle> = {
     label: "Gap",
     card: "bg-[var(--color-danger-surface)] border-[var(--color-danger-line)]",
     rule: "border-[var(--color-danger-line)]",
-    pill: "bg-[var(--color-danger)]",
+    pill: "bg-[var(--color-danger)] text-[var(--color-on-danger)]",
   },
   partial: {
     label: "Partial",
     card: "bg-[var(--color-warning-surface)] border-[var(--color-warning-line)]",
     rule: "border-[var(--color-warning-line)]",
-    pill: "bg-[var(--color-warning)]",
+    pill: "bg-[var(--color-warning)] text-[var(--color-on-warning)]",
   },
   match: {
     label: "Match",
     card: "bg-[var(--color-success-surface)] border-[var(--color-success-line)]",
     rule: "border-[var(--color-success-line)]",
-    pill: "bg-[var(--color-success)]",
+    pill: "bg-[var(--color-success)] text-[var(--color-on-success)]",
   },
   exceeds: {
     label: "Exceeds",
     card: "bg-[var(--color-accent-surface)] border-[var(--color-accent-line)]",
     rule: "border-[var(--color-accent-line)]",
-    pill: "bg-[var(--color-accent)]",
+    pill: "bg-[var(--color-accent)] text-[var(--color-on-accent)]",
   },
 };
 
@@ -111,7 +117,7 @@ const STANDOUT_STYLE: OutcomeStyle = {
   label: "Standout",
   card: "bg-[var(--color-accent-surface)] border-[var(--color-accent-line)]",
   rule: "border-[var(--color-accent-line)]",
-  pill: "bg-[var(--color-accent)]",
+  pill: "bg-[var(--color-accent)] text-[var(--color-on-accent)]",
 };
 
 const STANDOUT_ICON = (
@@ -191,12 +197,13 @@ export function StatusPill({ status }: { status: MatchStatus }) {
 
 /**
  * Solid rather than tinted: it sits on an already-tinted card, and a wash on a
- * wash reads as neither. White on all four fills clears AA.
+ * wash reads as neither. Each fill carries ink that clears AA against it, in
+ * both themes — see --color-on-* in globals.css.
  */
 function Pill({ style, icon }: { style: OutcomeStyle; icon: ReactNode }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full py-0.5 pl-1.5 pr-2.5 text-[11px] font-semibold text-white ${style.pill}`}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full py-0.5 pl-1.5 pr-2.5 text-[11px] font-semibold ${style.pill}`}
     >
       <OutcomeIcon icon={icon} className="h-3.5 w-3.5" />
       {style.label}
@@ -210,7 +217,7 @@ function Pill({ style, icon }: { style: OutcomeStyle; icon: ReactNode }) {
  */
 export function ImportancePill({ importance }: { importance: RequirementImportance }) {
   const classes: Record<RequirementImportance, string> = {
-    critical: "bg-[var(--color-text-primary)] text-white",
+    critical: "bg-[var(--color-text-primary)] text-[var(--color-on-emphasis)]",
     important: "bg-[var(--color-surface-overlay)] text-[var(--color-text-secondary)]",
     "nice-to-have": "bg-[var(--color-surface-overlay)] text-[var(--color-text-muted)]",
   };
@@ -284,13 +291,14 @@ function EntryCard({
       type="button"
       onClick={onClick}
       aria-pressed={attached}
-      // 12px to match the panel it sits in, rather than a third radius on the page.
-      className={`flex h-full w-full flex-col items-stretch rounded-xl border p-3.5 text-left transition-shadow ${
+      // One step tighter than the panel it sits in, rather than a third radius
+      // on the page.
+      className={`flex h-full w-full flex-col items-stretch rounded-[var(--radius-control)] border p-3.5 text-left transition-shadow ${
         style.card
       } ${
         attached
           ? "ring-2 ring-[var(--color-text-primary)] ring-offset-1 ring-offset-[var(--color-surface-raised)]"
-          : "hover:shadow-[0_2px_10px_rgba(22,24,34,0.09)]"
+          : "hover:shadow-[var(--shadow-card)]"
       }`}
     >
       {children}
@@ -398,7 +406,7 @@ function OutcomeTally({ items }: { items: MatchReportItem[] }) {
       {OUTCOME_ORDER.filter((key) => counts[key]).map((key) => (
         <span
           key={key}
-          className={`inline-flex items-center gap-1 rounded-full py-0.5 pl-1.5 pr-2.5 text-[11px] font-semibold text-white ${OUTCOME[key].pill}`}
+          className={`inline-flex items-center gap-1 rounded-full py-0.5 pl-1.5 pr-2.5 text-[11px] font-semibold ${OUTCOME[key].pill}`}
         >
           <OutcomeIcon icon={OUTCOME_ICON[key]} className="h-3.5 w-3.5" />
           {counts[key]} {OUTCOME[key].label.toLowerCase()}
@@ -457,9 +465,7 @@ function ScoreRing({ score }: { score: number }) {
           {score}
         </span>
       </div>
-      <p className="text-[10px] text-[var(--color-text-muted)] mt-1 uppercase tracking-wide">
-        Fit score
-      </p>
+      <p className="eyebrow mt-1">Fit score</p>
     </div>
   );
 }
@@ -518,7 +524,7 @@ export default function MatchReportView({
       <div className="flex flex-wrap items-start gap-4">
         <ScoreRing score={report.overallScore} />
         <div className="min-w-0 flex-1">
-          <h3 className="font-medium text-sm mb-1">Match report</h3>
+          <h3 className="text-[0.9375rem] font-semibold tracking-[-0.01em] mb-1">Match report</h3>
           <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
             {report.summary}
           </p>
@@ -535,9 +541,7 @@ export default function MatchReportView({
         </div>
       </div>
 
-      <p className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide mt-5 mb-2">
-        Click any entry to ask the chat about it
-      </p>
+      <p className="eyebrow mt-5 mb-2">Click any entry to ask the chat about it</p>
 
       <div className="space-y-4">
         {groups.map(([importance, items]) => (

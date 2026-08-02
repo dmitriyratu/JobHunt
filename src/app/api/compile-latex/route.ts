@@ -1,3 +1,5 @@
+import { writeFile, mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { compileLatex, findEngine, INSTALL_HINT } from "@/lib/latexEngine";
 
@@ -5,6 +7,36 @@ export const runtime = "nodejs";
 
 /** Max source size. A two-page resume is ~6KB; this is a runaway guard. */
 const MAX_TEX_BYTES = 400_000;
+
+/**
+ * Every compiled document, kept on disk.
+ *
+ * The .tex is otherwise the one artifact that never survives its request: it
+ * lives in React state, goes to a temp directory that is deleted the moment
+ * Tectonic exits, and is gone. That makes the rendered document the hardest
+ * thing in the app to inspect after the fact — a spacing bug, a bad escape or a
+ * bullet that came out truncated can only be caught by watching it happen.
+ *
+ * Two files, overwritten each compile: the source as it last built, and the
+ * previous one, so a change can be diffed against what it replaced. Off unless
+ * JOBHUNT_TEX_DIR names somewhere to put them, and never fatal — a document
+ * that typesets must not fail because a debug write did.
+ */
+async function keepSource(tex: string): Promise<void> {
+  const dir = process.env.JOBHUNT_TEX_DIR;
+  if (!dir) return;
+  try {
+    await mkdir(dir, { recursive: true });
+    const { readFile } = await import("node:fs/promises");
+    const previous = await readFile(join(dir, "latest.tex"), "utf-8").catch(() => null);
+    if (previous && previous !== tex) {
+      await writeFile(join(dir, "previous.tex"), previous, "utf-8");
+    }
+    await writeFile(join(dir, "latest.tex"), tex, "utf-8");
+  } catch {
+    // Debug output is never worth a failed compile.
+  }
+}
 
 /**
  * Whether the machine can typeset at all.
@@ -45,6 +77,10 @@ export async function POST(request: NextRequest) {
         { status: 413 }
       );
     }
+
+    // Before the compile, so a source that fails to build is still on disk to
+    // look at — that is exactly when you want it.
+    await keepSource(tex);
 
     const result = await compileLatex(tex);
 

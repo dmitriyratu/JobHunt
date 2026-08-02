@@ -72,6 +72,87 @@ export function unsupportedNumbers(value: string, sources: string[]): string[] {
   return [...new Set(numbersIn(value))].filter((n) => !cited.has(n));
 }
 
+// --- Citations --------------------------------------------------------------
+
+/** Words too common to prove a citation was used. */
+const COMMON = new Set([
+  "the", "and", "for", "with", "that", "this", "from", "was", "were", "has",
+  "had", "have", "which", "into", "over", "our", "their", "its", "all", "not",
+  "but", "are", "been", "than", "then", "them", "also", "about", "team",
+  "teams", "work", "worked", "working", "responsible", "helped", "built",
+  "build", "made", "using", "used", "across", "through", "within",
+]);
+
+const distinctive = (text: string): Set<string> =>
+  new Set(
+    text
+      .toLowerCase()
+      .split(/[^a-z0-9$%.]+/)
+      .filter((w) => w.length >= 4 && !COMMON.has(w))
+  );
+
+/**
+ * The cited lines a value actually drew on.
+ *
+ * A citation that shares nothing with the value it supposedly supports is not
+ * evidence, and it is not harmless: the number check reads the union of every
+ * cited line, so a line cited but unused donates its figures to the "supported"
+ * set and can walk an invented number straight past the check. Observed in the
+ * volume run — a bullet about code review guidelines citing "Took part in the
+ * hiring process as an interviewer", which it plainly did not use.
+ *
+ * A single citation is always kept: one unused citation is a mis-citation to
+ * report, not grounds for leaving a bullet with no source at all, and a heavily
+ * reworded bullet can legitimately share little surface with its origin.
+ */
+export function usedCitations(value: string, sources: string[]): string[] {
+  if (sources.length <= 1) return sources;
+
+  const words = distinctive(value);
+  const figures = new Set(numbersIn(value));
+
+  const used = sources.filter((source) => {
+    if (numbersIn(source).some((n) => figures.has(n))) return true;
+    return [...distinctive(source)].some((w) => words.has(w));
+  });
+
+  // Every citation looking unused means the heuristic is wrong about this
+  // bullet, not that the writer invented all of it. Leave it alone.
+  return used.length ? used : sources;
+}
+
+/**
+ * Numbers the document spells out, as digits.
+ *
+ * "over twelve years" and "12+ years" are the same claim, and only one of them
+ * is a numeral. Without this the fabrication check — the one rule still allowed
+ * to rewrite text — read "12" as appearing nowhere in the source and rewrote a
+ * faithful summary. Resumes spell out small numbers constantly, so this is the
+ * common case, not the edge.
+ *
+ * Deliberately one-way and generous: it only ever ADDS figures to the supported
+ * set. A miss here re-creates the bug; a spurious match costs nothing, because
+ * the model checker still reads the claim afterwards.
+ */
+const WORDS: Record<string, string> = {
+  one: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7",
+  eight: "8", nine: "9", ten: "10", eleven: "11", twelve: "12", thirteen: "13",
+  fourteen: "14", fifteen: "15", sixteen: "16", seventeen: "17",
+  eighteen: "18", nineteen: "19", twenty: "20", thirty: "30", forty: "40",
+  fifty: "50", sixty: "60", seventy: "70", eighty: "80", ninety: "90",
+  hundred: "100", thousand: "1000", million: "1000000", billion: "1000000000",
+  dozen: "12", half: "0.5", quarter: "0.25",
+};
+
+export function spelledNumbers(text: string): string[] {
+  const out: string[] = [];
+  for (const word of text.toLowerCase().split(/[^a-z]+/)) {
+    const digits = WORDS[word];
+    if (digits) out.push(digits);
+  }
+  return out;
+}
+
 // --- Skills -----------------------------------------------------------------
 
 const normaliseSkill = (s: string) => s.trim().toLowerCase();

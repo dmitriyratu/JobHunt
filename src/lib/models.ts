@@ -7,12 +7,14 @@
  * setting that has to be right for all three at once.
  */
 export type TaskId =
+  | "proofread-resume"
   | "triage-document"
   | "analyze-match"
   | "report-chat"
   | "tailor-resume"
   | "verify-grounding"
   | "repair-grounding"
+  | "review-facts"
   | "resume-chat"
   | "generate-email";
 
@@ -67,11 +69,47 @@ const CATALOG = {
 export type TaskModel = ModelSpec & {
   /** Human name for this step, for the settings and usage screens. */
   task: string;
-  /** Why this model — shown in Settings so the choice isn't a black box. */
+  /**
+   * Why this model, in the user's terms — printed in Settings.
+   *
+   * THIS IS CUSTOMER-FACING COPY, and the evidence behind a tier is not. Say
+   * what the step does for their document and why it is worth what it costs.
+   * Do not say what a model got wrong, that one contradicted itself, or how a
+   * bake-off went: someone reading it is deciding whether to trust the output,
+   * and an account of models misbehaving is an argument against trusting it,
+   * whichever model won.
+   *
+   * The measurements belong in the comment above each entry, where the next
+   * person to reopen the decision will look for them.
+   */
   why: string;
 };
 
 export const TASK_MODELS = {
+  // Reads the uploaded document once, at upload, for misspellings the candidate
+  // typed. Nothing downstream can do this: every later check asks whether the
+  // tailored document matches the upload, so a typo in the upload is the right
+  // answer to every question the app knows how to ask.
+  //
+  // Not the cheap model, and the gap is in the one place that matters. Measured
+  // on a real clinical CV with five misspellings planted in words the document
+  // actually contains: fast found three, twice running; standard found four.
+  // The two fast missed included "Ketering" inside "Memorial Sloan Ketering
+  // Cancer Center" — a proper noun, in an employer name, which is exactly the
+  // class of field that gets copied character-for-character into the finished
+  // document and that no later check can question. A typo in prose is
+  // embarrassing; a typo in the employer's name is the document being wrong
+  // about where someone worked.
+  //
+  // Neither tier produced a single false positive on the untouched CV, so this
+  // is buying recall, not restraint. Restraint comes from the prompt and from
+  // verifySuggestions. Half a cent, once per upload.
+  "proofread-resume": {
+    ...CATALOG.standard,
+    task: "Resume proofread",
+    why: "Reads your uploaded resume once for typos, and for institutions spelled more than one way, and offers each as something to accept or reject. A misspelling in an employer's name is copied straight through to the finished document, so this one runs on a stronger model.",
+  },
+
   // One question with two answers, decided from the opening of each document:
   // does this posting expect a resume or an academic/clinical CV? The signals
   // are explicit words — "residency", "tenure-track", "publications" — not
@@ -99,7 +137,7 @@ export const TASK_MODELS = {
   "analyze-match": {
     ...CATALOG.fast,
     task: "Match analysis",
-    why: "Reads the whole resume and posting and weighs every requirement. Tested head-to-head against the pricier model and matched it, so this step runs fast and cheap.",
+    why: "Reads your whole resume and the posting, then weighs every requirement and judges the evidence for each. The fast model handles this as well as anything pricier, so the step that gates the rest stays quick.",
   },
 
   // The analysis is already done by the time this runs. The model is applying
@@ -147,17 +185,35 @@ export const TASK_MODELS = {
   "tailor-resume": {
     ...CATALOG.fast,
     task: "Resume tailoring",
-    why: "Rewrites and combines the lines you already wrote against a report that's already been analysed. Tested head-to-head against both pricier models and beat them on combining and on keeping your numbers, so this step runs cheap.",
+    why: "Rewrites and reorders the lines you already wrote so they answer this posting. The fast model is the best of the three here at combining your own lines and keeping your numbers on the page, so the longest step is also a cheap one.",
   },
 
-  // Reads pairs of {rewrite, original} and says which rewrites claim something
-  // the original didn't. Each judgement is local, short, and needs no knowledge
-  // of the posting or the rest of the document — the hard part of the writing
-  // task is absent here, so the cheap model does it.
+  // The one place cheap intelligence measurably failed.
+  //
+  // This used to run on the fast model, justified by the plausible argument
+  // that each judgement is local and short. Never tested. An audit of thirteen
+  // decisions across three documents found eleven of them wrong — and wrong in
+  // the most expensive direction, deleting a $430,000 saving, a pair of
+  // build-time figures and an EMEA remit that were sitting verbatim in the very
+  // lines the checker had been shown. One rewrote "on-call rotation owner" down
+  // to "participated in", making the document less true than the resume it came
+  // from.
+  //
+  // The failure mode was not strictness. Replayed head to head, the fast model
+  // files NON-findings into the findings array — reasons ending "omission is
+  // allowed, so no issue" and "No finding." — which every caller downstream
+  // reads as a violation. It reasons correctly and puts the answer in the wrong
+  // box, and a tightened prompt did not fix it. The standard model produced
+  // four findings across the same documents, every one defensible, with no
+  // self-contradiction; the reasoning tier was sharper still but missed things
+  // the standard model caught, at three and a half times the price.
+  //
+  // Three tenths of a cent per document. Set against reverting a candidate's
+  // best number, it is not a close call.
   "verify-grounding": {
-    ...CATALOG.fast,
+    ...CATALOG.standard,
     task: "Grounding check",
-    why: "Compares each rewritten line against the original it came from. Small, local judgements, so it runs on the cheapest model.",
+    why: "Reads every rewritten line against the lines it came from, so nothing on the page claims more than your document supports. This is the check that decides whether your own words get changed, so it runs on a stronger model.",
   },
 
   // The one place the expensive model earns its price. It only runs when a
@@ -169,6 +225,23 @@ export const TASK_MODELS = {
     ...CATALOG.smart,
     task: "Grounding repair",
     why: "Rewrites the few lines that failed the grounding check, keeping the tailoring but dropping the unsupported claim. Rare, small, and worth the better model.",
+  },
+
+  // The cheap tier, and deliberately, on the same kind of judgement that cost
+  // verify-grounding its cheap tier one paragraph above.
+  //
+  // The difference is what happens when it is wrong. verify-grounding's output
+  // moves text: a bad finding there deleted a $430,000 saving. This one's output
+  // is re-checked in code before it can withhold anything — every word of the
+  // field has to appear in the lines the model cited — so a wrong answer either
+  // fails that check and leaves the warning standing, or names lines that really
+  // do contain the field, in which case withholding it was right. The expensive
+  // direction is closed off by the caller rather than bought from the model, and
+  // this runs only when a warning already exists.
+  "review-facts": {
+    ...CATALOG.fast,
+    task: "Copied-field review",
+    why: "Reads each warning about an employer, title or date against your uploaded document and withholds the ones it can point at your own lines for. Its clearances are re-checked word by word in code, so this step runs cheap.",
   },
 
   // Same shape as report-chat: applying a correction the user stated in plain

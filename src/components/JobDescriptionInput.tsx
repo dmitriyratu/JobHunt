@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteFile, loadFile, saveFile } from "@/lib/fileStore";
 import { canonicalizeLinkedInUrl } from "@/lib/linkedinUrl";
 import DocumentPreview from "./DocumentPreview";
+import SourceLink from "./SourceLink";
 
 type Tab = "paste" | "url" | "file";
 type SourceType = "file" | "url" | "text";
@@ -112,10 +113,11 @@ export default function JobDescriptionInput({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="font-medium text-sm">Job description loaded</p>
-            {/* Only the URL may break mid-token; the char count stays intact
-                instead of splitting into "5,799 c / hars". */}
+            {/* A posting URL is mostly tracking parameters, so only its host is
+                shown; the char count stays intact beside it rather than
+                splitting into "5,799 c / hars". */}
             <p className="text-[var(--color-text-secondary)] text-xs mt-0.5">
-              <span className="break-all">{jobSource}</span>
+              <SourceLink source={jobSource} className="inline-block max-w-full truncate align-bottom" />
               <span className="whitespace-nowrap">
                 {" · "}
                 {jobDescription.length.toLocaleString()} chars

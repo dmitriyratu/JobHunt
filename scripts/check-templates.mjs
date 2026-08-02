@@ -66,8 +66,12 @@ const PROFILE = {
   location: "Boston, MA",
   email: "alex.moreno@example.edu",
   phone: "(617) 555-0142",
-  linkedin: "linkedin.com/in/alex-moreno",
-  website: "",
+  // One clickable link and one identifier that deliberately has no URL, so the
+  // contact line exercises both branches of the renderer.
+  links: [
+    { kind: "linkedin", value: "linkedin.com/in/alex-moreno" },
+    { kind: "npi", value: "1234567890" },
+  ],
 };
 
 const res = (v) => ({ value: v, source: v, change: "unchanged", resolution: "pending" });
@@ -118,55 +122,216 @@ function fixtureSections(shape) {
     ],
   });
 
-  if (shape === "resume") {
-    return [
-      section("summary", { prose: res("Board-eligible physician with eight years across inpatient and ambulatory oncology.") }),
-      section("skills", {
-        keywords: res([
-          { label: "Clinical", items: ["Chemotherapy", "Transfusion medicine", "Palliative care"] },
-          { label: "Research", items: ["REDCap", "R", "Chart review"] },
-        ]),
-      }),
-      experience,
-      education,
-      section("certifications", { items: ["American Board of Pediatrics, 2022", "PALS & BLS, current through 2027"] }),
-    ];
-  }
+  const publications = section("publications", {
+    items: [
+      "Moreno A, Chen L, Okafor N. Immunophenotypic drift in relapsed disease. J Clin Oncol. 2025;43(2):211-219.",
+    ],
+  });
 
-  return [
-    education,
-    section("licensure", {
-      items: [
-        "Massachusetts Medical License #123456, active through 2027",
-        "American Board of Pediatrics, certified 2022",
-        "APHON Pediatric Chemotherapy & Biotherapy Provider, current through 2026",
-      ],
-    }),
-    experience,
-    section("procedures", {
-      keywords: res([{ label: "Independent", items: ["Bone marrow aspiration and biopsy", "Lumbar puncture with intrathecal chemotherapy"] }]),
-    }),
-    section("research", {
-      entries: [
-        {
-          id: "r1",
-          heading: "Minimal residual disease kinetics in relapsed ALL",
-          organization: "Dana-Farber Cancer Institute",
-          location: "Boston, MA",
-          startDate: "2023",
-          endDate: "Present",
-          bullets: [bullet("rb1", "[Retrospective cohort] of 240 patients; manuscript under review")],
-        },
-      ],
-    }),
-    section("publications", {
-      items: [
-        "Moreno A, Chen L, Okafor N. Immunophenotypic drift in relapsed disease. J Clin Oncol. 2025;43(2):211-219.",
-      ],
-    }),
-    section("memberships", { items: ["American Society of Pediatric Hematology/Oncology, 2022-Present"] }),
-    section("languages", { items: ["English (native)", "Spanish (professional)"] }),
-  ];
+  const languages = section("languages", { items: ["English (native)", "Spanish (professional)"] });
+
+  const research = section("research", {
+    entries: [
+      {
+        id: "r1",
+        heading: "Minimal residual disease kinetics in relapsed ALL",
+        organization: "Dana-Farber Cancer Institute",
+        location: "Boston, MA",
+        startDate: "2023",
+        endDate: "Present",
+        bullets: [bullet("rb1", "[Retrospective cohort] of 240 patients; manuscript under review")],
+      },
+    ],
+  });
+
+  // Each shape gets a fixture built from its OWN sections, not a shared one
+  // filtered down. A section key that a shape does not declare is dropped by the
+  // renderer, so a shared fixture would silently exercise nothing on the shapes
+  // whose catalogue it does not overlap — the check would pass by rendering an
+  // almost empty page. Every branch below therefore fills that shape's required
+  // sections, and each keeps at least one of the awkward strings above.
+  switch (shape) {
+    case "resume":
+      return [
+        section("summary", { prose: res("Board-eligible physician with eight years across inpatient and ambulatory oncology.") }),
+        section("skills", {
+          keywords: res([
+            { label: "Clinical", items: ["Chemotherapy", "Transfusion medicine", "Palliative care"] },
+            { label: "Research", items: ["REDCap", "R", "Chart review"] },
+          ]),
+        }),
+        experience,
+        education,
+        section("certifications", { items: ["American Board of Pediatrics, 2022", "PALS & BLS, current through 2027"] }),
+      ];
+
+    case "cv":
+      return [
+        education,
+        section("licensure", {
+          items: [
+            "Massachusetts Medical License #123456, active through 2027",
+            "American Board of Pediatrics, certified 2022",
+            "APHON Pediatric Chemotherapy & Biotherapy Provider, current through 2026",
+          ],
+        }),
+        experience,
+        section("procedures", {
+          keywords: res([{ label: "Independent", items: ["Bone marrow aspiration and biopsy", "Lumbar puncture with intrathecal chemotherapy"] }]),
+        }),
+        research,
+        publications,
+        section("memberships", { items: ["American Society of Pediatric Hematology/Oncology, 2022-Present"] }),
+        languages,
+      ];
+
+    case "academic":
+      return [
+        section("interests", { prose: res("Immunophenotypic heterogeneity in relapsed pediatric leukemia, and the measurement error it introduces into minimal residual disease assays.") }),
+        education,
+        section("experience", {
+          entries: [
+            entry("a1", "Assistant Professor of Pediatrics", "Harvard Medical School", "Boston, MA", "2024", "Present", []),
+            entry("a2", "Postdoctoral Research Fellow", "Dana-Farber Cancer Institute", "Boston, MA", "2022", "2024", []),
+          ],
+        }),
+        research,
+        section("grants", {
+          entries: [
+            entry("g1", "K08 Mentored Clinical Scientist Award (5% effort relief)", "National Cancer Institute", "Bethesda, MD", "2024", "Present", [
+              bullet("gb1", "[Principal investigator] on a five-year award; direct costs $675,000"),
+            ]),
+          ],
+        }),
+        publications,
+        section("presentations", {
+          items: [
+            "Moreno A. Electroencephalographically silent relapse: a measurement problem. ASPHO Annual Meeting, Denver CO, 2025. Invited talk.",
+          ],
+        }),
+        section("teaching", {
+          entries: [
+            entry("t1", "PED-320: Hematologic Malignancies in Childhood", "Harvard Medical School", "Boston, MA", "2024", "Present", [
+              bullet("tb1", "Designed & taught a 14-week seminar for 22 third-year students"),
+            ]),
+          ],
+        }),
+        section("service", {
+          entries: [
+            entry("s1", "Reviewer", "Journal of Clinical Oncology & Blood Advances", "", "2023", "Present", []),
+          ],
+        }),
+        section("memberships", { items: ["American Society of Pediatric Hematology/Oncology, 2022-Present"] }),
+        languages,
+      ];
+
+    case "federal":
+      return [
+        section("summary", { prose: res("Board-eligible physician with eight years of progressively responsible experience across inpatient and ambulatory oncology, including direct patient care, protocol development and quality improvement at a 24-bed service.") }),
+        section("eligibility", {
+          items: [
+            "US Citizen",
+            "Veterans' preference: 5-point (TP)",
+            "Security clearance: Public Trust, active",
+            "Current federal grade: GS-0602-13",
+          ],
+        }),
+        section("experience", {
+          entries: [
+            entry("f1", "Fellow, Pediatric Hematology-Oncology", "Boston Children's Hospital", "Boston, MA", "2022", "Present", [
+              bullet("fb1", "40 hours/week; GS-0602-12 equivalent; Supervisor: Dr. L. Chen, (617) 555-0188, may contact"),
+              bullet("fb2", "[Immunophenotyping] of leukemia & lymphoma specimens, raising turnaround 40% to 92%"),
+              bullet("fb3", "Managed febrile neutropenia, tumor lysis syndrome and hyperleukocytosis on a 24-bed service"),
+            ]),
+          ],
+        }),
+        education,
+        section("skills", {
+          keywords: res([
+            { label: "Clinical", items: ["Chemotherapy", "Transfusion medicine", "Palliative care"] },
+            { label: "Analysis", items: ["REDCap", "R", "Chart review"] },
+          ]),
+        }),
+        section("training", { items: ["Protocol Development for Federal Trials, NIH, 2024, 40 contact hours"] }),
+        section("certifications", { items: ["American Board of Pediatrics, 2022", "PALS & BLS, current through 2027"] }),
+        languages,
+      ];
+
+    case "legal":
+      return [
+        section("education", {
+          entries: [
+            entry("l1", "Juris Doctor, cum laude", "Georgetown University Law Center", "Washington, DC", "2016", "2019", [
+              bullet("lb1", "Notes Editor, Georgetown Law Journal; [Moot Court] semifinalist"),
+            ]),
+            entry("l2", "Bachelor of Arts, History", "Amherst College", "Amherst, MA", "2011", "2015", []),
+          ],
+        }),
+        section("admissions", {
+          items: [
+            "Massachusetts, 2019",
+            "US District Court, District of Massachusetts, 2020",
+            "New York, application pending",
+          ],
+        }),
+        section("experience", {
+          entries: [
+            entry("l3", "Associate, Health Care & Life Sciences", "Ropes & Gray LLP", "Boston, MA", "2021", "Present", [
+              bullet("lb2", "Second-chaired a 340B pricing dispute; drafted summary judgment briefing"),
+            ]),
+            entry("l4", "Summer Associate", "Ropes & Gray LLP", "Boston, MA", "", "", []),
+          ],
+        }),
+        section("clerkships", {
+          entries: [
+            entry("l5", "Law Clerk", "Hon. R. Okafor, US District Court, D. Mass.", "Boston, MA", "2019", "2021", []),
+          ],
+        }),
+        publications,
+        languages,
+      ];
+
+    case "creative":
+      return [
+        section("credits", {
+          entries: [
+            entry("c1", "Masha", "Three Sisters, Huntington Theatre Company", "Boston, MA", "2025", "", [
+              bullet("cb1", "Directed by L. Chen; [understudy] for Olga"),
+            ]),
+            entry("c2", "Ensemble", "Electroencephalographically Yours, Fringe Festival", "Edinburgh", "", "", []),
+          ],
+        }),
+        section("exhibitions", {
+          items: [
+            "Drift (solo), Gallery 263, Cambridge MA, 2025",
+            "Interference & Noise (group), SPRING/BREAK, New York NY, 2024",
+          ],
+        }),
+        section("experience", {
+          entries: [
+            entry("c3", "Teaching Artist", "Boston Children's Theatre", "Boston, MA", "2022", "Present", [
+              bullet("cb2", "Led a 12-week devising residency for 30% tuition-waived students"),
+            ]),
+          ],
+        }),
+        section("education", {
+          entries: [
+            entry("c4", "MFA, Acting", "Brown University / Trinity Rep", "Providence, RI", "2019", "2022", []),
+          ],
+        }),
+        section("skills", {
+          keywords: res([
+            { label: "Dialects", items: ["RP", "General American", "Dublin"] },
+            { label: "Movement", items: ["Stage combat (unarmed)", "Contemporary"] },
+          ]),
+        }),
+        section("awards", { items: ["Elliot Norton Award, Outstanding Actress, 2025"] }),
+        languages,
+      ];
+
+    default:
+      throw new Error(`fixture missing for shape ${JSON.stringify(shape)}`);
+  }
 }
 
 // --- Checks -----------------------------------------------------------------
@@ -209,9 +374,20 @@ function checkText(label, text, expected, corpus, failures) {
   // in uppercase, so "Education & Training" arrives as "EDUCATION & TRAINING".
   // What is being checked here is that every word survived extraction with its
   // spaces intact, and letter case is not part of that question.
-  const flat = text.replace(/\s+/g, " ").toLowerCase();
+  //
+  // A space before a closing bracket is normalised away on both sides. Charter's
+  // "f" overhangs to the right, so the font kerns before a following ")" to stop
+  // the glyphs colliding — and pdfjs-dist reads that kern as a space, extracting
+  // "(5% effort relief)" as "(5% effort relief )". pdf-parse reads the same PDF
+  // correctly, which is what identifies this as an extractor heuristic rather
+  // than a defect in the document: it is triggered by the letter before the
+  // bracket, not by the content ("effort)" is clean, "relief)" is not). No word
+  // is split or run together, so keyword matching is unaffected, and asserting
+  // on it would only pressure the fixture into avoiding the letter f.
+  const norm = (s) => s.replace(/\s+/g, " ").replace(/\s+([)\]}])/g, "$1").toLowerCase();
+  const flat = norm(text);
   for (const needle of expected) {
-    if (!flat.includes(needle.replace(/\s+/g, " ").toLowerCase())) {
+    if (!flat.includes(norm(needle))) {
       failures.push(`${label}: missing ${JSON.stringify(needle)}`);
     }
   }
@@ -242,18 +418,23 @@ async function main() {
   // modules are dependency-free enough to load via tsx-less dynamic import of
   // the compiled output. Simplest reliable route: ask tsx to do it.
   const { renderResumeLatex } = await import("../src/lib/resumeLatex.ts");
-  const { orderSectionKeys, specFor } = await import("../src/lib/documentShape.ts");
+  const { SHAPE_ORDER, allowsPageTarget, orderSectionKeys, specFor } = await import(
+    "../src/lib/documentShape.ts"
+  );
 
   const dir = await mkdtemp(path.join(tmpdir(), "jobhunt-check-"));
   let failed = false;
 
   try {
-    for (const shape of ["resume", "cv"]) {
+    // Driven off SHAPE_ORDER rather than a list here, so adding a shape to the
+    // catalogue without a fixture fails loudly in fixtureSections() instead of
+    // going unchecked.
+    for (const shape of SHAPE_ORDER) {
       const sections = fixtureSections(shape);
       const resume = {
         shape,
         sections,
-        pageTarget: shape === "resume" ? 2 : null,
+        pageTarget: allowsPageTarget(shape) ? 2 : null,
         generatedAt: new Date().toISOString(),
       };
 
@@ -312,6 +493,10 @@ async function main() {
           PROFILE.fullName,
           PROFILE.email,
           PROFILE.phone,
+          // Asserted as displayed, not as stored: an identifier kind is printed
+          // with its label ("NPI 1234567890") and a URL kind without its scheme.
+          "linkedin.com/in/alex-moreno",
+          "NPI 1234567890",
           ...sections.map((s) => specFor(shape, s.key)?.title).filter(Boolean),
           ...gridRows,
         ];

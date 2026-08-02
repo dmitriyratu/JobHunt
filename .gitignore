@@ -35,3 +35,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# LaTeX sources kept for debugging (JOBHUNT_TEX_DIR)
+.tex-debug/

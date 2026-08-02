@@ -66,6 +66,62 @@ const MAX_CLAIM_LOOKUPS = 3;
 type Resolution = { logoUrl: string | null; reliable: boolean };
 
 /**
+ * Wikidata only has an item — let alone a P154 logo on it — for companies
+ * notable enough to have been written up. Most employers aren't: AvePoint has
+ * an item (Q4827929) with no logo claim at all, so the wordmark path can never
+ * succeed for it no matter how the name is spelled.
+ *
+ * DuckDuckGo's icon service fills the gap from the company's own site. It is a
+ * favicon rather than a wordmark, so it stays a fallback — but a real mark
+ * beats initials. Crucially it 404s on a domain it has nothing for, which
+ * Google's equivalent does not: that one answers 200 with a generic globe, and
+ * a globe on every card is worse than a letter. Clearbit, the usual third
+ * option, no longer resolves at all.
+ */
+function iconUrl(domain: string): string {
+  return `https://icons.duckduckgo.com/ip3/${domain}.ico`;
+}
+
+/** "https://www.AvePoint.com/careers" -> "avepoint.com"; "" when it isn't a host. */
+function normalizeDomain(raw: string): string {
+  const bare = raw
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z]+:\/\//, "")
+    .replace(/^www\./, "")
+    .split(/[/?#]/)[0];
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(bare) && /\.[a-z]{2,}$/.test(bare) ? bare : "";
+}
+
+/**
+ * The company's likely own domain, for postings analyzed before the domain
+ * field existed — or never analyzed at all, which is every card until the match
+ * report runs.
+ *
+ * Short slugs are skipped deliberately. "Apex" or "Meta" collapse onto domains
+ * owned by someone else entirely, and a confidently wrong logo is worse than
+ * the initials; anything that short is also the kind of name Wikidata already
+ * covers. A guess that belongs to nobody just 404s and costs one request.
+ */
+function guessDomain(name: string): string {
+  const slug = nameVariants(name).at(-1)!.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return slug.length >= 5 ? `${slug}.com` : "";
+}
+
+/** True when the icon service actually has a mark for this domain. */
+async function hasIcon(domain: string): Promise<boolean> {
+  try {
+    const res = await fetch(iconUrl(domain), {
+      method: "HEAD",
+      signal: AbortSignal.timeout(6000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Resolves a company name to its logo via Wikidata property P154 ("logo
  * image"). Wikipedia's page-summary thumbnail is deliberately NOT used — for
  * companies it returns whatever lead image the article has, which in practice
@@ -126,18 +182,39 @@ async function findLogoUrl(name: string): Promise<Resolution> {
 }
 
 export async function GET(request: NextRequest) {
-  const name = request.nextUrl.searchParams.get("name")?.trim();
+  const params = request.nextUrl.searchParams;
+  const name = params.get("name")?.trim();
   if (!name) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
   }
+  // The domain the match report detected, when there is one. Authoritative
+  // where it exists — it was read off the posting rather than guessed here.
+  const known = normalizeDomain(params.get("domain") ?? "");
 
-  const key = name.toLowerCase();
+  // The answer depends on the domain too, so it is part of the key. Without
+  // that, a card cached as "no logo" before its posting was analyzed would keep
+  // answering "no logo" after the domain arrived.
+  const key = `${name.toLowerCase()}|${known}`;
   const hit = cache.get(key);
   if (hit && hit.expires > Date.now()) {
-    return NextResponse.json({ logoUrl: hit.logoUrl });
+    return NextResponse.json({ logoUrl: hit.logoUrl, reliable: true });
   }
 
-  const { logoUrl, reliable } = await findLogoUrl(name);
+  const wikidata = await findLogoUrl(name);
+  let { logoUrl } = wikidata;
+  const { reliable } = wikidata;
+
+  // Wordmark first, favicon second: Wikidata gives a wide brand lockup that
+  // reads as the company, the icon service gives a 32px square.
+  if (!logoUrl) {
+    for (const domain of [known, guessDomain(name)]) {
+      if (!domain) continue;
+      if (await hasIcon(domain)) {
+        logoUrl = iconUrl(domain);
+        break;
+      }
+    }
+  }
 
   if (logoUrl) {
     cache.set(key, { logoUrl, expires: Infinity });
@@ -146,5 +223,8 @@ export async function GET(request: NextRequest) {
   }
   // An unreliable miss is not cached at all, so the next view retries.
 
-  return NextResponse.json({ logoUrl });
+  // `reliable` goes out with the answer: the client caches too, and it was
+  // storing rate-limited misses for six hours because it could not tell them
+  // apart from a company that genuinely has no logo.
+  return NextResponse.json({ logoUrl, reliable });
 }

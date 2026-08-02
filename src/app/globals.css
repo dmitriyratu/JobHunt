@@ -1,54 +1,296 @@
 @import "tailwindcss";
 
-@theme {
-  --color-surface: #f5f6fa;
+/*
+ * ── Mist ──────────────────────────────────────────────────────────────────
+ *
+ * A near-white cool ground, white cards, and hairlines pulled back almost to
+ * nothing — separation comes from soft wide shadows and whitespace instead of
+ * lines. Generous radii, a violet-blue accent.
+ *
+ * The palette lives on :root rather than inside @theme because @theme values
+ * are static and this app has two of them. Nothing in src/ uses a generated
+ * Tailwind colour utility (no `bg-surface`, no `text-slate-500`) — every
+ * component reads `bg-[var(--color-…)]` directly — so moving the palette out
+ * of @theme costs nothing and is what makes the toggle possible.
+ *
+ * The dark set is defined once, under [data-theme="dark"]. There is no
+ * prefers-color-scheme fallback on purpose: the inline script in layout.tsx
+ * resolves the OS preference before first paint and always stamps the
+ * attribute, so a media query here would be a second source of truth that
+ * could disagree with the one the toggle writes.
+ */
+
+:root {
+  color-scheme: light;
+
+  --color-surface: #f7f8fa;
   --color-surface-raised: #ffffff;
-  --color-surface-overlay: #eceef5;
-  --color-border: #dbdfe9;
-  --color-border-subtle: #e7e9f1;
-  --color-text-primary: #18181b;
-  --color-text-secondary: #3f3f46;
-  /* Third readable step. --color-text-muted is only 4.48:1 on the tinted card
-     fill (#f5f6fa), which fails AA for body copy; this clears 7:1 there and
-     still reads as subordinate to secondary. Use it for de-emphasised prose. */
-  --color-text-tertiary: #52525b;
-  /* Reserve muted for genuinely non-essential text on white, and for hairlines
-     that need to be seen (4.48:1 on the card fill clears the 3:1 non-text bar). */
-  --color-text-muted: #71717a;
-  --color-accent: #2f5eea;
-  --color-accent-hover: #2547c0;
-  --color-accent-muted: #2f5eea1f;
-  --color-success: #15803d;
-  --color-success-muted: #15803d26;
-  --color-warning: #b45309;
-  --color-warning-muted: #b4530926;
-  --color-danger: #dc2626;
-  --color-danger-muted: #dc262624;
+  --color-surface-overlay: #f0f2f6;
+
+  /*
+   * Two borders doing genuinely different jobs, which is why only one of them
+   * gets to be faint.
+   *
+   * `border` outlines controls — inputs, secondary buttons, the header
+   * buttons. WCAG 1.4.11 asks for 3:1 against the adjacent colour for anything
+   * that identifies a control, and these sit on three different grounds, so
+   * this clears 3:1 on all of them (3.42:1 on a card, 3.22:1 on the canvas,
+   * 3.05:1 on an overlay). An earlier pass had it at 1.24:1, which looked
+   * pleasantly airy and left the text fields with no findable edge.
+   *
+   * `border-subtle` is the card hairline, and stays soft on purpose — a card's
+   * edge is the shadow's job here, and this only keeps the corners from
+   * dissolving where the shadow is weakest.
+   */
+  --color-border: #848b9a;
+  --color-border-subtle: #e2e6ee;
+
+  /*
+   * Four text steps, each measured against the *worst* ground it actually
+   * lands on — not against white. Body copy sits on the canvas, on a card, on
+   * a hover overlay and on all four verdict fills, and the accent fill is
+   * darker than any of the others:
+   *
+   *   primary 15.0:1   secondary 9.1:1   tertiary 7.0:1   muted 4.6:1
+   *
+   * Tertiary is the last step that clears 7:1, so it is the floor for prose
+   * you actually expect someone to read. Muted is for genuinely subordinate
+   * text — timestamps, counts, captions — and now clears AA on every one of
+   * those grounds; measured against white alone it had been passing at 4.5
+   * while sitting at 4.27 on the tinted ones, which is where it is mostly used.
+   */
+  --color-text-primary: #191b22;
+  --color-text-secondary: #3a3f4d;
+  --color-text-tertiary: #4a505e;
+  --color-text-muted: #656b7d;
+
+  /*
+   * Placeholders sit well below the muted step, and deliberately below AA.
+   *
+   * A placeholder here is an example of the answer, not the answer — every
+   * field in this app has a visible <label> above it, so nothing is carried by
+   * the hint alone. At the muted step it read as a filled-in value, which is
+   * the failure that actually costs you something: you cannot tell which
+   * fields you have already answered.
+   */
+  --color-text-placeholder: #8f96a5;
+
+  /*
+   * A filled chip on the app's own ground — the stage nav's steps.
+   *
+   * A step deliberately below --color-surface-overlay, which is barely a step
+   * off the canvas and disappears when used as a shape rather than a hover.
+   * This exists because outlining these chips did not work: a 1px hairline
+   * renders at 0.667px on a 1.5x display, so the outlined version read softer
+   * than an unoutlined filled one. A solid fill has no sub-pixel edge to blur.
+   */
+  --color-chip: #e6e8ef;
+
+  --color-accent: #5b5bd6;
+  --color-accent-hover: #4a4ac0;
+  --color-accent-muted: #5b5bd61a;
+
+  /*
+   * The four verdict hues. Each one carries white text at AA or better
+   * (success 4.95:1, warning 4.76:1, danger 5.03:1, accent 5.37:1), which is
+   * what lets the report use solid pills rather than tinted ones.
+   */
+  --color-success: #178050;
+  --color-success-muted: #17805024;
+  --color-warning: #a8620a;
+  --color-warning-muted: #a8620a24;
+  --color-danger: #cf3333;
+  --color-danger-muted: #cf333324;
 
   /*
    * Match-outcome surfaces: the fill and hairline for a requirement card.
    *
-   * Hue carries exactly one meaning in the report — how well the resume answers
-   * a requirement, on the Gap / Partial / Match / Exceeds scale — so these four
-   * own the palette outright and importance is left to greyscale weight. Two
-   * scales competing for the same colours is what made the old report need
-   * reading rather than scanning.
+   * Hue carries exactly one meaning in the report — how well the resume
+   * answers a requirement, on the Gap / Partial / Match / Exceeds scale — so
+   * these four own the palette outright and importance is left to greyscale
+   * weight.
    *
    * The fill is weak on purpose: it is meant to be recognised in peripheral
-   * vision, not read through. The saturated step above is spent on the card's
-   * left edge and its pill, both small enough to stay loud without shouting.
-   * Every fill clears 7:1 against --color-text-tertiary.
+   * vision, not read through. But an earlier pass drove all four to within
+   * 1.04–1.07:1 of the white card chasing headroom for the text on top, and at
+   * that point the tint had stopped registering at all — the same mistake the
+   * dark theme made in the opposite direction. They are now roughly twice as
+   * tinted, and the text steps above were re-picked around them rather than
+   * the other way round, so every fill still clears 7:1 against
+   * --color-text-tertiary.
    */
-  --color-danger-surface: #fdf3f3;
-  --color-danger-line: #f3c9c9;
-  --color-warning-surface: #fdf8ee;
-  --color-warning-line: #ecd6a9;
-  --color-success-surface: #f1faf4;
-  --color-success-line: #b6ddc4;
-  --color-accent-surface: #f1f5fe;
-  --color-accent-line: #c4d5fb;
+  --color-danger-surface: #fdeceb;
+  --color-danger-line: #eeb4b4;
+  --color-warning-surface: #fcf1dc;
+  --color-warning-line: #e7c98c;
+  --color-success-surface: #e9f7ef;
+  --color-success-line: #a8d8bf;
+  --color-accent-surface: #eeeefc;
+  --color-accent-line: #c8c8f2;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  /*
+   * Ink for text that sits on a saturated fill. White in light mode; in dark
+   * the same fills are light enough that they need dark ink instead, which is
+   * the whole reason these are tokens and not a literal `text-white`.
+   */
+  --color-on-accent: #ffffff;
+  --color-on-success: #ffffff;
+  --color-on-warning: #ffffff;
+  --color-on-danger: #ffffff;
+  /* Text on a --color-text-primary fill — the "Critical" importance pill. */
+  --color-on-emphasis: #ffffff;
+
+  /*
+   * Document surfaces. A resume preview is a sheet of paper: it stays white
+   * and inked in both themes, the same way a PDF viewer does. Without these,
+   * the greeked bars in TemplatePreview — which are drawn in the theme's text
+   * colours on a hardcoded white sheet — turn invisible in dark mode.
+   */
+  --color-paper: #ffffff;
+  --color-paper-ink: #16181d;
+  --color-paper-ink-2: #4a4f5c;
+  --color-paper-ink-3: #878d9b;
+
+  /* Modal backdrop. */
+  --color-scrim: rgba(25, 27, 34, 0.34);
+
+  /*
+   * Elevation. Mist leans on these hard, so they are two-part: a tight contact
+   * shadow that anchors the edge, and a wide diffuse one that lifts it.
+   */
+  --shadow-sm: 0 1px 2px rgba(25, 27, 34, 0.05);
+  --shadow-card:
+    0 1px 2px rgba(25, 27, 34, 0.04),
+    0 14px 34px -12px rgba(25, 27, 34, 0.16);
+  --shadow-card-hover:
+    0 2px 6px rgba(25, 27, 34, 0.06),
+    0 20px 42px -14px rgba(25, 27, 34, 0.22);
+  --shadow-pop:
+    0 4px 12px rgba(25, 27, 34, 0.08),
+    0 28px 64px -20px rgba(25, 27, 34, 0.32);
+  --shadow-accent:
+    0 1px 2px rgba(91, 91, 214, 0.22),
+    0 6px 16px -4px rgba(91, 91, 214, 0.3);
+  --shadow-accent-hover:
+    0 1px 2px rgba(91, 91, 214, 0.26),
+    0 10px 24px -6px rgba(91, 91, 214, 0.38);
+
+  --radius-card: 18px;
+  --radius-control: 12px;
+  --radius-sm: 8px;
+
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/*
+ * ── Mist, dark ────────────────────────────────────────────────────────────
+ *
+ * Not an inversion, and not the light theme with the values flipped. Three
+ * things are built differently, all for the same reason: on a dark ground,
+ * value differences that read clearly at the light end collapse into mud.
+ *
+ * 1. Hairlines do the separating, not elevation. A shadow is invisible against
+ *    near-black, and the surface steps below are only about 1.13:1 apart —
+ *    nowhere near enough on their own. --color-border clears the same 3:1
+ *    control-boundary bar as its light counterpart (3.66:1 on a card, 4.15:1
+ *    on the canvas, 3.13:1 on an overlay), and --color-border-subtle carries
+ *    the card edge at 1.35:1. This is what makes a card read as an object
+ *    rather than a slightly different patch of background.
+ *
+ * 2. The verdict fills are lifted, not darkened. An earlier pass drove them
+ *    below the card to satisfy a 7:1 floor against --color-text-tertiary, and
+ *    the whole report went flat — four barely-tinted black rectangles. They
+ *    now sit *above* the card as tinted raised panels, which clears the same
+ *    7:1 floor from the other direction (7.3–7.9:1) and lets the hue actually
+ *    register.
+ *
+ * 3. The four hues are brighter and the text steps are lifted a notch, so the
+ *    solid pills carry near-black ink rather than white.
+ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-surface: #0c0e14;
+  --color-surface-raised: #181c26;
+  --color-surface-overlay: #232936;
+
+  --color-border: #6a7589;
+  --color-border-subtle: #2c3342;
+
+  /* Measured against --color-surface-raised (#181c26), the ground most body
+     copy sits on: primary 15.5:1, secondary 11.3:1, tertiary 8.4:1, muted 6.0:1 */
+  --color-text-primary: #f2f4f9;
+  --color-text-secondary: #cdd3e0;
+  --color-text-tertiary: #afb6c6;
+  --color-text-muted: #929aac;
+  --color-text-placeholder: #657084;
+  --color-chip: #1f2431;
+
+  --color-accent: #9a97ff;
+  --color-accent-hover: #b0adff;
+  --color-accent-muted: #9a97ff33;
+
+  --color-success: #45d9a0;
+  --color-success-muted: #45d9a033;
+  --color-warning: #f5bc4e;
+  --color-warning-muted: #f5bc4e33;
+  --color-danger: #ff8085;
+  --color-danger-muted: #ff808533;
+
+  /* All four lift off the card by a comparable amount (1.13–1.19:1) so no one
+     outcome reads as flatter than the rest, while each keeps 7:1 or better
+     under --color-text-tertiary. */
+  --color-danger-surface: #32222a;
+  --color-danger-line: #5e3840;
+  --color-warning-surface: #2c2415;
+  --color-warning-line: #5c4a2c;
+  --color-success-surface: #142c22;
+  --color-success-line: #2d5a48;
+  --color-accent-surface: #242346;
+  --color-accent-line: #45447a;
+
+  --color-on-accent: #14132e;
+  --color-on-success: #04241a;
+  --color-on-warning: #2b1e04;
+  --color-on-danger: #2e0f12;
+  --color-on-emphasis: #12141b;
+
+  /* Unchanged — a sheet of paper is a sheet of paper. */
+  --color-paper: #ffffff;
+  --color-paper-ink: #16181d;
+  --color-paper-ink-2: #4a4f5c;
+  --color-paper-ink-3: #878d9b;
+
+  --color-scrim: rgba(0, 0, 0, 0.7);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-card:
+    0 1px 2px rgba(0, 0, 0, 0.55),
+    0 14px 34px -14px rgba(0, 0, 0, 0.8);
+  --shadow-card-hover:
+    0 2px 6px rgba(0, 0, 0, 0.6),
+    0 20px 42px -16px rgba(0, 0, 0, 0.85);
+  --shadow-pop:
+    0 4px 12px rgba(0, 0, 0, 0.6),
+    0 28px 64px -20px rgba(0, 0, 0, 0.9);
+  /* The accent glow is the one place a shadow still earns its keep here — it
+     reads as light coming off the button rather than as depth under it. */
+  --shadow-accent:
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 6px 18px -4px rgba(154, 151, 255, 0.3);
+  --shadow-accent-hover:
+    0 1px 2px rgba(0, 0, 0, 0.55),
+    0 10px 26px -6px rgba(154, 151, 255, 0.42);
+}
+
+@theme {
+  /*
+   * next/font generates its own family name — the literal string "Inter" only
+   * resolved for people who happened to have it installed, so everyone else
+   * was quietly getting the system face. Point at the variable next/font
+   * actually publishes.
+   */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer base {
@@ -65,6 +307,31 @@
    */
   :root {
     --rail-w: 0px;
+
+    /*
+     * The height of the recap-and-action row on the resume and letter steps.
+     *
+     * Published rather than written twice because it is a pairing: the recap
+     * card's collapsed header and the primary action beside it have to be the
+     * same height or the row reads as broken. The card used to set the height
+     * and the button hardcoded 78px to match, which made the button a slab;
+     * now both read this, and the number is a button height that the card
+     * meets rather than the reverse.
+     */
+    --recap-h: 3.5rem;
+
+    /*
+     * The height of the app header, and of the applications rail's own header
+     * beside it.
+     *
+     * Published because the two sit edge to edge and their bottom rules are
+     * read as one line across the window. Left to their own content they came
+     * out 8.6px apart — the main header is two stacked rows, the rail is two
+     * stacked buttons, and nothing was making them agree. Both now set this as
+     * a border-box height, so the rules land on the same pixel whatever either
+     * side happens to contain.
+     */
+    --app-header-h: 7.5rem;
   }
 
   @media (min-width: 1024px) {
@@ -81,8 +348,19 @@
     background: var(--color-surface);
     color: var(--color-text-primary);
     font-family: var(--font-sans);
+    font-optical-sizing: auto;
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /*
+   * Theme changes are instant everywhere except the two largest fields of
+   * colour, which cross-fade. Flipping the whole page at once reads as a
+   * flicker; letting the ground and the ink ease while the small elements snap
+   * reads as a transition. Anything longer than this starts to feel laggy.
+   */
+  body {
+    transition: background-color 180ms var(--ease-out), color 180ms var(--ease-out);
   }
 
   ::selection {
@@ -96,11 +374,55 @@
   button:focus-visible,
   input:focus-visible,
   textarea:focus-visible,
+  select:focus-visible,
   [role="button"]:focus-visible,
   [tabindex]:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* The default dark scrollbar on a #101218 ground is nearly black-on-black.
+     `color-scheme` handles Firefox and Safari; WebKit needs this. */
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-muted);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+
+  /*
+   * Mist's motion is all short and eased rather than absent, but none of it
+   * carries meaning, so it all goes when asked.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
@@ -136,26 +458,57 @@
     margin-inline: calc(var(--app-pad) * -1);
     padding-inline: var(--app-pad);
   }
+}
 
+/*
+ * Component classes, and specifically NOT utilities.
+ *
+ * These were in @layer utilities, alongside Tailwind's own. Same layer, same
+ * specificity, and this file is imported after Tailwind — so `.btn-primary`
+ * beat `.p-0`, `.px-4`, `.py-2`, `.text-xs` and `.w-9` on every element that
+ * tried to adjust one. Around thirty call sites were passing sizing that
+ * silently did nothing; the rail's "new application" button asked for 36×36
+ * and rendered 44×36 with the class's own 12px/22px padding.
+ *
+ * In @layer components they sit *below* utilities in the cascade, so any
+ * utility on the element wins, which is what every one of those call sites
+ * already assumed.
+ */
+@layer components {
+  /*
+   * The card. Its edge is mostly shadow — the hairline is there to keep the
+   * corner from dissolving where the shadow is weakest, not to draw a box.
+   */
   .glass-panel {
     background: var(--color-surface-raised);
     border: 1px solid var(--color-border-subtle);
-    border-radius: 12px;
-    box-shadow:
-      0 1px 2px rgba(22, 24, 34, 0.04),
-      0 8px 24px rgba(22, 24, 34, 0.05);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* The repeated small-caps label — section eyebrows, field labels, the cost
+     breakdown in the step bar. Was written out inline in a dozen places. */
+  .eyebrow {
+    font-size: 0.625rem;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
   }
 
   .input-base {
     width: 100%;
     background: var(--color-surface-raised);
     border: 1px solid var(--color-border);
-    border-radius: 10px;
+    border-radius: var(--radius-control);
     padding: 0.75rem 1rem;
     color: var(--color-text-primary);
     font-size: 0.875rem;
     outline: none;
-    transition: border-color 150ms, box-shadow 150ms;
+    transition:
+      border-color 150ms var(--ease-out),
+      box-shadow 150ms var(--ease-out);
   }
 
   .input-base:hover:not(:disabled) {
@@ -168,7 +521,7 @@
   }
 
   .input-base::placeholder {
-    color: var(--color-text-muted);
+    color: var(--color-text-placeholder);
   }
 
   /* iOS Safari zooms the page whenever a focused field's text is under 16px,
@@ -197,24 +550,28 @@
     justify-content: center;
     gap: 0.5rem;
     background: var(--color-accent);
-    color: white;
+    color: var(--color-on-accent);
     font-weight: 500;
     font-size: 0.9375rem;
     padding: 0.75rem 1.375rem;
-    border-radius: 10px;
-    border: none;
+    border-radius: var(--radius-control);
+    /* Transparent rather than none, so a primary and a secondary button with
+       the same padding come out the same height. They sit side by side in
+       every modal footer, and `border: none` here made the primary the
+       shorter of the pair by a hairline. */
+    border: 1px solid transparent;
     cursor: pointer;
-    box-shadow:
-      0 1px 2px rgba(47, 94, 234, 0.25),
-      0 2px 8px rgba(47, 94, 234, 0.18);
-    transition: background 150ms, box-shadow 150ms, transform 150ms, opacity 150ms;
+    box-shadow: var(--shadow-accent);
+    transition:
+      background 150ms var(--ease-out),
+      box-shadow 150ms var(--ease-out),
+      transform 150ms var(--ease-out),
+      opacity 150ms var(--ease-out);
   }
 
   .btn-primary:hover:not(:disabled) {
     background: var(--color-accent-hover);
-    box-shadow:
-      0 1px 2px rgba(47, 94, 234, 0.3),
-      0 4px 14px rgba(47, 94, 234, 0.28);
+    box-shadow: var(--shadow-accent-hover);
   }
 
   .btn-primary:active:not(:disabled) {
@@ -237,10 +594,16 @@
     font-weight: 500;
     font-size: 0.9375rem;
     padding: 0.75rem 1.375rem;
-    border-radius: 10px;
+    border-radius: var(--radius-control);
     border: 1px solid var(--color-border);
     cursor: pointer;
-    transition: background 150ms, border-color 150ms, transform 150ms, opacity 150ms;
+    box-shadow: var(--shadow-sm);
+    transition:
+      background 150ms var(--ease-out),
+      border-color 150ms var(--ease-out),
+      box-shadow 150ms var(--ease-out),
+      transform 150ms var(--ease-out),
+      opacity 150ms var(--ease-out);
   }
 
   .btn-secondary:hover:not(:disabled) {
@@ -255,6 +618,7 @@
   .btn-secondary:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+    box-shadow: none;
   }
 
   .letter-editor-content {

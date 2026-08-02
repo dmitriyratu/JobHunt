@@ -1,4 +1,87 @@
 /**
+ * The words the prompts forbid, checked rather than trusted.
+ *
+ * Split by what can safely be done about them. A qualifier can be deleted and
+ * leave a grammatical sentence behind — "successfully shipped" is "shipped".
+ * "Passionate about building great products" is not repairable by deletion; it
+ * has to be rewritten or not written, so it is only reported.
+ */
+const DELETABLE = [
+  "successfully",
+  "effectively",
+  "efficiently",
+  "seamlessly",
+  "holistically",
+  "cutting-edge",
+  "state-of-the-art",
+  "world-class",
+  "best-in-class",
+  "highly",
+  "truly",
+  "very",
+];
+
+const REPORTED = [
+  "delve",
+  "leverage",
+  "robust",
+  "seamless",
+  "holistic",
+  "spearheaded",
+  "pivotal",
+  "testament to",
+  "landscape",
+  "realm",
+  "resonate",
+  "passionate",
+  "thrilled",
+  "honed",
+  "adept",
+  "synergy",
+  "streamlined",
+  "instrumental in",
+  "played a key role",
+  "proven track record",
+  "fast-paced",
+  "results-driven",
+  "detail-oriented",
+  "track record of",
+  "wide range of",
+  "variety of domains",
+];
+
+/**
+ * Deletes the qualifiers that carry no information.
+ *
+ * Deliberately conservative: whole words only, and only ones whose removal
+ * leaves the sentence intact. Everything harder is left for aiTells to report.
+ */
+export function stripFiller(text: string): string {
+  let out = text;
+  for (const word of DELETABLE) {
+    out = out.replace(new RegExp(`\\b${word}\\b\\s*`, "gi"), "");
+  }
+  return out
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .trim();
+}
+
+/**
+ * Which forbidden words a piece of text still contains.
+ *
+ * Used to stop a correction making the writing worse: the grounding pass falls
+ * back to the candidate's own line when a rewrite fails, and the candidate's
+ * own line is exactly where "Passionate about building great products" and
+ * "Seeking a challenging role where I can leverage my diverse skill set" live.
+ * Reverting into one is a truthful answer to a question nobody asked.
+ */
+export function aiTells(text: string): string[] {
+  const lower = text.toLowerCase();
+  return [...DELETABLE, ...REPORTED].filter((w) => new RegExp(`\\b${w}\\b`).test(lower));
+}
+
+/**
  * Strips the single most recognisable AI tell from generated prose: the em/en
  * dash.
  *

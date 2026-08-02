@@ -12,6 +12,14 @@ type Props = {
    * instead of hiding the result of the tap.
    */
   onNavigate?: () => void;
+  /**
+   * Whether to render the new-application button.
+   *
+   * The desktop rail draws its own, up in the header band beside the title, so
+   * that the band fills its fixed height and the list isn't preceded by two
+   * rules a few pixels apart. The phone drawer has no such band and keeps this.
+   */
+  showNewButton?: boolean;
 };
 
 /**
@@ -21,7 +29,7 @@ type Props = {
  * — the rail is `hidden lg:flex`, which previously left a phone with no way to
  * create or switch applications at all.
  */
-export default function SessionList({ onNavigate }: Props) {
+export default function SessionList({ onNavigate, showNewButton = true }: Props) {
   const { sessions, currentSessionId, hydrated, newSession, switchSession, deleteSession } =
     useJobHuntState();
   const router = useRouter();
@@ -80,14 +88,16 @@ export default function SessionList({ onNavigate }: Props) {
 
   return (
     <>
-      <div className="px-4 pt-4 pb-4 border-b border-[var(--color-border-subtle)]">
-        <button onClick={handleNew} disabled={creating} className="btn-primary w-full">
-          {creating ? "Creating…" : "+ New application"}
-        </button>
-        <p className="text-xs text-[var(--color-text-muted)] mt-2">
-          Your resume carries over; the job details start fresh.
-        </p>
-      </div>
+      {showNewButton && (
+        <div className="px-4 pt-4 pb-4 border-b border-[var(--color-border-subtle)]">
+          <button onClick={handleNew} disabled={creating} className="btn-primary w-full">
+            {creating ? "Creating…" : "+ New application"}
+          </button>
+          <p className="text-xs text-[var(--color-text-muted)] mt-2">
+            Your resume carries over; the job details start fresh.
+          </p>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-2">
         {hydrated && sessions.length === 0 && (

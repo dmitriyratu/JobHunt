@@ -1,11 +1,13 @@
 /**
- * v2 key: v1 stored "no logo" permanently, so any company that failed a lookup
- * once — including every name that missed before the resolver learned to try
- * alternative spellings — could never recover without the user clearing site
- * data. Changing the key discards those entries outright.
+ * The key carries a version because every entry here is an answer from a
+ * resolver that has since learned something new, and a stored "no logo" would
+ * outlive the reason for it. v2 discarded v1's permanent misses, recorded
+ * before the resolver tried alternative spellings; v3 discards v2's, recorded
+ * before it fell back to the company's own favicon — every employer Wikidata
+ * has never heard of was sitting in there as a miss.
  */
-const STORAGE_KEY = "jobhunt-logo-cache-v2";
-const LEGACY_KEY = "jobhunt-logo-cache";
+const STORAGE_KEY = "jobhunt-logo-cache-v3";
+const LEGACY_KEYS = ["jobhunt-logo-cache", "jobhunt-logo-cache-v2"];
 
 /**
  * A found logo is kept indefinitely; "no logo" expires.
@@ -34,24 +36,36 @@ function read(): LogoCache {
   }
 }
 
-export function getCachedLogo(name: string): string | null | undefined {
-  const entry = read()[name.trim().toLowerCase()];
+/**
+ * The domain is part of the key, not just the name.
+ *
+ * A card is drawn long before its posting is analyzed, so the same company is
+ * looked up first with no domain and later with one. Keyed on the name alone,
+ * the "no logo" stored by the first lookup answers the second and the domain
+ * never gets its chance.
+ */
+function cacheKey(name: string, domain: string): string {
+  return `${name.trim().toLowerCase()}|${domain.trim().toLowerCase()}`;
+}
+
+export function getCachedLogo(name: string, domain = ""): string | null | undefined {
+  const entry = read()[cacheKey(name, domain)];
   // undefined = never looked up (or expired); null = looked up, no logo exists.
   if (!entry) return undefined;
   if (entry.url === null && entry.expires < Date.now()) return undefined;
   return entry.url;
 }
 
-export function setCachedLogo(name: string, url: string | null): void {
+export function setCachedLogo(name: string, url: string | null, domain = ""): void {
   if (typeof window === "undefined") return;
   try {
     const cache = read();
-    cache[name.trim().toLowerCase()] = {
+    cache[cacheKey(name, domain)] = {
       url,
       expires: url ? NEVER : Date.now() + NEGATIVE_TTL_MS,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
-    localStorage.removeItem(LEGACY_KEY);
+    for (const key of LEGACY_KEYS) localStorage.removeItem(key);
   } catch {
     /* cache is best-effort */
   }

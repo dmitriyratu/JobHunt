@@ -89,14 +89,17 @@ export default function LetterPage() {
   }
 
   return (
-    <div className="min-h-dvh">
+    <div className="flex min-h-dvh flex-col">
       <AppHeader
         subtitle="Write your outreach letter"
         settings={settings}
         onSettingsSave={handleSettingsSave}
       />
 
-      <main className="app-container py-8 space-y-6">
+      {/* See the resume step: the content block grows so the sticky footer has
+          a bottom to sit at on a page shorter than the window. */}
+      <main className="app-container py-8 flex flex-1 flex-col">
+        <div className="flex-1 space-y-6">
         {!state.resumeText || !state.jobDescription ? (
           <div className="glass-panel p-8 text-center">
             <p className="text-sm text-[var(--color-text-secondary)] mb-4">
@@ -110,8 +113,7 @@ export default function LetterPage() {
           <>
             {/* Same shape as the resume step: what's carried over and the one
                 action on a single line, so the letter itself gets the width.
-                See that page for why the button is a fixed 78px rather than
-                stretched to the row. */}
+                Both sides are --recap-h tall, so the row reads as one band. */}
             <div className="flex flex-wrap items-start gap-3">
               <div className="min-w-[16rem] flex-1">
                 <ContextRecap
@@ -130,7 +132,9 @@ export default function LetterPage() {
               <button
                 onClick={() => setComposerOpen(true)}
                 disabled={!canGenerate || generating}
-                className="btn-primary h-[78px] shrink-0 px-8 text-base font-medium"
+                // See the matching control on the resume page: button-sized and
+                // matched to the recap card's collapsed header via --recap-h.
+                className="btn-primary h-[var(--recap-h)] shrink-0 self-start whitespace-nowrap px-6"
               >
                 {generating ? (
                   <span className="flex items-center gap-2">
@@ -176,6 +180,8 @@ export default function LetterPage() {
             />
           </>
         )}
+
+        </div>
 
         <StepNav />
       </main>

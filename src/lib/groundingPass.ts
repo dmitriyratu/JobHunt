@@ -1,11 +1,15 @@
 import type OpenAI from "openai";
+import { aiTells } from "./deAiText";
+import { logicalLines } from "./sourceLines";
 import { getTaskModel } from "./models";
 import { createStructuredCompletion } from "./structuredCompletion";
 import {
   applyValues,
   checkNumbers,
   collectPairs,
+  numbersIn,
   pruneSkills,
+  spelledNumbers,
   unsupportedSkills,
   type GroundedPair,
   type Violation,
@@ -79,29 +83,30 @@ const REPAIR_SCHEMA = {
 
 const VERIFY_PROMPT = `You are checking a tailored resume against the document it was derived from.
 
-Each item gives "originals" — one or more lines from the candidate's own resume — and a "rewrite" produced for a job application. Decide, for each, whether the rewrite states anything the originals do not.
+YOU ARE GIVEN THE CANDIDATE'S WHOLE DOCUMENT. Judge every rewrite against ALL of it. A fact stated anywhere in that document is the candidate's to use, wherever it appears and whichever section it sits in.
 
-Judge the originals TOGETHER. Combining is allowed and is the point: a rewrite that takes a system from one line and a figure from another is correct, and rejecting it because no single line holds both would be wrong.
+Each rewrite also carries "cited" — the lines the writer says it worked from. Read those first, because they are usually the answer. But they are a pointer, not a fence: a rewrite that draws on a line it forgot to cite is a bookkeeping slip, NOT a false claim, and is not a finding. You are checking whether the resume tells the truth, not whether the footnotes are tidy.
 
 ALLOWED, and not a finding:
-- Rewording, compression, reordering clauses, changing voice.
-- Leading with a figure that was already in the original.
-- Swapping a term for a synonym: "Postgres" for "PostgreSQL", "physicians" for "doctors".
+- Rewording, compression, reordering clauses, changing voice, changing tense.
+- Combining facts from anywhere in the document into one sentence.
+- Leading with a figure the document states.
+- Naming a system, employer or technology the document names elsewhere.
+- Writing a number the document spells out as a numeral, or the reverse: "over twelve years" and "12+ years" are the same claim.
+- Swapping a term for a synonym.
 - Dropping detail. A shorter line claims less, never more.
-- Merging two originals into one sentence, as long as every part traces to one of them.
 
-A FINDING, always:
-- A number, percentage, duration, headcount or amount present in none of the originals, including one derived from them.
-- A technology, tool, system, credential or place none of the originals mention.
-- A relationship asserted between two originals that neither states. "Worked at MSK" and "published in Haematologica" do not together support "published while at MSK". Combining facts is allowed; inferring a link between them is not.
-- A larger role than the original states: "led" from "contributed to", "owned" from "helped", "designed" from "used", "managed a team" from "worked with a team".
-- A scope or outcome the original does not claim: "across the organisation" from "on my team", "eliminating downtime" from "reducing downtime".
+A FINDING, and only these:
+- A number, tool, place, employer or credential that appears NOWHERE in the document.
+- A larger role than the document states anywhere: "led" from "contributed to", "owned" from "helped", "migrated" from "was heavily involved in".
+- A scope or outcome the document does not claim: "across the organisation" from "on my team".
+- A causal or temporal link asserted between two facts that the document never connects.
 
-Judge only the item in front of you. You do not have the rest of the resume, and something being plausible for this candidate is not evidence the originals said it.
+Before reporting anything, name to yourself the exact words you believe are unsupported, then search the whole document for them. If you find them, it is not a finding. Most apparent problems are this.
 
-An item with an empty "originals" list cites nothing at all. Report it: a sentence that can point at no source is exactly what this check exists to catch.
+Some items carry a "numericHint" — a regex that could not find a figure among the cited lines. It does not see the rest of the document and it cannot tell what a number was attached to, so it is wrong more often than right. Check it against the full document before believing it.
 
-Return only the ungrounded ones. An empty array means everything checks out.`;
+Return only genuine findings. An empty array is the normal answer and the correct one for most documents. Never return an item you have concluded is fine.`;
 
 const REPAIR_PROMPT = `You are correcting lines of a tailored resume that claim more than the candidate's own document supports.
 
@@ -129,35 +134,107 @@ export type GroundingReport = {
   repaired: number;
   /** Failed with nothing salvageable, so the candidate's own line stands. */
   reverted: number;
-  /** Skills claimed that the original never listed. Deleted, not rewritten. */
-  skillsRemoved: number;
+  /**
+   * Skills claimed that the original never listed. Deleted, not rewritten.
+   *
+   * Named rather than counted: "2 skills were removed" is not a claim anyone
+   * can check, and this is the one thing the pass deletes outright — the only
+   * way to tell a correct deletion from a normalisation slip ("Node" against
+   * "Node.js") is to read which words went.
+   */
+  removedSkills: string[];
   /**
    * Flagged, unrepairable, and with no cited line to fall back to — so the text
    * stands as written. Reverting to nothing would delete it, which is a worse
    * answer than leaving a sentence the check couldn't clear.
    */
   unverified: number;
+  /**
+   * Objected to, but left exactly as written.
+   *
+   * The default outcome now. See the two-tier note in runGroundingPass: the
+   * checker is wrong often enough that only fabrication — a figure absent from
+   * the whole uploaded document — is allowed to change the text.
+   */
+  flagged: number;
+  /**
+   * Every line this pass acted on, with enough context to judge whether it
+   * should have.
+   *
+   * The counters above say how often the check fired. They cannot say whether
+   * it was RIGHT to fire, and nothing here recorded enough to find out — the
+   * model's original wording was overwritten and lost, so a revert and a
+   * correct revert looked identical afterwards. Reverts have been running at
+   * two to thirteen a document, every one of them replacing tailored text with
+   * the candidate's own, and the false-positive rate is simply unknown.
+   *
+   * This is also what a "flag, don't rewrite" surface needs: to show someone a
+   * line worth checking, you have to have kept the line, its sources and the
+   * objection.
+   */
+  decisions: GroundingDecision[];
   usage: { model: string; usage: UsageStats }[];
+};
+
+export type GroundingDecision = {
+  id: string;
+  /** What the writer produced, before this pass touched it. */
+  wrote: string;
+  /** The lines it cited, as it cited them. */
+  sources: string[];
+  /** Which check objected, and why. */
+  reason: string;
+  /** Whether the objection came from a regex or from a model. */
+  detector: "numbers" | "model";
+  outcome: "repaired" | "reverted" | "unverified" | "flagged";
+  /** What now stands in the document. */
+  became: string;
 };
 
 type VerifyResponse = { ungrounded: Violation[] };
 type RepairResponse = { repairs: { id: string; value: string }[] };
 
-/** Deterministic checks plus one model call, over whatever pairs are given. */
+/**
+ * Deterministic checks plus one model call, over whatever pairs are given.
+ *
+ * The checker is given the WHOLE uploaded document, not just the lines each
+ * bullet cited. That scope used to be the citations alone, and it was the
+ * single largest source of false findings: almost every surviving objection in
+ * the last audit was of the form "adds Rails", "adds shipment-tracking", "adds
+ * 40 million events" — every one of them a fact the candidate had written down,
+ * in a line the bullet happened not to cite. The claim was true and the
+ * bookkeeping was off, and the check could not tell the difference because it
+ * had never been shown the rest of the resume.
+ *
+ * Citations stay in the payload as "cited", because where the writer says a
+ * line came from is real evidence and worth reading first. They are just no
+ * longer the boundary of what counts as supported.
+ *
+ * It costs a copy of the resume per call — a bit over a cent on a nine page
+ * document. Against reverting a candidate's best line, that is not a trade
+ * worth thinking about twice.
+ */
 async function findViolations(
   client: OpenAI,
   pairs: GroundedPair[],
+  resumeText: string,
   report: GroundingReport
 ): Promise<Violation[]> {
   if (!pairs.length) return [];
 
+  // The numeric check is a signal, not a verdict.
+  //
+  // It used to be treated as proof: a pair it flagged skipped the model
+  // entirely and went straight to repair-or-revert. But the check is
+  // subject-blind — it asks only whether a digit appears among the cited lines,
+  // never what that digit was attached to — so it flags "eight years" derived
+  // from the candidate's own dates, and a figure correctly reworded into
+  // different phrasing, with no appeal. Everything now goes to the model; the
+  // numeric finding rides along as a hint about where to look. It is the same
+  // single batched call either way, so the extra certainty is free.
   const numeric = checkNumbers(pairs);
-  const flagged = new Set(numeric.map((v) => v.id));
-
-  // Only the pairs the cheap checks cleared go to the model: a line already
-  // known to be wrong doesn't need a second opinion to say so.
-  const remaining = pairs.filter((p) => !flagged.has(p.id));
-  if (!remaining.length) return numeric;
+  const hints = new Map(numeric.map((v) => [v.id, v.reason]));
+  const remaining = pairs;
 
   const model = getTaskModel("verify-grounding");
   const { result, usage } = await createStructuredCompletion<VerifyResponse>(client, {
@@ -172,17 +249,27 @@ async function findViolations(
       { role: "system", content: VERIFY_PROMPT },
       {
         role: "user",
-        content: JSON.stringify(
-          remaining.map((p) => ({ id: p.id, originals: p.sources, rewrite: p.value }))
-        ),
+        content: [
+          "## The candidate's document, in full. Nothing outside this is theirs to claim.",
+          logicalLines(resumeText).join("\n"),
+          "",
+          "## The rewrites to judge",
+          JSON.stringify(
+            remaining.map((p) => ({
+              id: p.id,
+              cited: p.sources,
+              rewrite: p.value,
+              ...(hints.has(p.id) ? { numericHint: hints.get(p.id) } : {}),
+            }))
+          ),
+        ].join("\n"),
       },
     ],
   });
   report.usage.push({ model: model.id, usage });
 
   const known = new Set(remaining.map((p) => p.id));
-  const semantic = (result.ungrounded ?? []).filter((v) => known.has(v.id));
-  return [...numeric, ...semantic];
+  return (result.ungrounded ?? []).filter((v) => known.has(v.id));
 }
 
 /**
@@ -195,14 +282,17 @@ async function findViolations(
 export async function runGroundingPass(
   client: OpenAI,
   sections: ResumeSection[],
-  jobDescription: string
+  jobDescription: string,
+  resumeText: string
 ): Promise<{ sections: ResumeSection[]; report: GroundingReport }> {
   const report: GroundingReport = {
     checked: 0,
     repaired: 0,
     reverted: 0,
-    skillsRemoved: 0,
+    removedSkills: [],
     unverified: 0,
+    flagged: 0,
+    decisions: [],
     usage: [],
   };
 
@@ -213,7 +303,7 @@ export async function runGroundingPass(
       if (!section.keywords) return section;
       const bad = unsupportedSkills(section.keywords.value, section.keywords.source);
       if (!bad.length) return section;
-      report.skillsRemoved += bad.length;
+      report.removedSkills.push(...bad);
       return {
         ...section,
         keywords: {
@@ -227,11 +317,67 @@ export async function runGroundingPass(
     report.checked = pairs.length;
     if (!pairs.length) return { sections: working, report };
 
-    const violations = await findViolations(client, pairs, report);
-    if (!violations.length) return { sections: working, report };
-
     const byId = new Map(pairs.map((p) => [p.id, p]));
-    const failing = violations.filter((v) => byId.has(v.id));
+
+    // --- Two tiers ----------------------------------------------------------
+    // Measured on thirteen decisions across three documents, eleven of the
+    // checker's objections were wrong — and wrong in the most expensive way,
+    // deleting the $430,000 saving, the build-time numbers and the EMEA remit
+    // that were sitting verbatim in the very lines it had been shown. One of
+    // them rewrote "on-call rotation owner" down to "participated in", making
+    // the document LESS true than the candidate's own resume.
+    //
+    // A check that unreliable must not hold the pen. So only the objections
+    // that can be confirmed without it are allowed to change anything:
+    //
+    //   HARD — the value states a figure that appears NOWHERE in the uploaded
+    //     document. That is fabrication, it is decided by exact matching over
+    //     the whole source rather than by judgement over a few cited lines, and
+    //     it is the failure that actually matters.
+    //   SOFT — everything else the model objects to. Recorded and surfaced,
+    //     never rewritten. An over-strict check that flags costs a glance; one
+    //     that silently reverts costs the tailoring.
+    const everyFigure = new Set(
+      logicalLines(resumeText).flatMap((l) => [...numbersIn(l), ...spelledNumbers(l)])
+    );
+    const invented = (value: string) => numbersIn(value).filter((n) => !everyFigure.has(n));
+
+    // The hard tier stands on its own, and has to.
+    //
+    // Demoting the numeric check to a hint for the model left a hole: a figure
+    // the model failed to notice was no longer caught by anything, because the
+    // only path to enforcement ran through the model's findings. Exact matching
+    // over the whole document is the one judgement here that needs no model and
+    // is never wrong about what it claims — a digit is present or it is not —
+    // so it decides on its own.
+    const failing: Violation[] = pairs
+      .map((p) => ({ pair: p, bad: invented(p.value) }))
+      .filter(({ bad }) => bad.length > 0)
+      .map(({ pair, bad }) => ({
+        id: pair.id,
+        reason: `states ${bad.map((n) => `"${n}"`).join(", ")}, which appears nowhere in the uploaded document`,
+      }));
+    const hard = new Set(failing.map((v) => v.id));
+
+    const violations = await findViolations(client, pairs, resumeText, report);
+
+    // Everything the model objected to that is not outright fabrication.
+    // Recorded and surfaced, never rewritten.
+    for (const soft of violations.filter((v) => byId.has(v.id) && !hard.has(v.id))) {
+      const pair = byId.get(soft.id)!;
+      report.flagged++;
+      report.decisions.push({
+        id: soft.id,
+        wrote: pair.value,
+        sources: pair.sources,
+        reason: soft.reason,
+        detector: "model",
+        outcome: "flagged",
+        became: pair.value,
+      });
+    }
+
+    if (!failing.length) return { sections: working, report };
 
     // --- Repair -------------------------------------------------------------
     const repairModel = getTaskModel("repair-grounding");
@@ -277,7 +423,7 @@ export async function runGroundingPass(
       value,
       sources: byId.get(id)!.sources,
     }));
-    const stillBad = new Set((await findViolations(client, repaired, report)).map((v) => v.id));
+    const stillBad = new Set((await findViolations(client, repaired, resumeText, report)).map((v) => v.id));
 
     const fixes = new Map<string, string>();
     for (const violation of failing) {
@@ -287,10 +433,37 @@ export async function runGroundingPass(
 
       const usable = repair && !stillBad.has(violation.id) && repair !== pair.value;
 
+      // Reverting is a truth fix, and it must not be a style regression. The
+      // candidate's own summary is where "Passionate about building great
+      // products" and "Seeking a challenging role where I can leverage my
+      // diverse skill set" live — words this app forbids everywhere else.
+      // Falling back into one of those puts the loudest AI tells on the page in
+      // the name of accuracy. Where the fallback reads worse than what it would
+      // replace, the text stands and is reported instead.
+      const fallbackReadsWorse =
+        aiTells(fallback).length > aiTells(pair.value).length;
+
+      // Recorded whatever happens, so the pass can be audited rather than
+      // trusted. `wrote` is the writer's text before this loop touches it.
+      const decide = (outcome: GroundingDecision["outcome"], became: string) => {
+        report.decisions.push({
+          id: violation.id,
+          wrote: pair.value,
+          sources: pair.sources,
+          reason: violation.reason,
+          // The hard tier is the only thing that reaches here, and it is decided
+          // by exact matching rather than by the model.
+          detector: "numbers",
+          outcome,
+          became,
+        });
+      };
+
       if (usable && repair !== fallback) {
         fixes.set(violation.id, repair);
         report.repaired++;
-      } else if (fallback.trim()) {
+        decide("repaired", repair);
+      } else if (fallback.trim() && !fallbackReadsWorse) {
         // No repair, one that failed again, one identical to what was
         // rejected, or one that simply handed back the original: all of these
         // end at the candidate's own line, so all of them are reverts. The
@@ -298,13 +471,16 @@ export async function runGroundingPass(
         // fact, which is the safe direction to lose it in.
         fixes.set(violation.id, fallback);
         report.reverted++;
+        decide("reverted", fallback);
       } else {
-        // Nothing to fall back TO. This is the case that used to delete a
-        // summary: a prose section citing nothing was flagged, could not be
-        // repaired, and got "reverted" to the empty string it came from.
-        // Reverting to nothing is never a correction — leave the text alone and
-        // report it as unverified instead.
+        // Nothing worth falling back TO — either no cited line at all, or one
+        // that would read worse than what it replaced. This is the case that
+        // used to delete a summary outright: a prose section citing nothing was
+        // flagged, could not be repaired, and got "reverted" to the empty string
+        // it came from. Neither reverting to nothing nor reverting to filler is
+        // a correction, so the text stands and is reported instead.
         report.unverified++;
+        decide("unverified", pair.value);
       }
     }
 

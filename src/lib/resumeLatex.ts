@@ -1,5 +1,6 @@
-import { specFor } from "./documentShape";
-import { sectionHasContent, visibleBullets } from "./tailoredResume";
+import { SHAPE_DEFS, specFor } from "./documentShape";
+import { linkDisplay, linkHref, printableLinks } from "./profileLinks";
+import { dateOrder, sectionHasContent, visibleBullets } from "./tailoredResume";
 import type { SectionSpec } from "./documentShape";
 import type { ResumeProfile } from "./settings";
 import type {
@@ -106,11 +107,6 @@ function httpUrl(raw: string): string {
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
-/** Strips the scheme for display — "linkedin.com/in/x", not the full URL. */
-function displayUrl(raw: string): string {
-  return raw.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "");
-}
-
 function link(url: string, display: string): string {
   return `\\href{${escapeUrl(url)}}{${escapeLatex(display)}}`;
 }
@@ -126,6 +122,15 @@ function link(url: string, display: string): string {
  * 9pt — fits on one line. It used to be narrow enough that nearly every range
  * wrapped, which left the left-hand column looking like a stack of fragments
  * rather than a column of dates.
+ *
+ * The common case is not the widest case, and on the two long shapes it is
+ * worth paying for the difference. `entryDates` wraps gracefully by design, but
+ * a column where one range in ten breaks reads as a defect rather than as a
+ * grid: on a real clinical CV "September 2013 - May 2019" was the only wrapped
+ * date on two pages, and it was the first thing the eye landed on. September is
+ * the widest month name, so 1.52in is what makes every Month-Year pair short of
+ * a September/September range set on one line. It costs 0.1in of measure, which
+ * at these margins is about one character per line of body text.
  */
 const METRICS: Record<DocumentShape, {
   size: string;
@@ -135,7 +140,21 @@ const METRICS: Record<DocumentShape, {
   name: string;
 }> = {
   resume: { size: "10pt", margin: "0.65in", datecol: "1.32in", name: "22" },
-  cv: { size: "10.5pt", margin: "0.72in", datecol: "1.42in", name: "22" },
+  cv: { size: "10.5pt", margin: "0.72in", datecol: "1.52in", name: "22" },
+  // Set like the clinical CV: both are long reads where the page count is not
+  // being fought for, and a document someone reads for ten minutes wants the
+  // half-point and the wider margin.
+  academic: { size: "10.5pt", margin: "0.72in", datecol: "1.52in", name: "22" },
+  // The widest date column of the six. A federal entry's left column carries a
+  // date range where the others carry a year, and federal reviewers read these
+  // on paper, so the margin is the most generous here.
+  federal: { size: "10.5pt", margin: "0.75in", datecol: "1.5in", name: "22" },
+  // Conservative by convention: legal hiring reads an unusual-looking document
+  // as a flag, so this is the resume metrics with a little more air.
+  legal: { size: "10pt", margin: "0.7in", datecol: "1.32in", name: "22" },
+  // A credit's left column carries a year and its right a production name and a
+  // company, so the date column is slightly wider than the resume's.
+  creative: { size: "10pt", margin: "0.7in", datecol: "1.38in", name: "22" },
 };
 
 /**
@@ -416,6 +435,20 @@ function preambleFor(shape: DocumentShape): string {
   \par\vspace{2.5pt}%
 }
 
+% The roles collapsed to fit, as one run of text at the foot of their section.
+%
+% Deliberately NOT \plainitem, which is what this used at first. A minipage is
+% an unbreakable box: correct for a licence or an award, which is one line and
+% must not be split, and wrong for a paragraph naming six jobs. TeX could not
+% break it across the page boundary, so it moved the whole box to page two and
+% took Certifications, Awards and Languages with it — a half empty page one, and
+% a length check that reported two pages for a document with two bullets on it.
+% A plain paragraph breaks where it needs to.
+\newcommand{\earlierline}[1]{%
+  \noindent{\RaggedRight\color{slate}#1\par}%
+  \vspace{2.5pt}%
+}
+
 \pagestyle{fancy}
 \fancyhf{}
 \renewcommand{\headrulewidth}{0pt}
@@ -469,13 +502,53 @@ function entryDates(entry: ResumeEntry): string {
  * health fair has no employer distinct from the city it happened in — and the
  * result printed as "Detroit, MI · Detroit, MI".
  */
-function entryOrg(entry: ResumeEntry): string {
-  const org = entry.organization.trim();
-  const location = entry.location.trim();
-  return [org, location === org ? "" : location]
-    .filter(Boolean)
-    .map(escapeLatex)
-    .join(SEP);
+/**
+ * Escaped, with only the final space tied.
+ *
+ * A whole-string `unbreakable` is wrong for these — "Immune Discovery and
+ * Modeling Service — Boelens Laboratory" has to be allowed to wrap somewhere.
+ * What must not happen is the tail landing alone on the next line, which is how
+ * "New York, NY" came out as "New York," and then a line holding "NY". Binding
+ * the last space costs one legal breakpoint and fixes exactly that.
+ */
+function bindTail(text: string): string {
+  return escapeLatex(text.trim()).replace(/\s+(\S+)$/, "~$1");
+}
+
+function entryOrg(organization: string, location: string): string {
+  const org = organization.trim();
+  const loc = location.trim();
+  return (
+    [org, loc === org ? "" : loc]
+      .filter(Boolean)
+      .map(bindTail)
+      // SEP with its leading space tied: the bullet stays with the text before
+      // it, so a wrap can never open a line with a stranded separator.
+      .join("~· ")
+  );
+}
+
+/**
+ * The two lines an entry leads with, with the organisation promoted when there
+ * is no heading to put above it.
+ *
+ * An entry can legitimately reach here with an empty heading: the tailoring
+ * route demotes a heading that arrived as a sentence rather than a title (see
+ * `consolidateEntries`), which leaves the organisation as the most identifying
+ * thing the entry still has. Printing the empty heading anyway puts a bold
+ * blank line above the organisation and an entry that looks like a rendering
+ * fault.
+ *
+ * This mirrors `entryParagraphs` in the .docx renderer, which has always done
+ * it. The two paths disagreeing is how a document ends up looking different
+ * depending on which button produced it.
+ */
+function entryLead(entry: ResumeEntry): { heading: string; org: string } {
+  const heading = entry.heading.trim();
+  return {
+    heading: escapeLatex(heading || entry.organization.trim()),
+    org: entryOrg(heading ? entry.organization : "", entry.location),
+  };
 }
 
 /**
@@ -495,9 +568,10 @@ function renderEntries(entries: ResumeEntry[]): string {
 
   return entries
     .map((entry) => {
+      const { heading, org } = entryLead(entry);
       const head = dated
-        ? `\\entry{${entryDates(entry)}}{${escapeLatex(entry.heading)}}{${entryOrg(entry)}}{}`
-        : `\\${macro}{${escapeLatex(entry.heading)}}{${entryOrg(entry)}}{}`;
+        ? `\\entry{${entryDates(entry)}}{${heading}}{${org}}{}`
+        : `\\${macro}{${heading}}{${org}}{}`;
       const lines = [head];
       const bullets = visibleBullets(entry.bullets);
       if (bullets.length) {
@@ -543,7 +617,23 @@ function renderSectionBody(spec: SectionSpec, section: ResumeSection): string {
     return items.map((i) => `\\plainitem{${escapeLatex(i)}}`).join("\n");
   }
 
-  return renderEntries(section.entries ?? []);
+  /*
+   * Entries, with one concession to documents generated before a section
+   * became a dated layout.
+   *
+   * Licensure used to be a `list` and stored its lines in `items`. Rendering an
+   * empty `entries` array would return "", and the caller drops a section whose
+   * body is empty — so an already-generated CV would quietly lose the whole
+   * block on the next compile. Falling back prints what that document actually
+   * holds; regenerating is what upgrades it to the date column.
+   */
+  const entries = section.entries ?? [];
+  const legacyItems = (section.items ?? []).filter((i) => i.trim());
+  if (!entries.length && legacyItems.length) {
+    return legacyItems.map((i) => `\\plainitem{${escapeLatex(i)}}`).join("\n");
+  }
+
+  return renderEntries(entries);
 }
 
 // --- Header -----------------------------------------------------------------
@@ -566,9 +656,14 @@ function renderSectionBody(spec: SectionSpec, section: ResumeSection): string {
  */
 function renderHeader(profile: ResumeProfile, resume: TailoredResume): string {
   // Falls back to the most recent entry's title, which is right often enough
-  // that nobody has to fill the headline in.
+  // that nobody has to fill the headline in. The first entry that HAS a title,
+  // not simply the first entry: one whose heading was demoted for being a
+  // sentence has nothing to lend the header, and taking its empty string would
+  // drop the headline line from a document that had a title to show.
   const fallbackHeadline =
-    resume.sections.find((s) => s.entries?.length)?.entries?.[0]?.heading ?? "";
+    resume.sections
+      .flatMap((s) => s.entries ?? [])
+      .find((e) => e.heading.trim())?.heading ?? "";
   const headline = profile.headline.trim() || fallbackHeadline.trim();
 
   // Location leads the row: it is the one contact detail that is read rather
@@ -579,9 +674,14 @@ function renderHeader(profile: ResumeProfile, resume: TailoredResume): string {
     contact.push(link(`mailto:${profile.email.trim()}`, profile.email.trim()));
   }
   if (profile.phone.trim()) contact.push(escapeLatex(profile.phone.trim()));
-  for (const raw of [profile.linkedin, profile.website]) {
-    const url = httpUrl(raw);
-    if (url) contact.push(link(url, displayUrl(raw)));
+  // Everything filled in, in catalogue order. An identifier with no destination
+  // — an NPI, a bar number — has no href and is set as plain text rather than
+  // being given an invented URL to point at.
+  for (const item of printableLinks(profile.links)) {
+    const shown = linkDisplay(item);
+    if (!shown) continue;
+    const href = linkHref(item);
+    contact.push(href ? link(httpUrl(href), shown) : escapeLatex(shown));
   }
 
   // Each line carries the gap that follows it. The name is set solid, so it
@@ -637,6 +737,50 @@ export function renderResumeLatex(
     // ampersand ("Education & Training"), which is an alignment tab in TeX and
     // fails the whole document with "Misplaced alignment tab character &".
     blocks.push(`\\section{${escapeLatex(spec.title)}}\n${body}`);
+
+    // Roles the page-fitting pass cut whole, printed as one line at the foot of
+    // the section they came from. A 2012 job with nothing left to say for this
+    // posting still belongs on a resume as history; what it does not deserve is
+    // a dated block and three bullets.
+    const collapsed = (resume.collapsed ?? []).filter((c) => c.sectionKey === section.key);
+    if (collapsed.length) {
+      const earlier = [...collapsed]
+        // Newest first, matching every other dated block on the page. They
+        // arrive in the order the fitter cut them, which is by relevance.
+        .sort(
+          (a, b) =>
+            (dateOrder(b.endDate) ?? dateOrder(b.startDate) ?? -Infinity) -
+            (dateOrder(a.endDate) ?? dateOrder(a.startDate) ?? -Infinity)
+        )
+        .map((c) => {
+          // Same rule as entryDates: a single year in both fields is one year,
+          // not a range from itself to itself.
+          const start = c.startDate.trim();
+          const end = c.endDate.trim();
+          // And the same dash. This printed an ASCII hyphen while every dated
+          // block above it printed an en dash, so a resume that had collapsed a
+          // role carried two range styles. Assembled after escaping, because
+          // `--` is TeX's en dash and the escaper would otherwise neutralise it.
+          const when =
+            start && end && start !== end
+              ? `${escapeLatex(start)}~-- ${escapeLatex(end)}`
+              : escapeLatex(start || end);
+          // And the same rule as entryOrg: an organisation that repeats the
+          // heading prints once.
+          const org = c.organization.trim();
+          const who = [c.heading.trim(), org === c.heading.trim() ? "" : org]
+            .filter(Boolean)
+            .map(escapeLatex)
+            .join(", ");
+          return `${who}${when ? ` (${when})` : ""}`;
+        })
+        .join("; ");
+      // Double backslashes: in a template literal `\e` collapses to `e` and
+      // `\t` becomes a tab, so the single-escaped version emitted
+      // "earlierline{" as literal text with a tab where \textit should be —
+      // and printed the macro name on the finished resume.
+      blocks.push(`\\earlierline{\\textit{Earlier:} ${earlier}}`);
+    }
   }
 
   const target = resume.pageTarget
@@ -644,7 +788,7 @@ export function renderResumeLatex(
     : "";
 
   const name = escapeLatex(profile.fullName.trim() || "Your Name");
-  const kind = resume.shape === "cv" ? "CV" : "Resume";
+  const kind = SHAPE_DEFS[resume.shape].kind;
 
   return [
     "% Tailored resume — generated, then yours to edit.",

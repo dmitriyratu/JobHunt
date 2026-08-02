@@ -9,6 +9,7 @@ import {
   STAGE_LABEL,
 } from "@/lib/session";
 import CompanyLogo from "./CompanyLogo";
+import SourceLink from "./SourceLink";
 import type { Session } from "@/types";
 
 type Props = {
@@ -30,11 +31,11 @@ function scoreClass(score: number): string {
   return "bg-[var(--color-danger-muted)] text-[var(--color-danger)]";
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <p className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">{label}</p>
-      <p className="text-xs text-[var(--color-text-secondary)] break-words">{value}</p>
+    <div className="min-w-0">
+      <p className="eyebrow">{label}</p>
+      <div className="text-xs text-[var(--color-text-secondary)] break-words">{children}</div>
     </div>
   );
 }
@@ -57,83 +58,92 @@ export default function SessionCard({
   const roleLabel = session.detectedJobTitle.trim() || title;
 
   // Delete is a sibling of the card button, never a child — nested buttons are
-  // invalid HTML and make click handling unpredictable.
+  // invalid HTML and make click handling unpredictable. The detail panel is a
+  // sibling for the same reason: it holds a link to the posting, and an anchor
+  // inside a button is both invalid and unclickable — the button swallows it.
+  // The border therefore sits on the wrapper, so the two still read as one card.
   return (
     <div className="group relative">
-      <button
-        onClick={onSelect}
-        aria-expanded={expanded}
-        className={`w-full text-left rounded-lg border p-3 transition-colors ${
+      <div
+        className={`rounded-lg border transition-colors ${
           active
             ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)]"
             : "border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] hover:border-[var(--color-text-muted)]"
         }`}
       >
-        {/* Brand mark leads, role reads beside it — the two things you scan a
-            list of applications for. The tile keeps a constant footprint
-            whether it holds a wordmark or the initials fallback, so the
-            headlines stay aligned down the rail. */}
-        <div className="flex items-start gap-3 pr-5">
-          {company && (
-            <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-1.5">
-              <CompanyLogo company={company} variant="tile" />
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            {/* Wraps — never truncated, so the full role is always readable. */}
-            <p className="text-sm font-medium break-words leading-snug">{roleLabel}</p>
+        <button onClick={onSelect} aria-expanded={expanded} className="w-full p-3 text-left">
+          {/* Brand mark leads, role reads beside it — the two things you scan a
+              list of applications for. The tile keeps a constant footprint
+              whether it holds a wordmark or the initials fallback, so the
+              headlines stay aligned down the rail. */}
+          <div className="flex items-start gap-3 pr-5">
             {company && (
-              <p className="text-xs text-[var(--color-text-muted)] break-words mt-0.5">
-                {company}
-              </p>
+              <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-1.5">
+                <CompanyLogo
+                  company={company}
+                  domain={session.detectedCompanyDomain}
+                  variant="tile"
+                />
+              </div>
             )}
+            <div className="min-w-0 flex-1">
+              {/* Wraps — never truncated, so the full role is always readable. */}
+              <p className="text-sm font-medium break-words leading-snug">{roleLabel}</p>
+              {company && (
+                <p className="text-xs text-[var(--color-text-muted)] break-words mt-0.5">
+                  {company}
+                </p>
+              )}
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center flex-wrap gap-2 mt-2.5 text-[10px]">
-          {typeof score === "number" ? (
-            <span className={`px-1.5 py-0.5 rounded-full font-medium ${scoreClass(score)}`}>
-              {score}/100
+          <div className="flex items-center flex-wrap gap-2 mt-2.5 text-[10px]">
+            {typeof score === "number" ? (
+              <span className={`px-1.5 py-0.5 rounded-full font-medium ${scoreClass(score)}`}>
+                {score}/100
+              </span>
+            ) : (
+              <span className="px-1.5 py-0.5 rounded-full font-medium bg-[var(--color-surface-overlay)] text-[var(--color-text-muted)]">
+                Not analyzed
+              </span>
+            )}
+            <span className="text-[var(--color-text-muted)]">{STAGE_LABEL[stage]}</span>
+            <span className="text-[var(--color-text-muted)] ml-auto">
+              {formatRelativeTime(session.updatedAt)}
             </span>
-          ) : (
-            <span className="px-1.5 py-0.5 rounded-full font-medium bg-[var(--color-surface-overlay)] text-[var(--color-text-muted)]">
-              Not analyzed
-            </span>
-          )}
-          <span className="text-[var(--color-text-muted)]">{STAGE_LABEL[stage]}</span>
-          <span className="text-[var(--color-text-muted)] ml-auto">
-            {formatRelativeTime(session.updatedAt)}
-          </span>
-        </div>
+          </div>
+        </button>
 
         {expanded && (
-          <div className="mt-3 pt-3 border-t border-[var(--color-border-subtle)] space-y-2">
-            <DetailRow label="Resume" value={session.resumeFilename || "Not uploaded"} />
-            <DetailRow
-              label="Job description"
-              value={session.jobSource || "Not loaded"}
-            />
-            {session.matchReport && (
-              <DetailRow
-                label="Requirements"
-                value={`${session.matchReport.items.length} analyzed · ${session.matchReport.items.filter((i) => i.status === "match").length} matched`}
+          <div className="mx-3 mb-3 space-y-2 border-t border-[var(--color-border-subtle)] pt-3">
+            <DetailRow label="Resume">{session.resumeFilename || "Not uploaded"}</DetailRow>
+            <DetailRow label="Job description">
+              <SourceLink
+                source={session.jobSource}
+                fallback="Not loaded"
+                className="inline-block max-w-full truncate align-bottom"
               />
+            </DetailRow>
+            {session.matchReport && (
+              <DetailRow label="Requirements">
+                {session.matchReport.items.length} analyzed ·{" "}
+                {session.matchReport.items.filter((i) => i.status === "match").length} matched
+              </DetailRow>
             )}
             {session.generatedSubject && (
-              <DetailRow label="Subject" value={session.generatedSubject} />
+              <DetailRow label="Subject">{session.generatedSubject}</DetailRow>
             )}
-            <DetailRow
-              label="Created"
-              value={new Date(session.createdAt).toLocaleString(undefined, {
+            <DetailRow label="Created">
+              {new Date(session.createdAt).toLocaleString(undefined, {
                 month: "short",
                 day: "numeric",
                 hour: "numeric",
                 minute: "2-digit",
               })}
-            />
+            </DetailRow>
           </div>
         )}
-      </button>
+      </div>
 
       {!confirming && (
         <button
@@ -161,7 +171,7 @@ export default function SessionCard({
           </p>
           <button
             onClick={onDelete}
-            className="shrink-0 rounded-md bg-[var(--color-danger)] px-3 py-1.5 text-xs font-medium text-white [@media(pointer:coarse)]:min-h-[40px]"
+            className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--color-danger)] px-3 py-1.5 text-xs font-medium text-[var(--color-on-danger)] [@media(pointer:coarse)]:min-h-[40px]"
           >
             Delete
           </button>

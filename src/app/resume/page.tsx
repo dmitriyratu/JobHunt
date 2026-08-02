@@ -8,6 +8,7 @@ import ContextRecap from "@/components/ContextRecap";
 import GenerateResumeModal from "@/components/GenerateResumeModal";
 import ResumeChat from "@/components/ResumeChat";
 import ResumeDocumentPane from "@/components/ResumeDocumentPane";
+import type { FitSummary, GroundingSummary } from "@/components/ChangeAuditModal";
 import StepNav from "@/components/StepNav";
 import { resumeFilename } from "@/lib/filePaths";
 import { saveToDownloads } from "@/lib/saveDownload";
@@ -35,7 +36,9 @@ export default function ResumePage() {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
   const [downloading, setDownloading] = useState(false);
-  const [savedPath, setSavedPath] = useState("");
+  // The last file written, with whether it went to a real folder — the pane
+  // offers to open it, and there is nothing to open behind a browser download.
+  const [saved, setSaved] = useState<{ path: string; usedFolders: boolean } | null>(null);
   // Shared with the applications rail, which is where the toggle lives.
   const { open: chatOpen, setOpen: setChatOpen, toggle: toggleChat } = useChatDock();
   const [engineHint, setEngineHint] = useState("");
@@ -43,14 +46,21 @@ export default function ResumePage() {
   const [triageNonce, setTriageNonce] = useState(0);
   const [pickerOpen, setPickerOpen] = useState(false);
   // What the grounding pass did to the last generation, so corrections
-  // aren't made silently behind the applicant.
-  const [grounding, setGrounding] = useState<{
-    checked: number;
-    repaired: number;
-    reverted: number;
-    skillsRemoved: number;
-    unverified: number;
-  } | null>(null);
+  // aren't made silently behind the applicant. The per-line decisions are kept,
+  // not just the counts: the API has always sent them and this dropped them on
+  // the floor, which left "2 were put back to your own wording" with no way to
+  // find out which two. See ChangeAuditModal.
+  const [grounding, setGrounding] = useState<GroundingSummary | null>(null);
+  // What the page-fitting pass cut to hit the length target. Reported for the
+  // same reason grounding is: the document says less than the model wrote, and
+  // the applicant should know before they send it.
+  const [fit, setFit] = useState<FitSummary | null>(null);
+  // Copied fields the uploaded document doesn't state. The only notice on the
+  // pane about something that might not be true, so it is never cleared
+  // silently — a regeneration resets it along with everything else.
+  const [factIssues, setFactIssues] = useState<
+    { where: string; field: string; value: string }[]
+  >([]);
 
   const { resumeTex } = state;
   const compile = useLatexCompile(resumeTex, Boolean(resumeTex) && !engineHint);
@@ -162,8 +172,10 @@ export default function ResumePage() {
   const runGenerate = useCallback(
     async (shape: DocumentShape) => {
     setGenerateError("");
-    setSavedPath("");
+    setSaved(null);
     setGrounding(null);
+    setFit(null);
+    setFactIssues([]);
     setGenerating(true);
     try {
       const res = await fetch("/api/tailor-resume", {
@@ -176,6 +188,10 @@ export default function ResumePage() {
           emphasis: state.resumeEmphasis || undefined,
           shape,
           pageTarget: allowsPageTarget(shape) ? state.resumePageTarget : undefined,
+          // Sent so the route can typeset and measure. The page count is only
+          // knowable from a compiled document, and the header is part of what
+          // fills the first page, so it has to be the real profile.
+          profile: settings.profile,
           apiKey: settings.apiKey || undefined,
         }),
       });
@@ -220,7 +236,20 @@ export default function ResumePage() {
         });
       }
 
+      // Only present when the copied-field check found something for the
+      // reviewer to read.
+      for (const call of data.factUsage ?? []) {
+        appendUsageEntry({
+          endpoint: "review-facts",
+          model: call.model,
+          sessionId: state.id,
+          usage: call.usage,
+        });
+      }
+
       setGrounding(data.grounding ?? null);
+      setFit(data.fit ?? null);
+      setFactIssues(data.factIssues ?? []);
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : "Tailoring failed");
     } finally {
@@ -303,7 +332,7 @@ export default function ResumePage() {
   const saveAs = useCallback(
     async (build: () => Promise<Blob>, extension: string) => {
       setDownloading(true);
-      setSavedPath("");
+      setSaved(null);
       try {
         const blob = await build();
         const result = await saveToDownloads(
@@ -312,7 +341,7 @@ export default function ResumePage() {
           state.detectedJobTitle,
           resumeFilename(settings.profile.fullName, extension)
         );
-        setSavedPath(result.path);
+        setSaved(result);
       } catch (err) {
         setGenerateError(err instanceof Error ? err.message : "Could not save the file");
       } finally {
@@ -365,14 +394,21 @@ export default function ResumePage() {
   }
 
   return (
-    <div className="min-h-dvh">
+    <div className="flex min-h-dvh flex-col">
       <AppHeader
         subtitle="Tailor your resume"
         settings={settings}
         onSettingsSave={handleSettingsSave}
       />
 
-      <main className="app-container py-8 space-y-6">
+      {/* A column, with the content block below set to grow.
+          `sticky bottom-0` only pins while there is something to scroll, so on
+          a page shorter than the window — the generating state is a spinner in
+          a small panel — the footer fell back to its place in the flow and sat
+          mid-screen with the min-h-dvh slack beneath it. Growing the content
+          pushes the bar to the bottom, where sticky then has nothing to do. */}
+      <main className="app-container py-8 flex flex-1 flex-col">
+        <div className="flex-1 space-y-6">
         {!canGenerate ? (
           <div className="glass-panel p-8 text-center">
             <p className="text-sm text-[var(--color-text-secondary)] mb-4">
@@ -424,7 +460,10 @@ export default function ResumePage() {
               <button
                 onClick={() => setPickerOpen(true)}
                 disabled={generating}
-                className="btn-primary h-[78px] shrink-0 px-8 text-base font-medium"
+                // Exactly as tall as the recap card's collapsed header, via the
+                // shared --recap-h. self-start rather than centred so the two
+                // stay aligned when the card is expanded and grows downwards.
+                className="btn-primary h-[var(--recap-h)] shrink-0 self-start whitespace-nowrap px-6"
               >
                 {generating ? (
                   <span className="flex items-center gap-2">
@@ -491,14 +530,19 @@ export default function ResumePage() {
               hasResume={hasResume}
               engineHint={engineHint}
               downloading={downloading}
-              savedPath={savedPath}
+              saved={saved}
               grounding={grounding}
+              fit={fit}
+              resume={state.tailoredResume}
+              factIssues={factIssues}
               onDownloadPdf={handleDownloadPdf}
               onDownloadDocx={handleDownloadDocx}
             />
 
           </>
         )}
+
+        </div>
 
         <StepNav />
       </main>

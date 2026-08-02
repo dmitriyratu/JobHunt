@@ -7,7 +7,8 @@ import {
   TabStopType,
   TextRun,
 } from "docx";
-import { specFor } from "./documentShape";
+import { SHAPE_DEFS, specFor } from "./documentShape";
+import { linkDisplay, printableLinks } from "./profileLinks";
 import {
   formatSkillGroups,
   sectionByKey,
@@ -352,7 +353,12 @@ function sectionBody(spec: SectionSpec, section: ResumeSection): Paragraph[] {
     case "keywords":
       return keywordsLayout(section);
     case "entries":
-      return entriesLayout(section);
+      // See the matching fallback in resumeLatex: a document generated while
+      // this section was still a `list` holds its lines in `items`, and would
+      // otherwise render as nothing and be dropped.
+      return !section.entries?.length && section.items?.some((i) => i.trim())
+        ? listLayout(section)
+        : entriesLayout(section);
     case "list":
       return listLayout(section);
     default:
@@ -388,8 +394,16 @@ function postNominals(headline: string): string {
 }
 
 function contactLine(profile: ResumeProfile): string {
+  // Plain text throughout, links included: the .docx path prints the display
+  // form rather than a hyperlink field, which is what survives being pasted into
+  // an applicant tracking system.
   return joinNonEmpty(
-    [profile.location, profile.email, profile.phone, profile.linkedin, profile.website],
+    [
+      profile.location,
+      profile.email,
+      profile.phone,
+      ...printableLinks(profile.links).map(linkDisplay),
+    ],
     DOT
   );
 }
@@ -406,7 +420,7 @@ function headerParagraphs(resume: TailoredResume, profile: ResumeProfile): Parag
     sectionByKey(resume, "experience")?.entries?.[0]?.heading.trim() ||
     "";
 
-  const suffix = resume.shape === "cv" ? postNominals(headline) : "";
+  const suffix = SHAPE_DEFS[resume.shape].postNominals ? postNominals(headline) : "";
 
   out.push(
     new Paragraph({
@@ -504,7 +518,8 @@ export function buildResumeDocument(
   }
 
   const name = profile.fullName.trim();
-  const kind = resume.shape === "cv" ? "Curriculum Vitae" : "Resume";
+  // The .docx metadata title spells it out where the LaTeX footer abbreviates.
+  const kind = SHAPE_DEFS[resume.shape].kind === "CV" ? "Curriculum Vitae" : "Resume";
 
   return new Document({
     creator: name || "JobHunt",

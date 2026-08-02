@@ -17,10 +17,12 @@ import { loadUsageLog, USAGE_CHANGED_EVENT, type UsageEndpoint } from "@/lib/usa
 const STEP_OF: Record<UsageEndpoint, StepId> = {
   "analyze-match": "match",
   "report-chat": "match",
+  "proofread-resume": "resume",
   "triage-document": "resume",
   "tailor-resume": "resume",
   "verify-grounding": "resume",
   "repair-grounding": "resume",
+  "review-facts": "resume",
   "resume-chat": "resume",
   "generate-email": "letter",
 };
@@ -110,9 +112,7 @@ export default function StepNav({ hint }: { hint?: string }) {
           >
             <span aria-hidden>←</span>
             <span className="text-left">
-              <span className="block text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                Back
-              </span>
+              <span className="eyebrow block">Back</span>
               {prev.label}
             </span>
           </Link>
@@ -130,18 +130,14 @@ export default function StepNav({ hint }: { hint?: string }) {
             .filter((s) => (costs.byStep.get(s.id) ?? 0) > 0)
             .map((s) => (
               <div key={s.id} className="text-center leading-tight">
-                <dt className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                  {s.label}
-                </dt>
+                <dt className="eyebrow">{s.label}</dt>
                 <dd className="tabular-nums text-[var(--color-text-secondary)]">
                   {formatCost(costs.byStep.get(s.id) ?? 0)}
                 </dd>
               </div>
             ))}
           <div className="border-l border-[var(--color-border)] pl-4 text-center leading-tight">
-            <dt className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
-              Total
-            </dt>
+            <dt className="eyebrow">Total</dt>
             <dd className="tabular-nums font-semibold text-[var(--color-text-primary)]">
               {formatCost(costs.total)}
             </dd>

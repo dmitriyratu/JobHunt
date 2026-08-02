@@ -167,8 +167,11 @@ export default function ResumePdfPreview({
           canvas.height = Math.floor(viewport.height);
           canvas.style.width = "100%";
           canvas.style.height = "auto";
+          // --color-paper, not a theme surface: a rendered PDF page is opaque
+          // white whatever the app is wearing, so anything else here would only
+          // show as a rim around the canvas.
           canvas.className =
-            "block rounded-sm border border-[var(--color-border-subtle)] bg-white shadow-sm";
+            "block rounded-[var(--radius-sm)] border border-[var(--color-border-subtle)] bg-[var(--color-paper)] shadow-[var(--shadow-card)]";
           // The page's own size, so a click can be converted back to PDF points
           // without the handler knowing the render scale.
           canvas.dataset.page = String(n);
@@ -235,7 +238,7 @@ export default function ResumePdfPreview({
 
       {compiling && pdfUrl && (
         <div className="pointer-events-none sticky bottom-3 mt-3 flex justify-center">
-          <span className="flex items-center gap-2 rounded-full bg-[var(--color-surface-raised)]/95 px-3 py-1.5 shadow-md">
+          <span className="flex items-center gap-2 rounded-full bg-[var(--color-surface-raised)]/95 px-3 py-1.5 shadow-[var(--shadow-card)]">
             <span className="h-3 w-3 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
             <span className="text-[11px] text-[var(--color-text-secondary)]">Typesetting…</span>
           </span>
@@ -244,7 +247,7 @@ export default function ResumePdfPreview({
 
       {stale && !compiling && (
         <div className="pointer-events-none sticky bottom-3 mt-3 flex justify-center">
-          <span className="rounded-full bg-[var(--color-surface-raised)]/95 px-3 py-1.5 text-[11px] text-[var(--color-text-secondary)] shadow-md">
+          <span className="rounded-full bg-[var(--color-surface-raised)]/95 px-3 py-1.5 text-[11px] text-[var(--color-text-secondary)] shadow-[var(--shadow-card)]">
             Showing the last version that compiled
           </span>
         </div>

@@ -124,7 +124,7 @@ for (const tier of TIERS) {
       repaired: body.grounding.repaired,
       reverted: body.grounding.reverted,
       unverified: body.grounding.unverified,
-      skillsRemoved: body.grounding.skillsRemoved,
+      skillsRemoved: (body.grounding.removedSkills ?? []).length,
       seconds,
       usd:
         cost(body.usage.model, body.usage) +

@@ -24,10 +24,18 @@ type Props = {
   muted?: boolean;
 };
 
+/*
+ * Drawn in the paper tokens, not the theme's text colours.
+ *
+ * The sheet below is deliberately white in both themes — it is a preview of a
+ * printed page, and a resume does not turn dark because the app did. Greeking
+ * it in --color-text-* meant the bars went near-white on a white sheet in dark
+ * mode, and the whole preview vanished.
+ */
 const BAR = "rounded-[1px]";
-const INK = "bg-[var(--color-text-primary)]";
-const MID = "bg-[var(--color-text-secondary)]";
-const FAINT = "bg-[var(--color-text-muted)]";
+const INK = "bg-[var(--color-paper-ink)]";
+const MID = "bg-[var(--color-paper-ink-2)]";
+const FAINT = "bg-[var(--color-paper-ink-3)]";
 
 function Line({ w, tone = "faint", h = 2 }: { w: string; tone?: "ink" | "mid" | "faint"; h?: number }) {
   const bg = tone === "ink" ? INK : tone === "mid" ? MID : FAINT;
@@ -137,7 +145,7 @@ export default function TemplatePreview({ shape, muted = false }: Props) {
   return (
     <div
       aria-hidden
-      className={`relative overflow-hidden rounded-sm border border-[var(--color-border)] bg-white shadow-sm transition-opacity ${
+      className={`relative overflow-hidden rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-paper)] shadow-[var(--shadow-sm)] transition-opacity ${
         muted ? "opacity-55" : "opacity-100"
       }`}
       style={{ aspectRatio: "8.5 / 11" }}
@@ -165,7 +173,7 @@ export default function TemplatePreview({ shape, muted = false }: Props) {
                 IS the headings and their order, so those have to be legible.
                 Deliberately off-scale: at true proportion a section heading
                 would be under 3px here and unreadable. */}
-            <div className="text-[6.5px] font-bold uppercase leading-none tracking-[0.06em] text-[color:var(--color-text-primary)]">
+            <div className="text-[6.5px] font-bold uppercase leading-none tracking-[0.06em] text-[color:var(--color-paper-ink)]">
               {spec.title}
             </div>
             <div className={`${FAINT} h-[1px] w-full opacity-30`} />
@@ -177,7 +185,7 @@ export default function TemplatePreview({ shape, muted = false }: Props) {
       </div>
 
       {overflows && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[var(--color-paper)] to-transparent" />
       )}
     </div>
   );

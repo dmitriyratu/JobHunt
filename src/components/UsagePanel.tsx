@@ -16,12 +16,14 @@ type Props = {
 const BILLING_URL = "https://platform.openai.com/settings/organization/billing/overview";
 
 const STEP_LABEL: Record<UsageEntry["endpoint"], string> = {
+  "proofread-resume": "Resume proofread",
   "triage-document": "Document type",
   "analyze-match": "Match report",
   "report-chat": "Refine chat",
   "tailor-resume": "Resume",
   "verify-grounding": "Grounding check",
   "repair-grounding": "Grounding repair",
+  "review-facts": "Copied-field review",
   "resume-chat": "Resume chat",
   "generate-email": "Letter",
 };

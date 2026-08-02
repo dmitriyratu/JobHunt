@@ -49,7 +49,7 @@ export default function GenerateEmailModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:p-6"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--color-scrim)] p-3 sm:p-6"
       onClick={onClose}
     >
       <div

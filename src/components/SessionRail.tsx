@@ -34,9 +34,14 @@ function RefineButton({ collapsed }: { collapsed: boolean }) {
   if (!available) return null;
 
   return (
-    // h-16 including the border, matching StepNav exactly — the two top rules
-    // are adjacent at the bottom of the screen.
-    <div className="mt-auto flex h-16 items-center border-t border-[var(--color-border-subtle)] px-3">
+    // No top rule. StepNav draws one across the main column because it divides
+    // the page from its own footer; the rail is already a separate column with
+    // its own left edge, so a second rule here only cut the panel in half.
+    //
+    // Still h-16, and still matching StepNav's height exactly — the two footers
+    // sit side by side, and the button has to line up with the controls beside
+    // it even though the line between them is gone.
+    <div className="mt-auto flex h-16 items-center px-3">
       <button
         onClick={toggle}
         aria-expanded={open}
@@ -60,7 +65,7 @@ function RefineButton({ collapsed }: { collapsed: boolean }) {
             // No room for a number beside the icon at 40px, so it becomes a dot.
             <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--color-surface-raised)] bg-[var(--color-accent)]" />
           ) : (
-            <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-accent)] px-1.5 text-[11px] font-semibold text-white">
+            <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-accent)] px-1.5 text-[11px] font-semibold text-[var(--color-on-accent)]">
               {pendingCount}
             </span>
           ))}
@@ -127,11 +132,15 @@ export default function SessionRail() {
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
       const next = !prev;
-      try {
-        localStorage.setItem(COLLAPSED_KEY, next ? "1" : "0");
-      } catch {
-        // Non-fatal: the rail still toggles for this session.
-      }
+      // Persisted outside the updater: StrictMode invokes updaters twice to
+      // surface impurity, so a write in here runs twice per click.
+      queueMicrotask(() => {
+        try {
+          localStorage.setItem(COLLAPSED_KEY, next ? "1" : "0");
+        } catch {
+          // Non-fatal: the rail still toggles for this session.
+        }
+      });
       return next;
     });
   }, []);
@@ -155,13 +164,15 @@ export default function SessionRail() {
     >
       {collapsed ? (
         <>
-          <div className="flex flex-col items-center gap-2 px-3 py-4 border-b border-[var(--color-border-subtle)]">
+          {/* --app-header-h, not padding: this block's bottom rule is read as
+              one line with the app header's, immediately to its left. */}
+          <div className="flex h-[var(--app-header-h)] shrink-0 flex-col items-center justify-center gap-2 px-3 border-b border-[var(--color-border-subtle)]">
             <button
               onClick={toggleCollapsed}
               title="Expand applications"
               aria-label="Expand applications"
               aria-expanded={false}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-overlay)] hover:border-[var(--color-text-muted)] transition-colors"
+              className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-overlay)] hover:border-[var(--color-text-muted)] transition-colors"
             >
               <ChevronIcon pointsRight={false} />
             </button>
@@ -170,10 +181,14 @@ export default function SessionRail() {
               disabled={creating}
               title="New application"
               aria-label="New application"
-              className="btn-primary h-9 w-9 p-0 text-lg leading-none"
+              // Matches the collapse button above it exactly — same 36px box,
+              // same corner. These two sit stacked in a 68px rail, and any
+              // difference between them reads as a mistake rather than a
+              // hierarchy.
+              className="btn-primary h-9 w-9 shrink-0 rounded-[var(--radius-sm)] p-0 text-lg leading-none"
             >
               {creating ? (
-                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--color-on-accent)] border-t-transparent" />
               ) : (
                 "+"
               )}
@@ -207,7 +222,11 @@ export default function SessionRail() {
                         fall back to the first letter of the card's own title —
                         an empty tile would look unclickable. */}
                     {company ? (
-                      <CompanyLogo company={company} variant="tile" />
+                      <CompanyLogo
+                        company={company}
+                        domain={session.detectedCompanyDomain}
+                        variant="tile"
+                      />
                     ) : (
                       <span className="text-sm font-semibold text-[var(--color-text-muted)]">
                         {title.trim().charAt(0).toUpperCase() || "?"}
@@ -222,24 +241,47 @@ export default function SessionRail() {
         </>
       ) : (
         <>
-          <div className="flex items-center justify-between gap-2 px-4 pt-5 pb-1">
-            <h2 className="font-medium text-sm">Applications</h2>
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-[var(--color-text-muted)]">
-                {hydrated ? sessions.length : ""}
-              </span>
-              <button
-                onClick={toggleCollapsed}
-                title="Collapse applications"
-                aria-label="Collapse applications"
-                aria-expanded
-                className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-primary)] transition-colors"
-              >
-                <ChevronIcon pointsRight />
-              </button>
+          {/*
+            Same height and rule as the collapsed state, and as the app header
+            beside it — expanding the rail shouldn't move the line.
+
+            The new-application button lives up here rather than below the rule,
+            for the same reason the collapsed state stacks its two buttons: the
+            band is a fixed --app-header-h, and a lone title left most of it
+            empty. Bringing the button up fills it and removes a second rule
+            that used to sit a few pixels under the first.
+          */}
+          <div className="flex h-[var(--app-header-h)] shrink-0 flex-col justify-center gap-2 border-b border-[var(--color-border-subtle)] px-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="font-medium text-sm">Applications</h2>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-[var(--color-text-muted)]">
+                  {hydrated ? sessions.length : ""}
+                </span>
+                <button
+                  onClick={toggleCollapsed}
+                  title="Collapse applications"
+                  aria-label="Collapse applications"
+                  aria-expanded
+                  className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-primary)] transition-colors"
+                >
+                  <ChevronIcon pointsRight />
+                </button>
+              </div>
             </div>
+            <button
+              onClick={handleNewCollapsed}
+              disabled={creating}
+              // The line that used to sit under this button as body copy. There
+              // is no room for it in a fixed band, and it is a first-run hint
+              // rather than something you re-read.
+              title="Your resume carries over; the job details start fresh."
+              className="btn-primary w-full py-2 text-sm"
+            >
+              {creating ? "Creating…" : "+ New application"}
+            </button>
           </div>
-          <SessionList />
+          <SessionList showNewButton={false} />
           <RefineButton collapsed={false} />
         </>
       )}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import SourceLink from "./SourceLink";
 import type { MatchReport } from "@/types";
 
 /**
@@ -44,52 +45,22 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 /**
  * A job URL is far too long to sit in a right-aligned row — truncating it just
- * shows a meaningless prefix. Show the host instead and keep the full URL on
- * the link, which is both shorter and more useful than a clipped string.
+ * shows a meaningless prefix, so `SourceLink` shows the host and keeps the full
+ * URL on the link.
+ *
+ * The source and its size go on separate lines. Kept inline, the narrow column
+ * truncated the whole value and the character count — the part that says the
+ * posting is sent in full — was the first thing to disappear.
  */
 function JobSourceValue({ jobSource, charCount }: { jobSource: string; charCount: number }) {
   if (!jobSource) return <>—</>;
 
-  let url: URL | null = null;
-  try {
-    const parsed = new URL(jobSource);
-    if (parsed.protocol === "http:" || parsed.protocol === "https:") url = parsed;
-  } catch {
-    // Not a URL — a filename or pasted text.
-  }
-
-  // The source and its size go on separate lines. Kept inline, the narrow
-  // column truncated the whole value and the character count — the part that
-  // says the posting is sent in full — was the first thing to disappear.
-  const meta = (
-    <span className="block text-[var(--color-text-muted)]">
-      {charCount.toLocaleString()} chars, sent in full
-    </span>
-  );
-
-  if (!url) {
-    return (
-      <>
-        <span className="block truncate" title={jobSource}>
-          {jobSource}
-        </span>
-        {meta}
-      </>
-    );
-  }
-
   return (
     <>
-      <a
-        href={url.href}
-        target="_blank"
-        rel="noopener noreferrer"
-        title={url.href}
-        className="block truncate text-[var(--color-accent)] hover:underline"
-      >
-        {url.hostname.replace(/^www\./, "")} ↗
-      </a>
-      {meta}
+      <SourceLink source={jobSource} className="block truncate" />
+      <span className="block text-[var(--color-text-muted)]">
+        {charCount.toLocaleString()} chars, sent in full
+      </span>
     </>
   );
 }
@@ -110,13 +81,27 @@ export default function ContextRecap({
 
   // The line answers "which application am I in?", which is the only thing
   // worth knowing at a glance. Shown open or closed, so the header's height
-  // never changes — the action beside it in the top bar is sized to match, and
-  // a header that grew on expand dragged the button's height with it.
+  // never changes — the action beside it in the row is sized to match, and a
+  // header that grew on expand would leave the two mismatched.
   const summary = [jobTitle, detectedCompany || companyName].map((s) => s.trim()).filter(Boolean);
 
   return (
-    <div className="glass-panel p-5">
-      <div className="flex items-center justify-between gap-2">
+    /*
+     * Collapsed, the panel *is* --recap-h — the height sits on this element
+     * rather than on the row inside it, so `border-box` swallows the hairline
+     * whatever it happens to render as. That matters: at a 1.5 device pixel
+     * ratio Chrome draws the 1px border as 0.667px, so subtracting a literal
+     * 2px from the inner row missed the button by a fraction on exactly the
+     * displays most people have.
+     *
+     * Expanded, the height comes off and normal padding takes over; the two
+     * stay aligned at the top, which is all that is left to match once the
+     * card is taller than the button by design.
+     */
+    <div className={`glass-panel px-5 ${open ? "pt-4 pb-5" : "h-[var(--recap-h)]"}`}>
+      <div
+        className={`flex items-center justify-between gap-2 ${open ? "" : "h-full"}`}
+      >
         <button
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
@@ -155,8 +140,8 @@ export default function ContextRecap({
       </div>
 
       {!open ? null : (
-        <>
-      <dl className="mt-4 grid grid-cols-[5rem_minmax(0,1fr)] sm:grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 sm:gap-x-4 gap-y-3 text-xs items-baseline">
+        <div className="mt-4">
+      <dl className="grid grid-cols-[5rem_minmax(0,1fr)] sm:grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 sm:gap-x-4 gap-y-3 text-xs items-baseline">
         {jobTitle && <Row label="Role">{jobTitle}</Row>}
 
         {detectedCompany ? (
@@ -215,7 +200,7 @@ export default function ContextRecap({
         Everything above is passed on in full, plus the recipient, the company and any notes you
         add below.
       </p>
-        </>
+        </div>
       )}
     </div>
   );

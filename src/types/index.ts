@@ -132,6 +132,11 @@ export type Grounded = {
  * `dropped` keeps a bullet in the data with its sources intact rather than
  * deleting it. The rendered document omits it, so this record is the only thing
  * that knows it existed — and the only way the chat can offer to put it back.
+ *
+ * Set by the page-fitting pass, never by the writer. Asking the model to hand
+ * back everything it rejected cost output tokens proportional to the whole
+ * document and was ignored outright at volume; what it left behind is derived
+ * from its citations instead. See `omitted`.
  */
 export type ResumeBullet = Grounded & {
   id: string;
@@ -151,10 +156,19 @@ export type ResumeSkillGroup = {
 };
 
 /**
- * Which document is being produced. See @/lib/documentShape — the shape picks
- * a fixed list of sections, their titles and their order.
+ * Which hiring convention the document is written to.
+ *
+ * Not a visual theme — every shape renders through the same LaTeX template.
+ * What a shape selects is the section skeleton: which sections may exist, what
+ * they are titled, and what order they print in. See documentShape.ts.
  */
-export type DocumentShape = "resume" | "cv";
+export type DocumentShape =
+  | "resume"
+  | "cv"
+  | "academic"
+  | "federal"
+  | "legal"
+  | "creative";
 
 /** How a section's content is laid out. */
 export type SectionLayout = "prose" | "keywords" | "entries" | "list";
@@ -178,6 +192,22 @@ export type ResumeEntry = {
   /** Display strings exactly as the source wrote them, e.g. "Mar 2021". */
   startDate: string;
   endDate: string;
+  /**
+   * 0 to 10: how much this entry argues for the posting it was tailored to,
+   * as judged by the writer while it was writing.
+   *
+   * This is what the page-fitting pass cuts by. It used to be inferred from
+   * word overlap between the entry and the job description, which is a bad
+   * proxy dressed up as a cheap one — it scored an open-source static analyzer
+   * at zero on a posting that listed open-source work as a plus, because the
+   * words did not happen to match. The model has already read both documents
+   * and ranked the bullets inside each entry; asking it for one more number
+   * costs nothing and replaces a guess with a judgement.
+   *
+   * Optional because documents generated before it existed have no ranking, and
+   * discarding those would be worse than falling back.
+   */
+  relevance?: number;
   bullets: ResumeBullet[];
 };
 
@@ -204,15 +234,48 @@ export type ResumeSection = {
  */
 export type ResumeDraft = {
   sections: ResumeSection[];
+  /** Source lines nothing on the page cites. See TailoredResume.omitted. */
+  omitted?: string[];
+  /** Roles the page-fitting pass reduced to a single line. */
+  collapsed?: CollapsedEntry[];
 };
 
 export type TailoredResume = {
   shape: DocumentShape;
   /** Ordered to match the shape's spec; sections with no content are dropped. */
   sections: ResumeSection[];
-  /** Null for a CV, which is never trimmed to a page count. */
+  /** Null for the shapes that are never trimmed to a page count. */
   pageTarget: ResumePageTarget | null;
+  /**
+   * Lines of the uploaded document that nothing on the page cites.
+   *
+   * The record of what this tailoring left behind, derived by diffing the
+   * source against every citation rather than reported by the model. The chat
+   * reads it to offer material back.
+   */
+  omitted?: string[];
+  /**
+   * Entries cut whole to make the page target, kept so they can print as one
+   * "Earlier:" line instead of vanishing.
+   */
+  collapsed?: CollapsedEntry[];
   generatedAt: string;
+};
+
+/** A role reduced to a single line: title, employer, and when. */
+export type CollapsedEntry = {
+  /**
+   * The section it was collapsed out of, so its one line prints at the foot of
+   * that section rather than wherever the last dated block happens to be. The
+   * first version attached them all to whichever entries section printed last,
+   * which on a resume is Education — so six collapsed jobs appeared under the
+   * degrees.
+   */
+  sectionKey: string;
+  heading: string;
+  organization: string;
+  startDate: string;
+  endDate: string;
 };
 
 export type ResumePageTarget = 1 | 2;
@@ -252,6 +315,41 @@ export type ResumeChatMessage = ChatMessage & {
 
 export type JobSourceType = "file" | "url" | "text" | "";
 
+/**
+ * One suspected typo in the uploaded document, offered for a decision.
+ *
+ * `wrong` is a token that really occurs in the extracted text and `right` is
+ * within two edits of it — both enforced in proofread.verifySuggestions, so a
+ * suggestion that reached here is applicable by string replacement and cannot
+ * be a rewrite wearing a spellcheck's clothes.
+ */
+export type SpellingSuggestion = {
+  /** The token as the document spells it. */
+  wrong: string;
+  /** What it should be. */
+  right: string;
+  /** A few words on why, from the model. Empty when it offered none. */
+  note: string;
+  /** How many times `wrong` occurs. Accepting fixes all of them. */
+  count: number;
+};
+
+/**
+ * One thing the document names two different ways.
+ *
+ * Every entry in `variants` occurs verbatim in the uploaded text and `preferred`
+ * is one of them — both enforced in consistency.verifyVariants — so accepting is
+ * a replacement between forms the candidate already wrote, never a new name.
+ */
+export type NameVariant = {
+  /** Each spelling as it appears, and how often. Most frequent first. */
+  variants: { text: string; count: number }[];
+  /** The one to standardise on. Always present in `variants`. */
+  preferred: string;
+  /** A few words on what it is, from the model. */
+  note: string;
+};
+
 export type Session = {
   // Metadata — owned by the store, never written directly by callers.
   id: string;
@@ -267,6 +365,20 @@ export type Session = {
   // Source material
   resumeText: string;
   resumeFilename: string;
+  /**
+   * Typos found in resumeText at upload, still awaiting a decision.
+   *
+   * Stored rather than held in the upload component so a reload does not throw
+   * the list away — it is the only chance to fix the source before every later
+   * check starts treating it as ground truth. Accepting or rejecting removes the
+   * entry, so an empty list means "nothing outstanding", not "never checked".
+   */
+  spellingSuggestions: SpellingSuggestion[];
+  /**
+   * Institutions and programmes the uploaded document spells more than one way,
+   * still awaiting a decision. Same lifecycle as spellingSuggestions.
+   */
+  nameVariants: NameVariant[];
   jobDescription: string;
   jobSource: string;
   jobSourceType: JobSourceType;
@@ -310,7 +422,7 @@ export type Session = {
   recommendedShapeConfident: boolean;
   /** Free-text steer for the tailoring, the resume's answer to letterContext. */
   resumeEmphasis: string;
-  /** Ignored for a CV, which is never trimmed to a page count. */
+  /** Ignored for the shapes that are never trimmed to a page count. */
   resumePageTarget: ResumePageTarget;
 
   // Analysis

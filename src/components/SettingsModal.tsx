@@ -1,14 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  isProfileUsable,
-  maskApiKey,
-  type AppSettings,
-  type ResumeProfile,
-} from "@/lib/settings";
+import { isProfileUsable, maskApiKey, type AppSettings } from "@/lib/settings";
 import { AdminKeyGuide, ApiKeyGuide } from "./KeyGuide";
-import ProfileFields from "./ProfileFields";
 import UsagePanel from "./UsagePanel";
 
 type Props = {
@@ -16,13 +10,19 @@ type Props = {
   onClose: () => void;
   settings: AppSettings;
   onSave: (settings: AppSettings) => void;
+  /** Opens the profile dialog, which used to be this one's first tab. */
+  onOpenProfile: () => void;
 };
 
 /**
- * "Your details" first: it is the tab you come back to. The key is entered once
- * and then forgotten, and spend is something you check rather than change.
+ * Two tabs, both about the account rather than about you.
+ *
+ * "Your details" used to lead this dialog and is now its own — see ProfileModal.
+ * What is left shares one lifecycle: connect a key once, then occasionally look
+ * at what it has cost. A pointer to the profile stays at the foot of Setup,
+ * because "where did my details go" is a fair question exactly once.
  */
-export type Tab = "details" | "setup" | "usage";
+export type Tab = "setup" | "usage";
 
 function EyeIcon({ off }: { off: boolean }) {
   return (
@@ -44,11 +44,11 @@ export default function SettingsModal({
   onClose,
   settings,
   onSave,
+  onOpenProfile,
 }: Props) {
-  const [tab, setTab] = useState<Tab>("details");
+  const [tab, setTab] = useState<Tab>("setup");
   const [draftKey, setDraftKey] = useState(settings.apiKey);
   const [draftAdminKey, setDraftAdminKey] = useState(settings.adminApiKey);
-  const [draftProfile, setDraftProfile] = useState<ResumeProfile>(settings.profile);
   const [showKey, setShowKey] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [editingKey, setEditingKey] = useState(!settings.apiKey);
@@ -59,9 +59,8 @@ export default function SettingsModal({
     if (!open) return;
     setDraftKey(settings.apiKey);
     setDraftAdminKey(settings.adminApiKey);
-    setDraftProfile(settings.profile);
     setEditingKey(!settings.apiKey);
-    setTab("details");
+    setTab("setup");
   }, [open, settings]);
 
   useEffect(() => {
@@ -79,7 +78,9 @@ export default function SettingsModal({
     onSave({
       apiKey: draftKey.trim(),
       adminApiKey: draftAdminKey.trim(),
-      profile: draftProfile,
+      // Carried through untouched. This dialog no longer edits the profile, but
+      // it still writes the whole settings blob, so omitting it would erase it.
+      profile: settings.profile,
       ...next,
     });
     setSavedFlash(true);
@@ -91,7 +92,7 @@ export default function SettingsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-2 sm:p-6"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--color-scrim)] p-2 sm:p-6"
       onClick={onClose}
     >
       <div
@@ -108,9 +109,8 @@ export default function SettingsModal({
           </button>
         </div>
 
-        {/* Separate jobs, separate tabs. Setting up a key, entering the details
-            that head your resume, and watching what you've spent were competing
-            for the same scroll and none of them read clearly. */}
+        {/* Separate jobs, separate tabs. Setting up a key and watching what
+            you've spent were competing for the same scroll. */}
         <div
           role="tablist"
           aria-label="Settings sections"
@@ -118,7 +118,6 @@ export default function SettingsModal({
         >
           {(
             [
-              ["details", "Your details"],
               ["setup", "Setup"],
               ["usage", "What you've spent"],
             ] as [Tab, string][]
@@ -135,7 +134,7 @@ export default function SettingsModal({
               }`}
             >
               {label}
-              {((id === "setup" && !hasKey) || (id === "details" && !profileReady)) && (
+              {id === "setup" && !hasKey && (
                 <span
                   className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--color-warning)] align-middle"
                   title="Not set up yet"
@@ -146,30 +145,7 @@ export default function SettingsModal({
         </div>
 
         <div className="p-4 sm:p-5">
-          {tab === "details" ? (
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-medium">The header on your resumes</h3>
-                <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-secondary)]">
-                  These sit at the top of every resume JobHunt generates. We fill them in
-                  from your first upload, but PDF text extraction mangles phone numbers and
-                  links often enough that it&rsquo;s worth a look. Correct anything wrong
-                  here and it stays fixed for every application.
-                </p>
-              </div>
-
-              <ProfileFields value={draftProfile} onChange={setDraftProfile} />
-
-              <p className="text-xs text-[var(--color-text-muted)]">
-                Saved only in this browser, and kept out of every AI request except the one
-                that writes your resume.
-              </p>
-
-              <button onClick={() => save({})} className="btn-primary w-full">
-                {savedFlash ? "Saved!" : "Save details"}
-              </button>
-            </div>
-          ) : tab === "setup" ? (
+          {tab === "setup" ? (
             <div className="space-y-4">
               {hasKey && !editingKey ? (
                 <>
@@ -304,6 +280,42 @@ export default function SettingsModal({
                   </button>
                 </div>
               </details>
+
+              {/* Where the "Your details" tab went. Kept because someone who
+                  filled it in here once will come back here looking for it, and
+                  a dead end is worse than a redirect. */}
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenProfile();
+                }}
+                className="flex w-full items-center justify-between gap-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3 text-left transition-colors hover:border-[var(--color-text-muted)]"
+              >
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-secondary)]">
+                    Your details
+                    {!profileReady && (
+                      <span
+                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-warning)]"
+                        title="Not filled in yet"
+                      />
+                    )}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-[var(--color-text-muted)]">
+                    The name and contact block at the top of every resume.
+                  </span>
+                </span>
+                <svg
+                  className="h-3.5 w-3.5 shrink-0 text-[var(--color-text-muted)]"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  aria-hidden
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
             </div>
           ) : (
             <UsagePanel adminApiKey={settings.adminApiKey} />

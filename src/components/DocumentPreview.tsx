@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { wordRegExp } from "@/lib/proofread";
 
 type Props = {
   cleanedText: string;
@@ -8,6 +9,14 @@ type Props = {
   fileName?: string;
   isPdf?: boolean;
   externalUrl?: string;
+  /**
+   * A word to find in the cleaned text and scroll to.
+   *
+   * The proofread list names a word; "where is it" is the question every row
+   * raises, and the answer is a hundred lines up in a scrolling box. Setting
+   * this marks every occurrence and brings the first into view.
+   */
+  highlight?: string;
 };
 
 export default function DocumentPreview({
@@ -16,11 +25,13 @@ export default function DocumentPreview({
   fileName,
   isPdf,
   externalUrl,
+  highlight,
 }: Props) {
   const hasOriginal = Boolean(fileUrl || externalUrl);
   const [tab, setTab] = useState<"clean" | "original">("clean");
   const [expanded, setExpanded] = useState(false);
   const showClean = tab === "clean" || !hasOriginal;
+  const markRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!expanded) return;
@@ -30,6 +41,21 @@ export default function DocumentPreview({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [expanded]);
+
+  // A highlight is only visible on the cleaned text — the original is a PDF the
+  // app cannot annotate — so asking for one switches to the tab that can show it.
+  useEffect(() => {
+    if (highlight) setTab("clean");
+  }, [highlight]);
+
+  // Centred rather than merely scrolled into view: the box is short, and a match
+  // pinned to its top edge reads as the first line of the document.
+  useEffect(() => {
+    if (!highlight) return;
+    markRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [highlight, expanded]);
+
+  const cleanBody = highlight ? marked(cleanedText, highlight, markRef) : cleanedText;
 
   return (
     <div className="mt-4">
@@ -64,7 +90,7 @@ export default function DocumentPreview({
 
       {showClean ? (
         <pre className="text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap max-h-40 overflow-y-auto bg-[var(--color-surface)] rounded-lg p-3 border border-[var(--color-border-subtle)]">
-          {cleanedText}
+          {cleanBody}
         </pre>
       ) : externalUrl ? (
         <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 text-center">
@@ -117,7 +143,7 @@ export default function DocumentPreview({
 
       {expanded && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-6"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-scrim)] p-3 sm:p-6"
           onClick={() => setExpanded(false)}
         >
           <div
@@ -133,13 +159,50 @@ export default function DocumentPreview({
               </button>
             </div>
             <pre className="flex-1 overflow-y-auto text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap p-5">
-              {cleanedText}
+              {cleanBody}
             </pre>
           </div>
         </div>
       )}
     </div>
   );
+}
+
+/**
+ * The text with every occurrence of a word wrapped for the eye.
+ *
+ * Every occurrence, not just the first, because accepting a fix changes all of
+ * them — showing one would misrepresent what the button does. The ref goes on
+ * the first so there is something to scroll to.
+ */
+function marked(text: string, word: string, firstRef: React.Ref<HTMLElement>): ReactNode {
+  const pattern = wordRegExp(word, "g");
+  const out: ReactNode[] = [];
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let index = 0;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > last) out.push(text.slice(last, match.index));
+    out.push(
+      <mark
+        key={index}
+        ref={index === 0 ? firstRef : undefined}
+        className="rounded-sm bg-[var(--color-warning-muted)] px-0.5 text-[var(--color-text-primary)] ring-1 ring-[var(--color-warning)]/50"
+      >
+        {match[0]}
+      </mark>
+    );
+    last = match.index + match[0].length;
+    index++;
+    // A zero-length match would spin forever; the pattern cannot produce one,
+    // but the loop should not depend on that being true.
+    if (match[0].length === 0) pattern.lastIndex++;
+  }
+
+  if (!index) return text;
+  out.push(text.slice(last));
+  return out;
 }
 
 function tabClass(active: boolean) {

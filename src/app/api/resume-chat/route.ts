@@ -145,6 +145,33 @@ function formatProvenance(resume: TailoredResume | null): string {
     }
   }
 
+  // Roles reduced to a single "Earlier:" line, so a request to bring one back
+  // has something to bring back.
+  for (const role of resume.collapsed ?? []) {
+    const when = [role.startDate, role.endDate].filter(Boolean).join(" - ");
+    lines.push(
+      `- ${role.heading}, ${role.organization}${when ? ` (${when})` : ""}` +
+        ` [COLLAPSED TO FIT, printed as one line with no bullets]`
+    );
+  }
+
+  // Material from the uploaded document that nothing on the page draws on,
+  // derived by diffing the source against every citation. This is what makes
+  // "what did you leave out?" and "put the Kafka work back" answerable — the
+  // .tex holds only what survived, and the model that wrote it is long gone.
+  const omitted = (resume.omitted ?? []).filter((l) => l.trim());
+  if (omitted.length) {
+    lines.push(
+      `\n[NOT IN THE DOCUMENT — lines from the uploaded resume that nothing on ` +
+        `the page uses. Available to add back on request; still subject to the ` +
+        `grounding rule, so anything drawn from one must cite it.]`
+    );
+    // Capped: a nine-page source leaves dozens behind, and the whole point of
+    // this block is to be readable next to the document itself.
+    for (const line of omitted.slice(0, 40)) lines.push(`- ${line}`);
+    if (omitted.length > 40) lines.push(`- …and ${omitted.length - 40} more`);
+  }
+
   return lines.join("\n");
 }
 

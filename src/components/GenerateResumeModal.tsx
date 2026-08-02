@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { allowsPageTarget, SHAPE_DESCRIPTION, SHAPE_LABEL } from "@/lib/documentShape";
+import { allowsPageTarget, SHAPE_DEFS, SHAPE_ORDER } from "@/lib/documentShape";
 import { isProfileUsable, type ResumeProfile } from "@/lib/settings";
 import ProfileFields from "./ProfileFields";
 import TemplatePreview from "./TemplatePreview";
@@ -17,19 +17,6 @@ import type { DocumentShape, ResumePageTarget } from "@/types";
  * and the steer — which is the right order, because the format is the only one
  * of the three that has a recommendation attached and is worth pausing on.
  */
-
-const SHAPES: DocumentShape[] = ["resume", "cv"];
-
-const LENGTH_NOTE: Record<DocumentShape, string> = {
-  resume: "One to two pages",
-  cv: "Runs as long as it needs to",
-};
-
-/** For the confirm button, where the full label reads as a mouthful. */
-const SHORT_LABEL: Record<DocumentShape, string> = {
-  resume: "resume",
-  cv: "CV",
-};
 
 const STEPS = ["Your details", "What to emphasise", "Format"] as const;
 
@@ -105,7 +92,7 @@ export default function GenerateResumeModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:p-6"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--color-scrim)] p-3 sm:p-6"
       onClick={onClose}
     >
       <div
@@ -116,7 +103,7 @@ export default function GenerateResumeModal({
         // Capped and column-flexed so the step body scrolls internally and the
         // Back/Continue footer stays put. The format step is tall enough to
         // push its own footer off a laptop screen otherwise.
-        className="glass-panel my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col p-5 sm:p-6"
+        className="glass-panel my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col p-5 sm:p-6"
       >
         {/* Step rail — three short answers, so the count is worth showing up
             front rather than revealing one surprise at a time. */}
@@ -134,7 +121,7 @@ export default function GenerateResumeModal({
                 <span
                   className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${
                     i <= step
-                      ? "bg-[var(--color-accent)] text-white"
+                      ? "bg-[var(--color-accent)] text-[var(--color-on-accent)]"
                       : "bg-[var(--color-surface-overlay)] text-[var(--color-text-muted)]"
                   }`}
                 >
@@ -168,7 +155,16 @@ export default function GenerateResumeModal({
                 extraction mangles phone numbers and links.
               </p>
             </div>
-            <ProfileFields value={profile} onChange={onProfileChange} idPrefix="gen" />
+            {/* Fed the shape this generation is heading for, so the link slots
+                match the document. `choice` is already the recommendation until
+                the format step overrides it, which is the best guess available
+                two steps before that step is reached. */}
+            <ProfileFields
+              value={profile}
+              onChange={onProfileChange}
+              shape={choice}
+              idPrefix="gen"
+            />
             {!profileReady && (
               <p className="text-xs text-[var(--color-warning)]">
                 A name and at least one way to reach you are required.
@@ -218,7 +214,8 @@ export default function GenerateResumeModal({
               </div>
             ) : (
               <p className="text-[11px] text-[var(--color-text-muted)]">
-                A CV runs as long as it needs to. Nothing is cut for space.
+                {SHAPE_DEFS[choice].label} runs as long as it needs to. Nothing is cut for
+                space.
               </p>
             )}
           </div>
@@ -259,15 +256,20 @@ export default function GenerateResumeModal({
                 <p className="text-[11px] leading-snug text-[var(--color-text-secondary)]">
                   <span className="font-medium text-[var(--color-accent)]">
                     {recommendedConfident ? "Recommended" : "Recommended (close call)"}:{" "}
-                    {SHAPE_LABEL[recommended]}
+                    {SHAPE_DEFS[recommended].label}
                   </span>
                   {recommendedReason && <> — {recommendedReason}</>}
                 </p>
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {SHAPES.map((shape) => {
+            {/* Three across rather than two. At six shapes a two-column grid
+                runs to three rows and the last one falls below the fold, which
+                makes the specialist formats read as an afterthought — they are
+                the whole reason someone is on this step. */}
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+              {SHAPE_ORDER.map((shape) => {
+                const def = SHAPE_DEFS[shape];
                 const isChoice = choice === shape;
                 return (
                   <button
@@ -275,40 +277,45 @@ export default function GenerateResumeModal({
                     type="button"
                     aria-pressed={isChoice}
                     onClick={() => setSelected(shape)}
-                    className={`rounded-xl border p-3 text-left transition-colors ${
+                    className={`flex flex-col rounded-xl border p-2.5 text-left transition-colors ${
                       isChoice
                         ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)]"
                         : "border-[var(--color-border)] hover:border-[var(--color-text-muted)]"
                     }`}
                   >
-                    <div className="mb-2.5 flex items-start justify-between gap-2">
-                      <span
-                        className={`text-xs font-medium ${
-                          isChoice
-                            ? "text-[var(--color-accent)]"
-                            : "text-[var(--color-text-secondary)]"
-                        }`}
-                      >
-                        {SHAPE_LABEL[shape]}
-                      </span>
+                    {/* The pill sits above the label rather than beside it: at
+                        a third of the row there is no width to share, and the
+                        label wraps to two lines under a floated badge. */}
+                    <div className="mb-1.5 flex min-h-[14px] items-center">
                       {recommended === shape && (
-                        <span className="shrink-0 rounded-full bg-[var(--color-accent)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+                        <span className="rounded-full bg-[var(--color-accent)] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-[var(--color-on-accent)]">
                           Recommended
                         </span>
                       )}
                     </div>
+                    <span
+                      className={`mb-2 text-[11px] font-medium leading-snug ${
+                        isChoice
+                          ? "text-[var(--color-accent)]"
+                          : "text-[var(--color-text-secondary)]"
+                      }`}
+                    >
+                      {def.label}
+                    </span>
 
-                    {/* Constrained so both sheets are the same size regardless
-                        of how many sections their shape declares. */}
-                    <div className="mx-auto max-w-[186px]">
+                    {/* Constrained so every sheet is the same size regardless
+                        of how many sections its shape declares. */}
+                    <div className="mx-auto w-full max-w-[150px]">
                       <TemplatePreview shape={shape} muted={!isChoice} />
                     </div>
 
-                    <p className="mt-2.5 text-[11px] leading-snug text-[var(--color-text-muted)]">
-                      {SHAPE_DESCRIPTION[shape]}
+                    <p className="mt-2 text-[10px] leading-snug text-[var(--color-text-muted)]">
+                      {def.description}
                     </p>
-                    <p className="mt-1 text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                      {LENGTH_NOTE[shape]}
+                    {/* Pushed to the bottom so the length line sits on one
+                        baseline across a row of unequal descriptions. */}
+                    <p className="mt-auto pt-1.5 text-[9px] uppercase tracking-wide text-[var(--color-text-muted)]">
+                      {def.lengthNote}
                     </p>
                   </button>
                 );
@@ -331,7 +338,7 @@ export default function GenerateResumeModal({
             disabled={!profileReady}
             className="btn-primary flex-1 py-2 text-sm"
           >
-            {last ? `Generate ${SHORT_LABEL[choice]}` : "Continue"}
+            {last ? `Generate ${SHAPE_DEFS[choice].short}` : "Continue"}
           </button>
         </div>
       </div>

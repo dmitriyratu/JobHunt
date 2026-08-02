@@ -59,13 +59,13 @@ export default function MobileSessionDrawer() {
 
       {open && (
         <div
-          className="lg:hidden fixed inset-0 z-50 flex justify-end bg-black/40"
+          className="lg:hidden fixed inset-0 z-50 flex justify-end bg-[var(--color-scrim)]"
           onClick={close}
         >
           <div
             // h-dvh, not h-screen: on iOS Safari `100vh` counts the collapsing
             // address bar, so a full-height sheet would overflow the visible area.
-            className="flex h-dvh w-[88%] max-w-[360px] flex-col bg-[var(--color-surface-raised)] shadow-xl"
+            className="flex h-dvh w-[88%] max-w-[360px] flex-col bg-[var(--color-surface-raised)] shadow-[var(--shadow-pop)]"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
