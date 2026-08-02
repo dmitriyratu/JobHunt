@@ -75,7 +75,9 @@ SKILLS ARE KEYWORDS, NOT PROSE. A keywords section exists to be skimmed in three
 - Every entry is 1 to 4 words. "Pediatric Hematology and Oncology" is fine. "Immune checkpoint therapy in pediatric and adolescent lymphomas" is a research topic, not a skill: leave it out.
 - Nothing that is a sentence, a paper title, a job title, an employer, an award, a committee, or a volunteer post belongs here. Those belong under one of the section keys above, or nowhere.
 - 3 to 5 groups. Category labels are at most 20 characters, ideally one word ("Clinical", "Research", "Languages", "Tools", "Credentials").
-- At most 8 entries per group, and at most 24 in total. If the source lists more, keep the ones this posting cares about and drop the rest: an exhaustive keyword list is worse than a selective one. Keywords are the one place you may drop material freely.
+- ORDER IS THE RANKING, and it is the main thing you do here. Within every group put the skills this posting cares about first, and order the groups the same way. This works exactly like the bullet ordering below, and it is load-bearing for the same reason: if the document runs long the app thins the grid from the END of each group, so what you put last is what goes.
+- Reordering is almost always the right move, not dropping. A skill the posting does not name is not noise — postings are written by people who assume the reader can join up "cloud infrastructure" and "AWS, Terraform, EKS", and a keyword search cannot. A skill that is off the page cannot be matched by anyone, for this role or a later one at the same company. Put it late in its group instead.
+- At most 10 entries per group, and at most 36 in total. If the source lists more, first regroup and relabel so related skills share a row; drop only what this posting could not possibly have a use for, weakest last. A skill this posting names is never dropped.
 - Never add a skill the source document does not already claim.
 - "source" is the same skills the document originally listed, in one group with an empty label.
 
@@ -1030,7 +1032,7 @@ export async function POST(request: NextRequest) {
         trimmed: fitted.trimmed,
         collapsed: fitted.collapsed,
         droppedSections: fitted.droppedSections,
-        skillsTrimmed: fitted.skillsTrimmed,
+        skillsRemoved: fitted.skillsRemoved,
         summaryShortened: fitted.summaryShortened,
         fits: fitted.fits,
       },

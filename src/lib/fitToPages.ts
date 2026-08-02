@@ -66,6 +66,17 @@ const MAX_ROUNDS = 8;
 const FLOOR = 1;
 
 /**
+ * How far the keyword grid is thinned, a step at a time.
+ *
+ * Each number is how many items a group may keep; the page is re-measured
+ * between steps and the ladder stops the moment the document fits, so a
+ * document a few lines over loses a few keywords rather than most of them.
+ * Five is roughly where a row stops being a row, which is why the ladder ends
+ * there and the next thing to give is a bullet.
+ */
+const SKILL_KEEP_LADDER = [8, 6, 5];
+
+/**
  * Sections whose entries are never collapsed, however little they argue.
  *
  * Relevance is measured as overlap with the posting, and a degree has almost
@@ -169,32 +180,54 @@ function shortenSummary(resume: TailoredResume): boolean {
 }
 
 /**
- * Removes skills the posting never asks for.
+ * Thins the keyword grid from the tail of each group.
  *
- * The keywords grid is four or five rows and costs as much of a one-page resume
- * as three bullets, and the fitter could not touch it — so a nine page source
- * at a one page target lost its Kafka bullet while a Mobile row nobody asked
- * for kept its place. The prompt already calls keywords "the one place you may
- * drop material freely"; this is the fitter finally able to act on that.
+ * WHY NOT BY WHAT THE POSTING NAMES
+ * This used to keep only the skills whose words appear in the job description
+ * and drop everything else in one pass. As a way of deciding what a skill is
+ * worth, string overlap is far too blunt: a posting asking for "cloud
+ * infrastructure and IaC" names none of AWS, Terraform, EKS or Kubernetes, so a
+ * resume aimed squarely at it came back listing one of the four. Postings are
+ * written by people who assume the reader can join those up, and a keyword grid
+ * is read by people and by search engines who cannot. Dropping a skill also
+ * costs more than it looks: it is gone from every keyword search anyone runs
+ * against the document afterwards, including for a different role.
  *
- * A skill the posting mentions is never dropped, and every group keeps at least
- * one item, so the grid thins rather than developing holes.
+ * WHAT DECIDES IT INSTEAD
+ * Order. The writer emits each group with the skills this posting cares about
+ * first — the same convention the bullets already use, and load-bearing for the
+ * same reason — so the tail of a group is what argues least. `keep` is how many
+ * of each group survive; the caller lowers it a step at a time and re-measures,
+ * rather than clearing the grid in one go and hoping.
+ *
+ * Two things are exempt wherever they sit: a skill the posting names by word,
+ * and the first item of any group, so the grid thins rather than developing
+ * holes.
+ *
+ * Returns what it removed, by name. A count alone tells the applicant that four
+ * skills went without telling them which four, which is the half that matters.
+ *
+ * Exported for scripts/probe-skills.ts, which is the only cheap probe in the
+ * set — this is pure, so it can be pinned without a key or a TeX engine.
  */
-function pruneOffTargetSkills(resume: TailoredResume, jobDescription: string): number {
-  const asked = new Set(skillTokens(jobDescription));
-  let removed = 0;
+export function trimSkillTails(
+  resume: TailoredResume,
+  asked: Set<string>,
+  keep: number
+): string[] {
+  const removed: string[] = [];
 
   for (const section of resume.sections) {
     const keywords = section.keywords;
     if (!keywords) continue;
 
     const groups = keywords.value.map((group) => {
-      const matched = group.items.filter((i) => skillTokens(i).some((w) => asked.has(w)));
-      // Nothing in this group is asked for: keep its first item so the row still
-      // says what it is, and drop the rest.
-      const keep = matched.length ? matched : group.items.slice(0, 1);
-      removed += group.items.length - keep.length;
-      return { ...group, items: keep };
+      if (group.items.length <= keep) return group;
+      const kept = group.items.filter(
+        (item, i) => i < Math.max(1, keep) || skillTokens(item).some((w) => asked.has(w))
+      );
+      removed.push(...group.items.filter((item) => !kept.includes(item)));
+      return { ...group, items: kept };
     });
 
     section.keywords = { ...keywords, value: groups.filter((g) => g.items.length > 0) };
@@ -203,15 +236,22 @@ function pruneOffTargetSkills(resume: TailoredResume, jobDescription: string): n
   return removed;
 }
 
-/** Drops the last keyword group outright, once thinning is not enough. */
-function dropWeakestSkillGroup(resume: TailoredResume): boolean {
+/**
+ * Drops the last keyword group outright, once thinning is not enough.
+ *
+ * Returns the skills that went with it, or an empty list when there was no
+ * group left to spare — two groups are the floor, below which the grid stops
+ * being a grid.
+ */
+export function dropWeakestSkillGroup(resume: TailoredResume): string[] {
   for (const section of resume.sections) {
     const keywords = section.keywords;
     if (!keywords || keywords.value.length <= 2) continue;
+    const dropped = keywords.value[keywords.value.length - 1];
     section.keywords = { ...keywords, value: keywords.value.slice(0, -1) };
-    return true;
+    return dropped.items;
   }
-  return false;
+  return [];
 }
 
 export type FitResult = {
@@ -224,8 +264,13 @@ export type FitResult = {
   collapsed: number;
   /** Optional sections dropped whole, by key, in the order they went. */
   droppedSections: string[];
-  /** Keyword entries removed because the posting never mentions them. */
-  skillsTrimmed: number;
+  /**
+   * Keyword entries cut to reach the page target, by name.
+   *
+   * Named rather than counted: the applicant is the only one who can tell
+   * whether losing "Terraform" mattered, and they cannot do that from a number.
+   */
+  skillsRemoved: string[];
   /** Sentences taken off the end of the summary. */
   summaryShortened: number;
   /** True when the target was reached; false when it ran out of things to cut. */
@@ -415,7 +460,7 @@ export async function fitToPages(
     trimmed: 0,
     collapsed: 0,
     droppedSections: [],
-    skillsTrimmed: 0,
+    skillsRemoved: [],
     summaryShortened: 0,
     fits: true,
   };
@@ -454,7 +499,7 @@ export async function fitToPages(
         trimmed: 0,
         collapsed: 0,
         droppedSections: [],
-        skillsTrimmed: 0,
+        skillsRemoved: [],
         summaryShortened: 0,
         fits: true,
       };
@@ -463,7 +508,7 @@ export async function fitToPages(
     let trimmed = 0;
     let collapsed = 0;
     const droppedSections: string[] = [];
-    let skillsTrimmed = 0;
+    const skillsRemoved: string[] = [];
     let summaryShortened = 0;
 
     /**
@@ -579,11 +624,20 @@ export async function fitToPages(
       if (pages <= target) break;
     }
 
-    // Keywords the posting never mentions are the cheapest thing on the page to
-    // lose: pure noise on a targeted resume, and worth three bullets of space.
-    // They go before a single line about the work does.
-    skillsTrimmed = pruneOffTargetSkills(working, jobDescription);
-    if (skillsTrimmed > 0) {
+    // The tail of the keyword grid is the cheapest thing on the page to lose —
+    // six skills are worth about a line, where a line of bullets is a claim
+    // about the work — so it goes before any of that does. But only the tail,
+    // and only as far as the page actually demands: each step down the ladder
+    // is measured before the next is taken, and the loop stops the moment the
+    // document fits. An earlier version cleared everything the posting did not
+    // name in a single unmeasured pass, which routinely cut far more than the
+    // page needed and could not tell you what it had taken.
+    const asked = new Set(skillTokens(jobDescription));
+    for (const keep of SKILL_KEEP_LADDER) {
+      if (pages <= target) break;
+      const removed = trimSkillTails(working, asked, keep);
+      if (removed.length === 0) continue;
+      skillsRemoved.push(...removed);
       const after = await measure(working);
       if (after > 0) pages = after;
     }
@@ -601,12 +655,15 @@ export async function fitToPages(
       rounds++;
       if (shortenSummary(working)) {
         summaryShortened++;
-      } else if (dropWeakestSkillGroup(working)) {
-        skillsTrimmed++;
-      } else if (collapseWeakest(working, wanted)) {
-        collapsed++;
       } else {
-        break;
+        const droppedGroup = dropWeakestSkillGroup(working);
+        if (droppedGroup.length > 0) {
+          skillsRemoved.push(...droppedGroup);
+        } else if (collapseWeakest(working, wanted)) {
+          collapsed++;
+        } else {
+          break;
+        }
       }
       best = await searchWithin();
     }
@@ -624,7 +681,7 @@ export async function fitToPages(
       trimmed,
       collapsed,
       droppedSections,
-      skillsTrimmed,
+      skillsRemoved,
       summaryShortened,
       fits: pages <= target,
     };

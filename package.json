@@ -16,7 +16,8 @@
     "check:audit": "tsx scripts/probe-audit.ts",
     "check:facts": "tsx scripts/probe-facts.ts",
     "check:proofread": "tsx scripts/probe-proofread.ts",
-    "check:consistency": "tsx scripts/probe-consistency.ts"
+    "check:consistency": "tsx scripts/probe-consistency.ts",
+    "check:skills": "tsx scripts/probe-skills.ts"
   },
   "dependencies": {
     "@tiptap/extension-underline": "^3.29.0",

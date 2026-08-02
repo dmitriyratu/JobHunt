@@ -49,7 +49,8 @@ export type FitSummary = {
   trimmed: number;
   collapsed: number;
   droppedSections: string[];
-  skillsTrimmed: number;
+  /** Keywords cut to reach the page target, by name. */
+  skillsRemoved: string[];
   summaryShortened: number;
   fits: boolean;
 };
@@ -76,7 +77,11 @@ export function changeCount(
       grounding.removedSkills.length
     : 0;
   const f = fit
-    ? fit.trimmed + fit.collapsed + fit.droppedSections.length + fit.skillsTrimmed + fit.summaryShortened
+    ? fit.trimmed +
+      fit.collapsed +
+      fit.droppedSections.length +
+      fit.skillsRemoved.length +
+      fit.summaryShortened
     : 0;
   return g + f;
 }
@@ -303,21 +308,40 @@ export default function ChangeAuditModal({ open, grounding, fit, resume, onClose
                 </div>
               )}
 
+              {/* Keywords are named rather than counted, like the bullets
+                  above and for the same reason: "4 skills dropped" tells you
+                  something was lost and gives you no way to judge whether it
+                  mattered. These are the tail of the grid — the writer's own
+                  ranking, cut from the end — so anything here that you would
+                  have fought for is a ranking that came out wrong, which is
+                  worth seeing rather than a number. */}
+              {fit.skillsRemoved.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-xs font-medium text-[var(--color-text-secondary)]">
+                    {fit.skillsRemoved.length === 1
+                      ? "1 keyword cut to reach the page target"
+                      : `${fit.skillsRemoved.length} keywords cut to reach the page target`}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {fit.skillsRemoved.map((skill) => (
+                      <span
+                        key={skill}
+                        className="rounded-full bg-[var(--color-surface-overlay)] px-2.5 py-1 text-[11px] text-[var(--color-text-secondary)] line-through"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* The counts with no text behind them. Named anyway: a section
                   gone whole is the change most likely to be noticed after
                   sending. */}
-              {(fit.droppedSections.length > 0 ||
-                fit.skillsTrimmed > 0 ||
-                fit.summaryShortened > 0) && (
+              {(fit.droppedSections.length > 0 || fit.summaryShortened > 0) && (
                 <ul className="mt-3 space-y-0.5 text-xs text-[var(--color-text-secondary)]">
                   {fit.droppedSections.length > 0 && (
                     <li>Sections left out entirely: {fit.droppedSections.join(", ")}</li>
-                  )}
-                  {fit.skillsTrimmed > 0 && (
-                    <li>
-                      {fit.skillsTrimmed} skill{fit.skillsTrimmed === 1 ? "" : "s"} this
-                      posting never mentions dropped
-                    </li>
                   )}
                   {fit.summaryShortened > 0 && (
                     <li>

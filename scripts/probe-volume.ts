@@ -135,7 +135,7 @@ async function run(pageTarget: ResumePageTarget) {
     trimmed: fitResult.trimmed,
     collapsed: fitResult.collapsed,
     droppedSections: fitResult.droppedSections,
-    skillsTrimmed: fitResult.skillsTrimmed,
+    skillsRemoved: fitResult.skillsRemoved,
     summaryShortened: fitResult.summaryShortened,
     fits: fitResult.fits,
   };
