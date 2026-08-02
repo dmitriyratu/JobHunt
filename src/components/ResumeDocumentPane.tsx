@@ -316,8 +316,13 @@ export default function ResumeDocumentPane({
 
           {/* Downloads live up here beside the view tabs rather than under the
               document: they're what you came to do, and at the foot of a pane
-              that scrolls they sat below the fold. */}
-          <div className="flex flex-wrap items-center gap-2">
+              that scrolls they sat below the fold.
+
+              Full width on a phone, where they wrap onto a line of their own
+              anyway — left at their content width they sat as two small tabs
+              against a lot of empty row, which read as leftovers rather than as
+              the thing the page is for. */}
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             {/* One link, not a link and a caption and a confirmation. It used
                 to be a panel under the document — the full path on its own
                 line, below the fold on a scrolled pane, printed for copying
@@ -372,7 +377,7 @@ export default function ResumeDocumentPane({
                     ? "Fix the error below to download."
                     : "Waiting for the first compile…"
               }
-              className="btn-primary px-4 py-2 text-sm"
+              className="btn-primary flex-1 px-4 py-2 text-sm sm:flex-none"
             >
               {downloading ? (
                 <span className="flex items-center gap-2">
@@ -391,7 +396,7 @@ export default function ResumeDocumentPane({
             <button
               onClick={onDownloadDocx}
               disabled={downloading}
-              className="btn-secondary px-2.5 py-2 text-xs"
+              className="btn-secondary shrink-0 px-4 py-2 text-xs"
             >
               .docx
             </button>

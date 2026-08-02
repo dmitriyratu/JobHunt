@@ -428,9 +428,14 @@ export default function ResumePage() {
                 given the recap's *collapsed* height instead — 78px, which is
                 fixed because that header is always exactly two single-line rows
                 (the summary truncates rather than wrapping) inside p-5 and a
-                1px border. */}
+                1px border.
+
+                On a phone the row stacks and the two controls share a line of
+                their own at equal width. Wrapped, they came out ragged and
+                different heights — a 44px secondary beside a 56px primary — and
+                the pair read as unrelated rather than as this step's actions. */}
             <div className="flex flex-wrap items-start gap-3">
-              <div className="min-w-[16rem] flex-1">
+              <div className="w-full sm:min-w-[16rem] sm:flex-1">
                 <ContextRecap
                   resumeFilename={state.resumeFilename}
                   resumeText={state.resumeText}
@@ -444,41 +449,42 @@ export default function ResumePage() {
                 />
               </div>
 
-              {/* Below lg the applications rail is hidden, and with it the
-                  assistant's toggle — so it falls back to the page. */}
-              {hasResume && (
-                <div className="lg:hidden">
+              <div className="flex w-full items-stretch gap-2 sm:w-auto">
+                {/* Below lg the applications rail is hidden, and with it the
+                    assistant's toggle — so it falls back to the page. */}
+                {hasResume && (
                   <ChatToggle
                     label="Refine"
                     open={chatOpen}
                     pendingCount={pendingProposals}
                     onClick={toggleChat}
+                    className="h-12 flex-1 sm:h-[var(--recap-h)] sm:flex-none lg:hidden"
                   />
-                </div>
-              )}
-
-              <button
-                onClick={() => setPickerOpen(true)}
-                disabled={generating}
-                // Exactly as tall as the recap card's collapsed header, via the
-                // shared --recap-h. self-start rather than centred so the two
-                // stay aligned when the card is expanded and grows downwards.
-                className="btn-primary h-[var(--recap-h)] shrink-0 self-start whitespace-nowrap px-6"
-              >
-                {generating ? (
-                  <span className="flex items-center gap-2">
-                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Tailoring…
-                  </span>
-                ) : hasResume ? (
-                  "Regenerate resume"
-                ) : (
-                  "Generate resume"
                 )}
-              </button>
+
+                <button
+                  onClick={() => setPickerOpen(true)}
+                  disabled={generating}
+                  // Exactly as tall as the recap card's collapsed header, via the
+                  // shared --recap-h. self-start rather than centred so the two
+                  // stay aligned when the card is expanded and grows downwards.
+                  className="btn-primary h-12 flex-1 self-start whitespace-nowrap px-6 sm:h-[var(--recap-h)] sm:flex-none"
+                >
+                  {generating ? (
+                    <span className="flex items-center gap-2">
+                      <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Tailoring…
+                    </span>
+                  ) : hasResume ? (
+                    "Regenerate resume"
+                  ) : (
+                    "Generate resume"
+                  )}
+                </button>
+              </div>
             </div>
 
             {!state.matchReport && (

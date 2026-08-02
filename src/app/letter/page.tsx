@@ -115,7 +115,7 @@ export default function LetterPage() {
                 action on a single line, so the letter itself gets the width.
                 Both sides are --recap-h tall, so the row reads as one band. */}
             <div className="flex flex-wrap items-start gap-3">
-              <div className="min-w-[16rem] flex-1">
+              <div className="w-full sm:min-w-[16rem] sm:flex-1">
                 <ContextRecap
                   resumeFilename={state.resumeFilename}
                   resumeText={state.resumeText}
@@ -133,8 +133,10 @@ export default function LetterPage() {
                 onClick={() => setComposerOpen(true)}
                 disabled={!canGenerate || generating}
                 // See the matching control on the resume page: button-sized and
-                // matched to the recap card's collapsed header via --recap-h.
-                className="btn-primary h-[var(--recap-h)] shrink-0 self-start whitespace-nowrap px-6"
+                // matched to the recap card's collapsed header via --recap-h,
+                // and the full width of the column on a phone, where a half-wide
+                // slab under a full-width card read as an unfinished row.
+                className="btn-primary h-12 w-full self-start whitespace-nowrap px-6 sm:h-[var(--recap-h)] sm:w-auto sm:shrink-0"
               >
                 {generating ? (
                   <span className="flex items-center gap-2">

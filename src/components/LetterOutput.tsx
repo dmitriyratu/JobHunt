@@ -31,7 +31,8 @@ export default function LetterOutput({
       {body ? (
         <>
           <SubjectField value={subject} onChange={onSubjectChange} />
-          <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">Email body</p>
+          {/* The "Email body" label and its Copy button belong to the editor —
+              they sit on one line together, the way the subject's do. */}
           <LetterEditor html={body} onChange={onBodyChange} />
         </>
       ) : (

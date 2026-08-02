@@ -2,24 +2,32 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { getJourneySteps, type StepId } from "@/lib/journey";
 import { useJobHuntState } from "@/lib/useAppState";
 
 /**
  * Where you are in the journey.
  *
- * Each step is a glyph in a tile plus its name. The glyph is what makes this
- * work: it is the same mark every time, in the same place, so after a couple
- * of applications the row is recognised rather than read — and it degrades to
- * icons alone on a phone, which is the one screen where four labels never fit.
+ * This is a progress meter, not a toolbar, and it is now built to look like
+ * one. Every step owns a segment of a single track across the top of the row,
+ * and the segment's colour is the whole state machine: finished is green,
+ * where-you-are is near-black, still-to-come is a hairline grey. Underneath it
+ * each step names itself.
  *
- * Exactly one thing on the row is filled in, and it is the step you are on.
- * An earlier pass gave every finished step a solid green disc, so a session
- * with four finished steps put four loud marks on screen and the current step
- * was the quietest element in the row — the one piece of information the nav
- * exists to carry. Completion is now a small badge on the corner of the tile,
- * which says the same thing without competing.
+ * Deliberately no accent anywhere in here. --color-accent is the app's action
+ * colour — it fills .btn-primary and nothing else that isn't clickable-and-
+ * primary — and an earlier pass gave the current step a solid accent pill,
+ * which made the one thing on the row that is *not* an action look like the
+ * loudest button on the page. Progress gets its own language: position is
+ * carried by weight and by the track, completion by the same green the rest of
+ * the app already uses for "done".
+ *
+ * The row is a four-column grid on a phone and a centred flex row from `sm`.
+ * The grid is what let the labels come back: the previous version hid three of
+ * the four names below `sm` and left a row of anonymous glyphs, and scrolled
+ * horizontally when they didn't fit. Four columns always fit, because the
+ * labels wrap inside them.
  */
 
 /**
@@ -68,7 +76,7 @@ function StepIcon({ id }: { id: StepId }) {
       // Heavier than a typical 20px glyph wants, because it is drawn at 14.
       // At 1.6 the strokes landed on half pixels and the whole row read soft.
       strokeWidth={1.9}
-      className="h-3.5 w-3.5"
+      className="h-3.5 w-3.5 shrink-0"
       aria-hidden
     >
       {STEP_ICON[id]}
@@ -79,10 +87,9 @@ function StepIcon({ id }: { id: StepId }) {
 /**
  * Finished.
  *
- * Trails the label rather than riding the corner of the glyph. As a badge it
- * needed a tile to sit on; once the tile went, an 11px disc pinned to a 14px
- * glyph simply covered it — two marks fighting for the same square. Given its
- * own place in the line it stays legible and costs about ten pixels.
+ * Rides beside the glyph rather than trailing the label, so it sits in the same
+ * place whether the label is on the glyph's line (from `sm`) or under it (on a
+ * phone). Green, matching its track segment.
  */
 function DoneCheck() {
   return (
@@ -99,151 +106,97 @@ function DoneCheck() {
   );
 }
 
-/**
- * The step separator.
- *
- * A chevron rather than a rule: a rule joins two things, an arrow says which
- * way the work runs, and that is the thing the row was missing. It takes the
- * success hue once the step behind it is finished, so the coloured run stops
- * exactly at the frontier and the trail reads as progress rather than
- * decoration.
- */
-function StepArrow({ done }: { done: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={3}
-      aria-hidden
-      className={`h-3 w-3 shrink-0 ${
-        done
-          ? "text-[var(--color-success)] opacity-85"
-          : "text-[var(--color-text-muted)] opacity-55"
-      }`}
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-    </svg>
-  );
-}
-
 export default function StageNav() {
   const { state } = useJobHuntState();
   const pathname = usePathname();
   const steps = getJourneySteps(state);
-
-  const railRef = useRef<HTMLDivElement>(null);
-  const activeRef = useRef<HTMLDivElement>(null);
-
-  /**
-   * Bring the current step into view.
-   *
-   * Still needed even though the labels collapse on a phone: the current step
-   * keeps its label, so the row can still overrun a narrow screen.
-   *
-   * The container's scrollLeft is set directly rather than calling
-   * scrollIntoView, which walks up the ancestor chain and would scroll the
-   * whole page to bring the rail into view — the same reason the chat
-   * transcripts scroll their own container.
-   */
-  useEffect(() => {
-    const rail = railRef.current;
-    const active = activeRef.current;
-    if (!rail || !active) return;
-    if (rail.scrollWidth <= rail.clientWidth) return;
-
-    rail.scrollLeft = Math.max(
-      0,
-      active.offsetLeft - (rail.clientWidth - active.offsetWidth) / 2
-    );
-  }, [pathname, steps.length]);
+  const currentIndex = steps.findIndex((s) => s.href === pathname);
 
   return (
-    <div
-      ref={railRef}
-      className="flex items-center gap-1.5 max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-    >
-      {steps.map((step, i) => {
-        const active = pathname === step.href;
-        // Completion is the tile's badge, and the current step's tile is
-        // already spoken for by the accent — a green badge on it would put two
-        // colours on one 26px object.
-        const showBadge = step.complete && !active;
+    <nav aria-label="Progress" className="w-full">
+      {/*
+       * Equal columns on a phone so four labels always fit; content-width and
+       * centred from `sm`, where there is room for the row to be as wide as it
+       * wants to be. `items-stretch` keeps every segment on the same line when
+       * one label wraps to two and its neighbours don't.
+       */}
+      <ol className="grid grid-cols-4 items-stretch gap-1.5 sm:flex sm:justify-center sm:gap-2">
+        {steps.map((step, i) => {
+          const active = i === currentIndex;
 
-        /*
-         * Every step is a pill now, not just the current one.
-         *
-         * Bare labels beside a filled current step left the row looking like
-         * one button and three captions. Giving them all the same container
-         * makes them read as four of the same kind of thing, and lets the
-         * current one differ by fill rather than by existing at all.
-         */
-        /*
-         * One filled shape per step, and not a line anywhere.
-         *
-         * The previous pass drew two nested 1px outlines — the chip and a tile
-         * inside it — which is the worst thing you can do for sharpness on a
-         * fractional display: at 1.5x a 1px border lands on 0.667px and every
-         * edge in the row went soft. A solid fill has no sub-pixel edge to
-         * blur, so the shapes are now defined by colour and the nested box is
-         * gone entirely. The glyph carries the state instead.
-         */
-        const base =
-          "flex items-center gap-2 whitespace-nowrap rounded-[6px] px-2.5 py-1.5 text-xs tracking-[-0.005em] transition-colors [@media(pointer:coarse)]:min-h-[44px]";
+          /*
+           * The track segment, which is the only thing carrying position.
+           *
+           * Current beats complete when a step is both — you can revisit a
+           * finished step, and "you are here" is the more urgent fact. The tick
+           * beside the glyph still says the step is done, so nothing is lost.
+           */
+          const track = active
+            ? "bg-[var(--color-text-primary)]"
+            : step.complete
+              ? "bg-[var(--color-success)]"
+              : "bg-[var(--color-border-subtle)]";
 
-        const tone = active
-          ? "bg-[var(--color-accent)] font-semibold text-[var(--color-on-accent)]"
-          : step.enabled
-            ? "bg-[var(--color-chip)] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-            : "bg-[var(--color-chip)] font-medium text-[var(--color-text-muted)] opacity-45 cursor-not-allowed";
+          const label = active
+            ? "font-semibold text-[var(--color-text-primary)]"
+            : step.complete
+              ? "font-medium text-[var(--color-text-secondary)]"
+              : "font-medium text-[var(--color-text-muted)]";
 
-        const iconTone = active
-          ? "text-[var(--color-on-accent)]"
-          : step.complete
-            ? "text-[var(--color-success)]"
-            : "text-[var(--color-text-muted)]";
+          const icon = active
+            ? "text-[var(--color-text-primary)]"
+            : step.complete
+              ? "text-[var(--color-success)]"
+              : "text-[var(--color-text-muted)]";
 
-        const content = (
-          <>
-            <span className={`flex shrink-0 items-center ${iconTone}`}>
-              <StepIcon id={step.id} />
-            </span>
-            {/* The current step keeps its label at every width; the rest give
-                theirs up below sm, where four of them never fitted. Hidden with
-                sr-only rather than `hidden`, so the links keep their names for
-                a screen reader at any width. */}
-            <span className={active ? "" : "sr-only sm:not-sr-only"}>{step.label}</span>
-            {showBadge && <DoneCheck />}
-          </>
-        );
-
-        return (
-          <div
-            key={step.id}
-            ref={active ? activeRef : undefined}
-            className="flex shrink-0 items-center gap-1.5"
-          >
-            {step.enabled ? (
-              <Link
-                href={step.href}
-                aria-current={active ? "step" : undefined}
-                className={`${base} ${tone}`}
-                title={step.label}
-              >
-                {content}
-              </Link>
-            ) : (
-              <span
-                className={`${base} ${tone}`}
-                title="Add a resume and job description first"
-              >
-                {content}
+          const content = (
+            <>
+              <span className={`h-1 w-full shrink-0 rounded-full ${track}`} />
+              {/* Stacked on a phone — an icon beside a label that wraps to two
+                  lines leaves the glyph floating against a ragged block — and
+                  on one line from `sm`, where nothing wraps. */}
+              <span className="flex flex-1 flex-col items-center justify-center gap-1 sm:flex-row sm:gap-2">
+                <span className={`flex items-center gap-1 ${icon}`}>
+                  <StepIcon id={step.id} />
+                  {step.complete && <DoneCheck />}
+                </span>
+                <span className={`text-center text-[11px] leading-tight sm:text-xs ${label}`}>
+                  {step.label}
+                </span>
               </span>
-            )}
-            {i < steps.length - 1 && <StepArrow done={step.complete} />}
-          </div>
-        );
-      })}
-    </div>
+              {step.complete && <span className="sr-only">(done)</span>}
+            </>
+          );
+
+          // 44px on a touch screen, counted on the whole column rather than on
+          // the text, so the tappable area is the segment and everything under
+          // it. The row is content-sized otherwise.
+          const base =
+            "flex h-full flex-col gap-1.5 rounded-[var(--radius-sm)] px-1.5 pb-1.5 pt-0 transition-colors sm:px-2.5 sm:pb-2 [@media(pointer:coarse)]:min-h-[52px]";
+
+          return (
+            <li key={step.id} className="flex min-w-0 sm:w-auto">
+              {step.enabled ? (
+                <Link
+                  href={step.href}
+                  aria-current={active ? "step" : undefined}
+                  title={step.label}
+                  className={`${base} w-full hover:bg-[var(--color-surface-overlay)]`}
+                >
+                  {content}
+                </Link>
+              ) : (
+                <span
+                  className={`${base} w-full cursor-not-allowed opacity-55`}
+                  title="Add a resume and job description first"
+                >
+                  {content}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
   );
 }

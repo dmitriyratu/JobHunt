@@ -106,14 +106,17 @@ export default function StepNav({ hint }: { hint?: string }) {
     <nav className="app-bleed sticky bottom-0 z-30 mt-8 -mb-8 h-16 bg-[var(--color-surface)] border-t border-[var(--color-border)] flex items-center justify-between gap-3">
       <div className="min-w-0">
         {prev ? (
+          // The whole two-line block is the target, and it is padded out to 44px
+          // on a touch screen — as a bare inline link the tappable area was the
+          // text itself, about 30px of it, at the very bottom of the window.
           <Link
             href={prev.href}
-            className="inline-flex items-center gap-2 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+            className="-my-2 inline-flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] py-2 pr-2 text-sm text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
           >
             <span aria-hidden>←</span>
-            <span className="text-left">
+            <span className="min-w-0 text-left">
               <span className="eyebrow block">Back</span>
-              {prev.label}
+              <span className="block truncate">{prev.label}</span>
             </span>
           </Link>
         ) : (
@@ -121,9 +124,18 @@ export default function StepNav({ hint }: { hint?: string }) {
         )}
       </div>
 
-      {/* Per-step, then the total. Hidden on narrow screens, where the two
-          navigation controls already fill the bar and a breakdown is the first
-          thing to give up. */}
+      {/* The running total, which is the one number worth carrying at every
+          width — a phone gets it alone, and the per-step breakdown behind it
+          appears from md, where there is room for four more columns. */}
+      {costs.total > 0 && (
+        <div className="shrink-0 text-center leading-tight md:hidden">
+          <p className="eyebrow">Total</p>
+          <p className="text-xs font-semibold tabular-nums text-[var(--color-text-primary)]">
+            {formatCost(costs.total)}
+          </p>
+        </div>
+      )}
+
       {costs.total > 0 && (
         <dl className="hidden shrink-0 items-center gap-4 text-xs md:flex">
           {steps

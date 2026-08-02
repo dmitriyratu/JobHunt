@@ -58,11 +58,25 @@ export default function LetterEditor({ html, onChange }: Props) {
   }
 
   return (
-    <div className="rounded-lg border border-[var(--color-border-subtle)] overflow-hidden">
-      {/* Wraps rather than overflowing: seven tool buttons plus Copy are a few
-          pixels wider than a phone screen. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
-        <div className="flex items-center gap-1">
+    <>
+      {/* Label and Copy on one line above the box, matching the subject field
+          directly above it. Copy used to ride the toolbar, which is what made
+          that row too wide for a phone. */}
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-[var(--color-text-secondary)]">Email body</p>
+        <button onClick={handleCopy} className="btn-secondary shrink-0 px-3 py-1.5 text-xs">
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      </div>
+      <div className="rounded-lg border border-[var(--color-border-subtle)] overflow-hidden">
+      {/* Tools only, and no justify-between.
+          Seven buttons plus a Copy pushed apart to the panel's edges came to
+          more than a 390px phone has, so the row overflowed its own card and
+          dropped Copy onto a second line. Copy now sits with the "Email body"
+          label above the editor — the same place the subject's does — and what
+          is left is a plain, tight run of tools that fits. */}
+      <div className="border-b border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2 py-1.5 sm:px-3 sm:py-2">
+        <div className="flex flex-wrap items-center gap-0.5 sm:gap-1">
           <ToolbarButton
             active={editor.isActive("bold")}
             onClick={() => editor.chain().focus().toggleBold().run()}
@@ -107,19 +121,20 @@ export default function LetterEditor({ html, onChange }: Props) {
             ↷
           </ToolbarButton>
         </div>
-        <button onClick={handleCopy} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
-          {copied ? "Copied!" : "Copy"}
-        </button>
       </div>
-      <div className="bg-[var(--color-surface)] p-4 sm:p-5 max-h-[500px] overflow-y-auto">
-        <EditorContent editor={editor as Editor} />
+        <div className="bg-[var(--color-surface)] p-4 sm:p-5 max-h-[500px] overflow-y-auto">
+          <EditorContent editor={editor as Editor} />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
+/** Grouping, and the first thing to go: on a phone the seven buttons need
+ *  every pixel of the row, and losing two hairlines costs nothing a gap
+ *  doesn't already say. */
 function Divider() {
-  return <div className="w-px h-5 bg-[var(--color-border)] mx-1" />;
+  return <div className="mx-1 hidden h-5 w-px shrink-0 bg-[var(--color-border)] sm:block" />;
 }
 
 function ToolbarButton({
@@ -139,12 +154,15 @@ function ToolbarButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      // 44px on a phone, 28px from sm: up. Seven of these sit in a row under
+      // 36×40 on a phone, 28px from sm: up. Seven of these sit in a row above
       // the email body, and at 28px they are a thumb-width apart on a touch
       // screen — under both the Apple HIG target and what WCAG 2.5.8 asks for.
-      // Mobile-first rather than a pointer-coarse variant so the size is
-      // decided by available room, which is the thing that actually varies.
-      className={`h-11 w-11 sm:h-7 sm:w-7 flex items-center justify-center rounded text-sm transition-colors ${
+      // Not the full 44 square: seven of those are wider than the card on a
+      // 360px phone, and a toolbar that wraps to two rows costs more than the
+      // last few pixels of target buy. Mobile-first rather than a
+      // pointer-coarse variant so the size is decided by available room, which
+      // is the thing that actually varies.
+      className={`h-10 w-9 sm:h-7 sm:w-7 flex items-center justify-center rounded text-sm transition-colors ${
         active
           ? "bg-[var(--color-accent-muted)] text-[var(--color-accent)]"
           : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-overlay)]"

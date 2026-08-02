@@ -39,29 +39,34 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
           the rail exists to align with — below that the row is free to wrap to
           two lines on a narrow phone. */}
       <header className="border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] lg:flex lg:h-[var(--app-header-h)] lg:flex-col">
-        {/* flex-wrap so the buttons drop to a second line instead of pushing the
-            page into horizontal scroll — at 320px the title plus both buttons
-            are ~11px wider than the viewport. */}
-        <div className="app-container py-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 lg:min-h-0 lg:flex-1">
+        {/* Two deliberate rows on a phone rather than a ragged wrap.
+            Five 44px controls and the wordmark cannot share a 390px line — they
+            overflow by about ten pixels, which is how this came to wrap by
+            accident — so below `sm` the control group is given the full width
+            and spreads across it, which reads as a toolbar instead of as an
+            overflow. From `sm` everything is back on one line at the right. */}
+        <div className="app-container py-3 sm:py-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 lg:min-h-0 lg:flex-1">
           <button
             onClick={goHome}
             title="Start a new application"
-            className="flex items-center gap-3 text-left rounded-[var(--radius-control)] -m-1 p-1 hover:bg-[var(--color-surface-overlay)] transition-colors"
+            className="flex min-w-0 items-center gap-2.5 sm:gap-3 text-left rounded-[var(--radius-control)] -m-1 p-1 hover:bg-[var(--color-surface-overlay)] transition-colors"
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-accent)] shadow-[var(--shadow-accent)]">
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-accent)] shadow-[var(--shadow-accent)]">
               <svg className="h-5 w-5 text-[var(--color-on-accent)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             </div>
             <div className="min-w-0">
-              <h1 className="font-semibold text-base tracking-tight">JobHunt</h1>
-              {/* The per-page subtitle is the first thing to go on a phone —
-                  the journey pills below already say where you are. */}
-              <p className="hidden sm:block text-xs text-[var(--color-text-muted)]">{subtitle}</p>
+              <h1 className="font-semibold text-base tracking-tight leading-tight">JobHunt</h1>
+              {/* Kept at every width now. The controls have a line of their own
+                  on a phone, which leaves the brand row with room to spare, and
+                  the journey meter below names the step you are on but not what
+                  the page is for. */}
+              <p className="truncate text-xs text-[var(--color-text-muted)]">{subtitle}</p>
             </div>
           </button>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex w-full items-center justify-between gap-1.5 sm:w-auto sm:shrink-0 sm:justify-end sm:gap-2">
             {/* Its own control rather than a Settings tab: this is the one thing
                 in here you revisit per application.
 
@@ -115,12 +120,13 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
           </div>
         </div>
 
-        {/* The journey gets its own centered panel below the title rather than
-            competing with the utility buttons for room in the top row. */}
+        {/* The journey gets its own band below the title rather than competing
+            with the utility buttons for room in the top row. Full width on a
+            phone — the meter divides the screen into four equal segments, which
+            is what keeps every step named — and centred by StageNav itself once
+            there is room to spare. */}
         <div className="border-t border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
-          {/* justify-start below sm because centring a horizontally scrollable
-              flex row clips its leading edge, making the first pill unreachable. */}
-          <div className="app-container py-2.5 flex justify-start sm:justify-center">
+          <div className="app-container py-2">
             <StageNav />
           </div>
         </div>

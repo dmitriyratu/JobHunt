@@ -531,8 +531,15 @@ export default function MatchReportView({
           <OutcomeTally items={report.items} />
           {error && <p className="text-[var(--color-danger)] text-xs mt-2">{error}</p>}
         </div>
-        <div className="shrink-0 sm:max-w-[200px] sm:text-right">
-          <button onClick={onAnalyze} disabled={loading} className="btn-secondary text-xs">
+        {/* Full width on a phone, where this wraps below the summary: a small
+            left-aligned button with a caption under it read as a footnote to
+            the paragraph above rather than as a control. */}
+        <div className="w-full sm:w-auto sm:shrink-0 sm:max-w-[200px] sm:text-right">
+          <button
+            onClick={onAnalyze}
+            disabled={loading}
+            className="btn-secondary w-full text-xs sm:w-auto"
+          >
             {loading ? "Re-analyzing…" : "Re-analyze match"}
           </button>
           <p className="text-[10px] text-[var(--color-text-muted)] mt-1.5">

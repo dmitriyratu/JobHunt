@@ -263,14 +263,13 @@ export default function MatchPage() {
                 {/* Below lg the applications rail is hidden, and with it the
                     assistant's toggle — so it falls back to the page. */}
                 {state.matchReport && (
-                  <div className="lg:hidden">
-                    <ChatToggle
-                      label="Refine"
-                      open={chatOpen}
-                      pendingCount={pendingProposals}
-                      onClick={toggleChat}
-                    />
-                  </div>
+                  <ChatToggle
+                    label="Refine"
+                    open={chatOpen}
+                    pendingCount={pendingProposals}
+                    onClick={toggleChat}
+                    className="shrink-0 lg:hidden"
+                  />
                 )}
               </div>
               <MatchReportView

@@ -65,19 +65,22 @@ export function ChatToggle({
   open,
   pendingCount = 0,
   onClick,
+  className = "",
 }: {
   label: string;
   open: boolean;
   pendingCount?: number;
   onClick: () => void;
+  /** Sizing from the row this sits in — the page decides how wide it gets. */
+  className?: string;
 }) {
   return (
     <button
       onClick={onClick}
       aria-expanded={open}
-      className={`btn-secondary flex shrink-0 items-center gap-2 px-3 py-2 text-sm ${
+      className={`btn-secondary flex items-center justify-center gap-2 px-3 py-2 text-sm ${
         open ? "border-[var(--color-accent)] text-[var(--color-accent)]" : ""
-      }`}
+      } ${className}`}
     >
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path

@@ -109,7 +109,7 @@ export default function GenerateResumeModal({
             front rather than revealing one surprise at a time. */}
         <ol className="mb-5 flex shrink-0 items-center gap-2">
           {STEPS.map((label, i) => (
-            <li key={label} className="flex flex-1 items-center gap-2">
+            <li key={label} className="flex items-center gap-2 sm:flex-1">
               <button
                 type="button"
                 onClick={() => i < step && setStep(i)}
@@ -118,27 +118,39 @@ export default function GenerateResumeModal({
                   i < step ? "cursor-pointer" : "cursor-default"
                 }`}
               >
+                {/* Same three tones as the journey meter in the header —
+                    answered is green, where-you-are is near-black, still to
+                    come is a grey chip. The accent belongs to the buttons at
+                    the foot of this dialog, not to a position marker. */}
                 <span
                   className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${
-                    i <= step
-                      ? "bg-[var(--color-accent)] text-[var(--color-on-accent)]"
-                      : "bg-[var(--color-surface-overlay)] text-[var(--color-text-muted)]"
+                    i < step
+                      ? "bg-[var(--color-success)] text-[var(--color-on-success)]"
+                      : i === step
+                        ? "bg-[var(--color-text-primary)] text-[var(--color-on-emphasis)]"
+                        : "bg-[var(--color-surface-overlay)] text-[var(--color-text-muted)]"
                   }`}
                 >
                   {i < step ? "✓" : i + 1}
                 </span>
+                {/* The step you are on names itself at every width; the other
+                    two give their labels up on a phone, where three of them and
+                    the rules between them do not fit. */}
                 <span
-                  className={`hidden text-xs sm:block ${
+                  className={`text-xs ${
                     i === step
                       ? "font-medium text-[var(--color-text-primary)]"
-                      : "text-[var(--color-text-muted)]"
+                      : "hidden text-[var(--color-text-muted)] sm:block"
                   }`}
                 >
                   {label}
                 </span>
               </button>
+              {/* The connecting rule needs room the current step's label has
+                  already taken on a phone, where it came out as a two-pixel
+                  dash. The numbers and their order say the same thing. */}
               {i < STEPS.length - 1 && (
-                <span className="h-px flex-1 bg-[var(--color-border)]" />
+                <span className="hidden h-px flex-1 bg-[var(--color-border)] sm:block" />
               )}
             </li>
           ))}
