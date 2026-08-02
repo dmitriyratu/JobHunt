@@ -7,13 +7,14 @@ import {
   collectPairs,
   numbersIn,
   unsupportedNumbers,
+  pruneSkills,
+  skillsWithoutLiteralSupport,
   spelledNumbers,
-  unsupportedSkills,
   usedCitations,
 } from "@/lib/grounding";
 import { aiTells, stripFiller } from "@/lib/deAiText";
 import { checkFacts } from "@/lib/factCheck";
-import { indexSource, resolveCitations, uncited } from "@/lib/sourceIndex";
+import { indexSource, resolveCitations, unusedLines } from "@/lib/sourceIndex";
 import { logicalLines } from "@/lib/sourceLines";
 import type { ResumeSection } from "@/types";
 
@@ -111,11 +112,85 @@ check(
 // --- Skills are unchanged by sources[] --------------------------------------
 check(
   "skills containment",
-  unsupportedSkills(
+  skillsWithoutLiteralSupport(
     [{ label: "Tools", items: ["Go", "Kubernetes"] }],
-    [{ label: "", items: ["Go", "SQL"] }]
+    [{ label: "", items: ["Go", "SQL"] }],
+    "Built services in Go against a SQL store."
   ),
   ["Kubernetes"]
+);
+
+/*
+ * The real one, from a real resume.
+ *
+ * The document's skills line reads "LLM systems (RAG, agents, fine-tuning),
+ * anomaly detection". The writer is asked to regroup keywords and duly split
+ * that into four, none of which equals the single source item — so the old
+ * exact-match check deleted all four as invented, on an LLM posting, and told
+ * the candidate their resume "never" listed them. "anomaly detection" survived
+ * only because it happened to stand alone.
+ */
+const REAL_SKILLS_LINE =
+  "AI/Machine Learning: LLM systems (RAG, agents, fine-tuning), anomaly detection, " +
+  "predictive modeling, time series forecasting, NLP, TensorFlow/Keras, PyTorch";
+
+check(
+  "keywords split out of a bracketed source line are all supported",
+  skillsWithoutLiteralSupport(
+    [
+      {
+        label: "AI/ML",
+        items: ["LLM systems", "RAG", "agents", "fine-tuning", "anomaly detection"],
+      },
+    ],
+    [{ label: "", items: ["LLM systems (RAG, agents, fine-tuning)", "anomaly detection"] }],
+    REAL_SKILLS_LINE
+  ),
+  []
+);
+
+check(
+  "punctuation and casing variants match the document",
+  skillsWithoutLiteralSupport(
+    [{ label: "AI/ML", items: ["fine tuning", "Tensorflow", "pytorch"] }],
+    [{ label: "", items: [] }],
+    REAL_SKILLS_LINE
+  ),
+  []
+);
+
+check(
+  "a keyword the document never claims still surfaces for the model to judge",
+  skillsWithoutLiteralSupport(
+    [{ label: "AI/ML", items: ["RAG", "Kubernetes"] }],
+    [{ label: "", items: [] }],
+    REAL_SKILLS_LINE
+  ),
+  ["Kubernetes"]
+);
+
+// Word boundaries, not substrings: the document naming JavaScript is not the
+// document claiming Java.
+check(
+  "Java does not match inside JavaScript",
+  skillsWithoutLiteralSupport(
+    [{ label: "Languages", items: ["Java"] }],
+    [{ label: "", items: [] }],
+    "Front end work in JavaScript and TypeScript."
+  ),
+  ["Java"]
+);
+
+check(
+  "pruneSkills removes exactly what it is given, and empties no group",
+  pruneSkills(
+    [
+      { label: "AI/ML", items: ["RAG", "Kubernetes"] },
+      { label: "Gone", items: ["Kubernetes"] },
+    ],
+    ["kubernetes"]
+  ),
+  [{ label: "AI/ML", items: ["RAG"] }]
 );
 
 // --- Wrapped source lines ----------------------------------------------------
@@ -442,15 +517,18 @@ const DUPES = indexSource("EXPERIENCE\n\n- Volunteer work here\n- Volunteer work
 check("both duplicate lines are indexed", DUPES.length, 2);
 check("and they get distinct ids", DUPES[0].id === DUPES[1].id, false);
 
+// These two were written against `uncited`, which became `unusedLines` — the
+// import had been dangling since, so this whole probe died on load and every
+// check below it stopped running. Same two assertions, current function.
 check(
-  "uncited is exact set subtraction now",
-  uncited(INDEX, [wrapped.text]).some((l) => l.startsWith("Responsible for reporting")),
+  "a line that reached the page is not reported as unused",
+  unusedLines(INDEX, [wrapped.text]).some((l) => l.startsWith("Responsible for reporting")),
   false
 );
 
 check(
-  "and still reports what nothing cited",
-  uncited(INDEX, [wrapped.text]).some((l) => l.startsWith("Took ownership of the data quality")),
+  "and one nothing drew on still is",
+  unusedLines(INDEX, [wrapped.text]).some((l) => l.startsWith("Took ownership of the data quality")),
   true
 );
 

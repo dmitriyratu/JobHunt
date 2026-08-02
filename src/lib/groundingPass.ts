@@ -9,8 +9,9 @@ import {
   collectPairs,
   numbersIn,
   pruneSkills,
+  skillKey,
+  skillsWithoutLiteralSupport,
   spelledNumbers,
-  unsupportedSkills,
   type GroundedPair,
   type Violation,
 } from "./grounding";
@@ -108,6 +109,43 @@ Some items carry a "numericHint" — a regex that could not find a figure among 
 
 Return only genuine findings. An empty array is the normal answer and the correct one for most documents. Never return an item you have concluded is fine.`;
 
+const SKILL_SCHEMA = {
+  type: "object",
+  properties: {
+    unsupported: {
+      type: "array",
+      description: "Only the skills the document does not support. Omit every skill that is fine.",
+      items: {
+        type: "object",
+        properties: {
+          skill: { type: "string", description: "Exactly as it was given to you." },
+          reason: { type: "string", description: "A few words: why nothing supports it." },
+        },
+        required: ["skill", "reason"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["unsupported"],
+  additionalProperties: false,
+} as const;
+
+const SKILL_PROMPT = `You are checking keywords on a tailored resume against the candidate's own document.
+
+Every keyword you are given has already failed a literal text search of that document, so "I cannot find those exact characters" is not an answer — it is the reason you were asked. Your job is the part a search cannot do: deciding whether the document claims the capability under another name.
+
+SUPPORTED, and not a finding:
+- The same thing abbreviated or spelled out: K8s and Kubernetes, RAG and retrieval-augmented generation, CI/CD and continuous delivery.
+- A spelling, casing or spacing variant: Postgres and PostgreSQL, NodeJS and Node.js, fine tuning and fine-tuning.
+- A common synonym or the industry's usual name for what the document describes.
+- A named tool or method the document plainly used, described there in words rather than named: a document describing a pipeline that turns natural language into database queries supports "text-to-SQL".
+- A narrower term the document's own wording contains, or a broader one it clearly demonstrates.
+
+A FINDING, and only this:
+- Nothing anywhere in the document claims this capability, under any name. The candidate would be asserting something new by printing it.
+
+WHEN YOU ARE UNSURE, IT IS SUPPORTED. A keyword deleted wrongly costs the candidate a skill they really have and can be matched on; a generous one that survives costs almost nothing, and the writer was already forbidden to invent. Return only the keywords nothing in the document supports. An empty array is the normal answer and the correct one for most documents.`;
+
 const REPAIR_PROMPT = `You are correcting lines of a tailored resume that claim more than the candidate's own document supports.
 
 Each item gives "originals" — the lines from the candidate's resume it is allowed to draw on — the "rewrite" that failed checking, and the "problem" with it.
@@ -193,6 +231,71 @@ export type GroundingDecision = {
 
 type VerifyResponse = { ungrounded: Violation[] };
 type RepairResponse = { repairs: { id: string; value: string }[] };
+type SkillResponse = { unsupported: { skill: string; reason: string }[] };
+
+/**
+ * The second half of the skills check: judgement, on the few that need it.
+ *
+ * Only runs when the text search left something over, which on most documents
+ * is nothing at all — so the usual generation still pays for exactly one
+ * grounding call. What reaches here is the genuinely ambiguous set, where the
+ * document says the same thing in different characters, and no amount of string
+ * comparison was ever going to settle it.
+ *
+ * Deliberately not folded into the bullet checker's call. That one judges
+ * rewritten sentences against their sources and is tuned to be strict; this one
+ * judges vocabulary and is told to be lenient. Sharing a prompt would make one
+ * of them wrong.
+ *
+ * A failure keeps every keyword. The pass is a backstop against a writer that
+ * was already forbidden to invent skills, and deleting a candidate's real
+ * skill because a network call timed out is the worst outcome on offer here.
+ */
+async function findUnsupportedSkills(
+  client: OpenAI,
+  candidates: string[],
+  resumeText: string,
+  report: GroundingReport
+): Promise<string[]> {
+  if (!candidates.length) return [];
+
+  try {
+    const model = getTaskModel("verify-grounding");
+    const { result, usage } = await createStructuredCompletion<SkillResponse>(client, {
+      model: model.id,
+      schemaName: "skill_check",
+      schema: SKILL_SCHEMA,
+      temperature: 0,
+      supportsTemperature: model.supportsTemperature,
+      reasoning: model.reasoning,
+      maxTokens: 800,
+      messages: [
+        { role: "system", content: SKILL_PROMPT },
+        {
+          role: "user",
+          content: [
+            "## The candidate's document, in full. Nothing outside this is theirs to claim.",
+            logicalLines(resumeText).join("\n"),
+            "",
+            "## The keywords to judge",
+            JSON.stringify(candidates),
+          ].join("\n"),
+        },
+      ],
+    });
+    report.usage.push({ model: model.id, usage });
+
+    // Only ever delete something that was actually asked about — a model that
+    // returns a keyword nobody offered it has misunderstood the task, and
+    // acting on that would delete a skill at random.
+    const asked = new Set(candidates.map(skillKey));
+    return (result.unsupported ?? [])
+      .map((u) => u.skill)
+      .filter((s) => asked.has(skillKey(s)));
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Deterministic checks plus one model call, over whatever pairs are given.
@@ -297,21 +400,38 @@ export async function runGroundingPass(
   };
 
   try {
-    // Skills first, and entirely in code: the check is set containment, and the
-    // fix is deleting the offending item. Nothing to rewrite, nobody to ask.
-    let working = sections.map((section) => {
-      if (!section.keywords) return section;
-      const bad = unsupportedSkills(section.keywords.value, section.keywords.source);
-      if (!bad.length) return section;
-      report.removedSkills.push(...bad);
-      return {
-        ...section,
-        keywords: {
-          ...section.keywords,
-          value: pruneSkills(section.keywords.value, section.keywords.source),
-        },
-      };
-    });
+    // Skills first, in two stages: search the candidate's document for each
+    // keyword, then ask the model about whatever the search could not find.
+    // Cheapest first — most documents never reach the second stage, and the
+    // ones that do send it three or four words rather than a resume.
+    let working = sections;
+    const candidates = sections.flatMap((section) =>
+      section.keywords
+        ? skillsWithoutLiteralSupport(
+            section.keywords.value,
+            section.keywords.source,
+            resumeText
+          )
+        : []
+    );
+
+    if (candidates.length) {
+      const removed = await findUnsupportedSkills(client, candidates, resumeText, report);
+      if (removed.length) {
+        report.removedSkills.push(...removed);
+        working = sections.map((section) =>
+          section.keywords
+            ? {
+                ...section,
+                keywords: {
+                  ...section.keywords,
+                  value: pruneSkills(section.keywords.value, removed),
+                },
+              }
+            : section
+        );
+      }
+    }
 
     const pairs = collectPairs(working);
     report.checked = pairs.length;

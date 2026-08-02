@@ -147,6 +147,17 @@ export default function ChangeAuditModal({ open, grounding, fit, resume, onClose
   const collapsed = resume?.collapsed ?? [];
   const removedSkills = grounding?.removedSkills ?? [];
   const omitted = resume?.omitted ?? [];
+  // Whether the length pass took anything at all. A `fit` object exists on
+  // every generation, including the ones where nothing was cut and the ones
+  // where nothing could even be measured.
+  const fitDidSomething = Boolean(
+    fit &&
+      (cuts.length > 0 ||
+        collapsed.length > 0 ||
+        fit.skillsRemoved.length > 0 ||
+        fit.droppedSections.length > 0 ||
+        fit.summaryShortened > 0)
+  );
 
   if (!open) return null;
 
@@ -236,10 +247,11 @@ export default function ChangeAuditModal({ open, grounding, fit, resume, onClose
                     : `${removedSkills.length} skills were removed`}
                 </p>
                 <p className="mt-0.5 text-xs leading-relaxed text-[var(--color-text-secondary)]">
-                  Deleted outright, not rewritten: the writer listed{" "}
-                  {removedSkills.length === 1 ? "this" : "these"} and your uploaded resume
-                  never does. If one is wrong, it is a wording mismatch — add it to your
-                  resume in the same words and regenerate.
+                  Deleted outright, not rewritten. Your uploaded resume was searched for{" "}
+                  {removedSkills.length === 1 ? "this" : "each of these"}, and then read
+                  again for anything claiming the same thing in different words. Neither
+                  found it. If that is wrong, say it on your resume in your own words and
+                  regenerate.
                 </p>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {removedSkills.map((skill) => (
@@ -263,16 +275,26 @@ export default function ChangeAuditModal({ open, grounding, fit, resume, onClose
               )}
           </section>
 
-          {/* --- The length pass --------------------------------------------- */}
-          {fit && (
+          {/* --- The length pass ---------------------------------------------
+              Shown only when it actually took something. It used to render on
+              the mere existence of a `fit` object, which is present even when
+              nothing was cut and — where the machine has no TeX engine, so no
+              page was ever measured — printed the heading "Cut to fit 0 pages"
+              over a promise that material had been removed for length and could
+              be asked back. Nothing had been removed and there was nothing to
+              ask for. The page count is dropped from the heading too when it is
+              zero, since zero pages is not a document. */}
+          {fit && fitDidSomething && (
             <section className="border-t border-[var(--color-border-subtle)] pt-4">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
-                Cut to fit {fit.pages} page{fit.pages === 1 ? "" : "s"}
+                {fit.pages > 0
+                  ? `Cut to fit ${fit.pages} page${fit.pages === 1 ? "" : "s"}`
+                  : "Cut for length"}
               </h3>
               <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-secondary)]">
                 True material removed for length, least relevant to this posting first. Ask
                 the chat to put any of it back.
-                {!fit.fits && " It still runs long — shorten some bullets by hand."}
+                {!fit.fits && fit.pages > 0 && " It still runs long — shorten some bullets by hand."}
               </p>
 
               {cuts.length > 0 && (

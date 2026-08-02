@@ -155,40 +155,84 @@ export function spelledNumbers(text: string): string[] {
 
 // --- Skills -----------------------------------------------------------------
 
-const normaliseSkill = (s: string) => s.trim().toLowerCase();
+/**
+ * A skill reduced to what it actually says.
+ *
+ * Lowercased with every separator flattened to a single space, so "Node.js",
+ * "node js" and "NODE.JS" are one string, and so is "fine-tuning" against
+ * "fine tuning". `+` and `#` survive because they are the whole difference
+ * between C, C++ and C#.
+ */
+export function skillKey(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9+#]+/g, " ")
+    .trim();
+}
 
 /**
- * Skills claimed that the original document never listed.
+ * Skills the candidate's own document does not literally contain.
  *
- * Containment rather than permutation: dropping a skill is allowed — the prompt
- * asks for a selective list — but adding one is a claim about the candidate
- * that nothing supports.
+ * NOT the same question as "is this skill invented", which is why the result is
+ * called a candidate list rather than a verdict. This is the free half of the
+ * check: anything found here is certainly the candidate's and needs no further
+ * thought, and only what is left costs a model call.
+ *
+ * WHAT THIS USED TO DO, AND WHY IT WAS WRONG
+ * It compared the writer's list against `source` — the writer's own summary of
+ * what the document listed — by exact string equality, and deleted anything
+ * that didn't match a whole item. The prompt asks the writer to regroup
+ * keywords, so a source line reading "LLM systems (RAG, agents, fine-tuning)"
+ * arrives as ONE source item and sensibly comes back as four. None of the four
+ * equals the one, so all four were deleted as invented — on a resume that
+ * states them in those exact words, for a posting that asked for them. The
+ * check punished the writer for doing what it was told.
+ *
+ * Two changes fix that class of error. The document itself is searched, not
+ * just the writer's summary of it — a copy of a copy was never the right thing
+ * to check against, and `resumeText` was already being passed into this pass
+ * for the bullet checker. And matching is on word boundaries within the
+ * normalised text rather than on whole items, so a keyword lifted out of a
+ * longer line still counts. Boundaries matter: "Java" must not match inside
+ * "JavaScript".
  */
-export function unsupportedSkills(
+export function skillsWithoutLiteralSupport(
   value: ResumeSkillGroup[],
-  source: ResumeSkillGroup[]
+  source: ResumeSkillGroup[],
+  resumeText: string
 ): string[] {
-  const known = new Set(source.flatMap((g) => g.items).map(normaliseSkill));
+  const haystack = ` ${[
+    ...source.flatMap((g) => g.items).map(skillKey),
+    skillKey(resumeText),
+  ].join(" ")} `;
+
   const seen = new Set<string>();
   const out: string[] = [];
 
   for (const item of value.flatMap((g) => g.items)) {
-    const key = normaliseSkill(item);
-    if (known.has(key) || seen.has(key)) continue;
+    const key = skillKey(item);
+    if (!key || seen.has(key)) continue;
     seen.add(key);
+    if (haystack.includes(` ${key} `)) continue;
     out.push(item);
   }
   return out;
 }
 
-/** Drops unsupported skills, leaving groups that still have something in them. */
+/**
+ * Removes exactly the skills named, leaving groups that still have something.
+ *
+ * Takes the list to delete rather than deriving it, because the decision is now
+ * made in two stages — a text search and, for what survives it, a model — and a
+ * function that re-derived it here could only ever repeat the first.
+ */
 export function pruneSkills(
   value: ResumeSkillGroup[],
-  source: ResumeSkillGroup[]
+  remove: string[]
 ): ResumeSkillGroup[] {
-  const known = new Set(source.flatMap((g) => g.items).map(normaliseSkill));
+  const gone = new Set(remove.map(skillKey));
   return value
-    .map((g) => ({ ...g, items: g.items.filter((i) => known.has(normaliseSkill(i))) }))
+    .map((g) => ({ ...g, items: g.items.filter((i) => !gone.has(skillKey(i))) }))
     .filter((g) => g.items.length > 0);
 }
 
