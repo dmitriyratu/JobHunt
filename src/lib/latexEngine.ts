@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, chmod, copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -91,6 +92,64 @@ function candidatePaths(): string[] {
  */
 const SERVICE_URL = process.env.LATEX_SERVICE_URL?.replace(/\/+$/, "") ?? "";
 
+// --- The engine that travels with the code ----------------------------------
+
+/**
+ * A Tectonic inside the deployment bundle, with its TeX cache already primed.
+ *
+ * This is how the app typesets on a host that has no package manager and a
+ * read-only disk. The engine is 26MB and the cache for this preamble is 55MB,
+ * which together sit inside the 250MB a serverless function is allowed, so
+ * rather than call a container over HTTP the whole thing ships with the code
+ * and is spawned in-process. No second deployment, no second bill, no cold
+ * start but the function's own.
+ *
+ * scripts/fetch-tectonic.mjs puts both here during a Linux build;
+ * next.config.ts is what actually gets them into the bundle, since tracing
+ * follows imports and nothing here imports a binary.
+ */
+const BUNDLE_DIR = path.join(process.cwd(), "vendor", "tectonic");
+const BUNDLED_BIN = path.join(BUNDLE_DIR, "bin", "tectonic");
+const BUNDLED_CACHE = path.join(BUNDLE_DIR, "cache");
+
+let bundledPromise: Promise<string | null> | undefined;
+
+/**
+ * The bundled binary, made runnable, or null if there isn't one.
+ *
+ * Memoised on the promise rather than the result so that concurrent first
+ * requests — which is what a cold start receives — share one preparation
+ * instead of racing to copy the same file.
+ *
+ * The copy is a fallback, not the normal path. A traced file does not reliably
+ * keep its executable bit, and the bundle is read-only so it cannot be chmod'd
+ * where it lies; /tmp is the only writable directory a function has. When the
+ * bit did survive this costs one access() and nothing is copied.
+ */
+async function bundledEngine(): Promise<string | null> {
+  bundledPromise ??= (async () => {
+    try {
+      await access(BUNDLED_BIN, constants.F_OK);
+    } catch {
+      return null;
+    }
+    try {
+      await access(BUNDLED_BIN, constants.X_OK);
+      return BUNDLED_BIN;
+    } catch {
+      const runnable = path.join(tmpdir(), "tectonic");
+      try {
+        await access(runnable, constants.X_OK);
+      } catch {
+        await copyFile(BUNDLED_BIN, runnable);
+        await chmod(runnable, 0o755);
+      }
+      return runnable;
+    }
+  })();
+  return bundledPromise;
+}
+
 let cachedEngine: string | null | undefined;
 
 /**
@@ -106,6 +165,16 @@ let cachedEngine: string | null | undefined;
 export async function findEngine(): Promise<string | null> {
   if (SERVICE_URL) return "remote";
   if (cachedEngine !== undefined) return cachedEngine;
+
+  // Before PATH, because on a deployed function this is the only engine there
+  // is, and after LATEX_SERVICE_URL, because setting that is a deliberate
+  // instruction to compile somewhere else.
+  const bundled = await bundledEngine();
+  if (bundled) {
+    cachedEngine = bundled;
+    return bundled;
+  }
+
   for (const candidate of candidatePaths()) {
     try {
       await run(candidate, ["--version"], { timeout: 10_000 });
@@ -120,8 +189,10 @@ export async function findEngine(): Promise<string | null> {
 }
 
 const REMOTE_HINT =
-  " On a host that cannot run binaries — Vercel, Netlify, any serverless"
-  + " platform — deploy service/ and set LATEX_SERVICE_URL to it instead. See DEPLOY.md.";
+  " On a deployed host this means the build did not bundle one: `npm run build`"
+  + " runs scripts/fetch-tectonic.mjs, which fetches the engine and primes its"
+  + " cache into vendor/tectonic, and it only does that on Linux. Failing that,"
+  + " deploy service/ and set LATEX_SERVICE_URL to it. See DEPLOY.md.";
 
 export const INSTALL_HINT =
   (process.platform === "win32"
@@ -155,6 +226,15 @@ function extractErrors(log: string): string {
   // summary lands.
   return lines.filter((l) => l.trim()).slice(-12).join("\n");
 }
+
+/**
+ * What a compile against a read-only, incomplete cache looks like from outside.
+ *
+ * Only consulted when the bundled engine is the one that ran; on a developer's
+ * machine the cache is writable and a missing package is simply fetched.
+ */
+const CACHE_MISS =
+  /read-only file system|permission denied|failed to (open|create|write)|unable to (open|fetch|download)|not found in bundle/i;
 
 function firstLine(log: string): string {
   const line = log
@@ -307,6 +387,19 @@ export async function compileLatex(tex: string): Promise<CompileResult> {
   if (!engine) return { ok: false, message: INSTALL_HINT, log: "" };
   if (engine === "remote") return compileRemote(tex);
 
+  // The bundled engine reads its packages from the cache that shipped beside
+  // it, which is inside the deployment and therefore read-only. That is fine:
+  // a compile whose packages are all present writes nothing to the cache — the
+  // output goes to the temp directory below, which is under /tmp and writable.
+  // A document that reaches for a package the build never warmed is the one
+  // case this cannot serve, and it is reported as such rather than as a
+  // filesystem error.
+  const bundled = await bundledEngine();
+  const usingBundle = engine === bundled;
+  const env = usingBundle
+    ? { ...process.env, TECTONIC_CACHE_DIR: BUNDLED_CACHE }
+    : process.env;
+
   const dir = await mkdtemp(path.join(tmpdir(), "jobhunt-tex-"));
   try {
     const texPath = path.join(dir, TEX_NAME);
@@ -329,7 +422,7 @@ export async function compileLatex(tex: string): Promise<CompileResult> {
           "--outdir", dir,
           texPath,
         ],
-        { timeout: COMPILE_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024 }
+        { timeout: COMPILE_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024, env }
       );
       stderr = result.stderr ?? "";
     } catch (err) {
@@ -351,8 +444,22 @@ export async function compileLatex(tex: string): Promise<CompileResult> {
       pdf = await readFile(path.join(dir, "resume.pdf"));
     } catch {
       const log = await readFile(path.join(dir, "resume.log"), "utf8").catch(() => "");
-      const detail = extractErrors(log || stderr);
-      return { ok: false, message: firstLine(log || stderr), log: detail };
+      const raw = log || stderr;
+      const detail = extractErrors(raw);
+      // A preamble that asks for a package the build never warmed fails deep in
+      // the engine, in the language of file permissions, and reads like the
+      // host is broken. It isn't: the bundle is complete for the preamble it
+      // was built against and this document went outside it.
+      if (usingBundle && CACHE_MISS.test(raw)) {
+        return {
+          ok: false,
+          message:
+            "This document needs a TeX package that wasn't bundled at build time."
+            + " Add it to service/warm.tex, which mirrors the preamble, and redeploy.",
+          log: detail,
+        };
+      }
+      return { ok: false, message: firstLine(raw), log: detail };
     }
 
     return {

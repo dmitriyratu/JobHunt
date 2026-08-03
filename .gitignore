@@ -38,3 +38,7 @@ next-env.d.ts
 
 # LaTeX sources kept for debugging (JOBHUNT_TEX_DIR)
 .tex-debug/
+
+# The Tectonic engine and its primed TeX cache, fetched at build time by
+# scripts/fetch-tectonic.mjs. Build output, and 81MB of it.
+/vendor/

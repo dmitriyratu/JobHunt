@@ -66,35 +66,93 @@ npx vercel --prod
 
 ## Compiling PDFs
 
-**Vercel alone cannot produce the resume PDF, and no amount of configuration
-will change that.**
+**This needs nothing from you. It is here because when it breaks, nothing else
+in the app explains what you are looking at.**
 
 The resume is typeset by [Tectonic](https://tectonic-typesetting.github.io/), a
 LaTeX engine the app runs as a program. On your own machine that works with no
 setup — install Tectonic and the app finds it, including at the path the Windows
-installer uses. A Vercel function is a different computer: it has no Tectonic,
-no way to install one, and a read-only disk. Installing it locally does nothing
-for the deployed site, which is the single most confusing thing about this
-whole setup.
+installer uses. A Vercel function is a different computer: no Tectonic, no way
+to install one, and a read-only disk.
 
-Left unconfigured, the deployed app still works, minus the document half:
+The engine therefore travels with the code. `npm run build` runs
+`scripts/fetch-tectonic.mjs`, which on a Linux build downloads Tectonic and
+compiles a throwaway document to fill its TeX cache, both into `vendor/`.
+`next.config.ts` ships that directory with the two routes that typeset. There
+is no service to deploy, no environment variable to set, and no second bill.
 
-| | Without a compile service |
+It fits because it is small:
+
+| | |
+|---|---|
+| `vendor/tectonic/bin/tectonic` | 26 MB — the statically-linked musl build, no shared libraries to satisfy |
+| `vendor/tectonic/cache` | 55 MB — every TeX file this preamble asks for |
+| | **81 MB**, against the 250 MB a function is allowed |
+
+Both are gitignored. They are build output, rebuilt on every deploy.
+
+### Why the build spends a minute on this
+
+Tectonic downloads the TeX files a document asks for and caches them, so an
+empty cache means the first real compile pulls them over the network — slow at
+best, impossible on a read-only disk. Both builds therefore compile
+`service/warm.tex` purely for the side effect of filling that cache:
+`scripts/fetch-tectonic.mjs` for the Vercel bundle, the `Dockerfile` for the
+container image. One document, so the two cannot disagree about what to warm.
+
+**`warm.tex` mirrors the preamble in `src/lib/resumeLatex.ts`, and on the
+bundled path that is now load-bearing.** The cache ships read-only, so a package
+the warm-up never fetched cannot be fetched at runtime either — it fails the
+compile, with a message saying so:
+
+> This document needs a TeX package that wasn't bundled at build time. Add it
+> to service/warm.tex, which mirrors the preamble, and redeploy.
+
+If you add a `\usepackage` to `preambleFor()`, add it to `warm.tex` in the same
+commit. Under the container this only cost one slow compile; here it is the
+difference between a document that builds and one that doesn't.
+
+That constraint holds only for the preamble the app generates. Editing the body
+of a document — which is all the editor exposes unless you switch to full
+source — cannot reach outside the bundled cache.
+
+### When the engine is missing
+
+If the deployed site says **"Tectonic is not installed"**, the build did not
+bundle one. The build log is where to look — the script announces itself on
+every line it prints:
+
+```
+[tectonic] downloading tectonic-0.17.0-x86_64-unknown-linux-musl.tar.gz
+[tectonic] Tectonic 0.17.0
+[tectonic] warming the bundle cache…
+[tectonic] cache warmed.
+```
+
+`[tectonic] win32: skipping bundle` is correct on your own machine and wrong on
+Vercel; it means the build ran somewhere that isn't Linux.
+
+Without an engine the app still works, minus the document half — and one part
+of that is silent:
+
+| | With no engine |
 |---|---|
 | Tailoring, match report, letter | Fine |
 | `.docx` download | Fine — built in the browser |
-| PDF preview and download | Dead, with an install hint that cannot be acted on |
-| Fitting to a page count | **Silently does nothing.** The length pass measures a document by building it; with no engine it measures zero pages and trims nothing. This one is worth knowing, because nothing on screen says the page target was ignored. |
+| PDF preview and download | Dead, with an install hint |
+| Fitting to a page count | **Silently does nothing.** The length pass measures a document by building it; with no engine it measures zero pages and trims nothing. Nothing on screen says the page target was ignored. |
 
-`service/` is the fix: the same Tectonic, in a container, behind one HTTP
-endpoint. Point the app at it with `LATEX_SERVICE_URL` and every compile —
-preview, download, and the page-fitting search — goes there instead.
+### Falling back to a container
 
-### Deploying it to Cloud Run
+`service/` is still here and still works: the same Tectonic behind one HTTP
+endpoint. Set `LATEX_SERVICE_URL` and it takes precedence over the bundle —
+useful if you outgrow Vercel's compute allowance, or if a future Tectonic stops
+fitting.
 
-Any container host works; Cloud Run is suggested because it scales to zero, so
-a personal deployment stays inside the always-free tier. Expect a few seconds
-on the first compile after an idle period while the container wakes.
+Any container host works. Cloud Run scales to zero and stays inside its
+always-free tier, but requires a billing account with a card on file;
+[Render](https://render.com)'s free tier does not, at the cost of sleeping after
+15 minutes idle and waking in 30–60s.
 
 ```bash
 cd service
@@ -127,33 +185,29 @@ curl -X POST https://YOUR-SERVICE-URL/compile \
   | head -c 120                                      # {"pdf":"JVBERi0..."
 ```
 
-### Why the image build takes a few minutes
-
-Tectonic downloads the TeX files a document asks for and caches them, so an
-empty cache means the first real compile pulls a bundle over the network — slow
-at best, a timeout at worst, and it would happen again after every deploy. The
-`Dockerfile` therefore compiles `service/warm.tex` during the build purely for
-the side effect of filling that cache, and ships it inside the image.
-
-`warm.tex` mirrors the preamble in `src/lib/resumeLatex.ts`. If you change the
-packages there, copy them across. Drift is not fatal — a missing package is
-fetched at runtime the first time a document needs it — but it costs one slow
-compile on the deployed site.
-
 ### Running it locally
 
-You don't need to. With no `LATEX_SERVICE_URL`, the app spawns your local
-`tectonic` and nothing about this applies. To test the remote path anyway:
+You don't need to. On Windows and macOS the bundle step skips itself and the
+app spawns the `tectonic` you installed, exactly as before. To exercise either
+deployed path anyway:
 
 ```bash
+# the bundle, as Vercel builds it — Linux only, it fetches a Linux binary
+TECTONIC_BUNDLE_FORCE=1 npm run bundle:tectonic
+
+# the container
 cd service && node server.mjs          # uses your own tectonic, port 8080
 LATEX_SERVICE_URL=http://localhost:8080 npm run dev
 ```
+
+The app prefers them in that order: `LATEX_SERVICE_URL` if set, then
+`vendor/tectonic`, then whatever is on `PATH`.
 
 ## After deploying
 
 Open the URL, click **AI settings**, and paste an OpenAI key — the app will
 refuse to run without one, by design.
 
-If the resume step shows "Tectonic is not installed", the compile service is
-either not deployed or not wired up — see [Compiling PDFs](#compiling-pdfs).
+If the resume step shows "Tectonic is not installed", the build did not bundle
+an engine — see [Compiling PDFs](#compiling-pdfs), which starts with where to
+look in the build log.

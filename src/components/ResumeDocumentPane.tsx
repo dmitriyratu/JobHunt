@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LatexEditor from "./LatexEditor";
 import ResumePdfPreview from "./ResumePdfPreview";
 import ChangeAuditModal, {
@@ -194,6 +194,21 @@ export default function ResumeDocumentPane({
 
   const canLocate = synctex.pages.size > 0;
 
+  // Ctrl/Cmd+Enter rebuilds. The document no longer follows the source on its
+  // own, and reaching for the mouse after every edit is the cost of that; this
+  // is what keeps a tightening pass — cut a line, look, cut another — feeling
+  // like the live preview it replaced.
+  const runCompile = compile.compile;
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+      event.preventDefault();
+      runCompile();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [runCompile]);
+
   if (loading) {
     return (
       <div className="glass-panel flex flex-col items-center justify-center gap-3 p-12">
@@ -254,16 +269,45 @@ export default function ResumeDocumentPane({
               ))}
             </div>
 
-            <span className="text-xs text-[var(--color-text-muted)]">
-              {compile.compiling
-                ? "Typesetting…"
-                : compile.pages > 0 && (
-                    <span className={overTarget ? "text-[var(--color-warning)]" : undefined}>
-                      {compile.pages} page{compile.pages === 1 ? "" : "s"}
-                      {pageTarget !== null && ` · target ${pageTarget}`}
-                    </span>
-                  )}
-            </span>
+            {/* Describes the PDF on screen, so it keeps saying what that
+                document is while the next one builds — the button beside it is
+                what reports the build. Dimmed while compiling because the count
+                is about to be restated, and possibly differently. */}
+            {compile.pages > 0 && (
+              <span
+                className={`text-xs transition-opacity ${
+                  compile.compiling ? "opacity-50" : ""
+                } ${
+                  overTarget ? "text-[var(--color-warning)]" : "text-[var(--color-text-muted)]"
+                }`}
+              >
+                {compile.pages} page{compile.pages === 1 ? "" : "s"}
+                {pageTarget !== null && ` · target ${pageTarget}`}
+              </span>
+            )}
+
+            {/* The preview stopped following the source, so this is what closes
+                the loop — and it has to carry the fact that it needs pressing,
+                because a document that is quietly one edit out of date looks
+                exactly like one that is current.
+
+                Accented only while there is something to build. A button that
+                shouts whether or not it has work reads as decoration after the
+                second glance, and the state that matters here is the one where
+                what you are reading is not what you wrote. */}
+            <button
+              type="button"
+              onClick={runCompile}
+              disabled={compile.compiling}
+              title="Rebuild the preview from the source (Ctrl/Cmd+Enter)"
+              className={`rounded-md px-3 py-2.5 text-xs font-medium transition-colors disabled:opacity-50 sm:py-1.5 ${
+                compile.dirty
+                  ? "bg-[var(--color-accent)] text-white hover:opacity-90"
+                  : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-secondary)]"
+              }`}
+            >
+              {compile.compiling ? "Typesetting…" : "Recompile"}
+            </button>
 
             {/* Sits with the page count because it is the same kind of fact —
                 what this document is, not something to do about it — and is
