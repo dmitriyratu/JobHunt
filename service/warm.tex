@@ -1,0 +1,38 @@
+% Compiled once during the image build, for its side effect.
+%
+% Tectonic ships as a single binary and downloads the TeX files a document
+% actually asks for on first use, caching them. In a container that cache is
+% empty on every cold start unless it is baked in — so the first real compile
+% after each deploy would try to pull the bundle, and either take a minute or
+% time out. Building this at image-build time fills the cache, and it ships
+% inside the image.
+%
+% KEEP THE PREAMBLE BELOW IN STEP WITH preambleFor() IN src/lib/resumeLatex.ts.
+% Drift is not fatal — a package this misses is fetched at runtime the first
+% time a real document wants it, costing one slow compile — but every package
+% listed here is one the deployed app never waits for.
+
+\documentclass[10pt,letterpaper]{article}
+\usepackage[fontsize=10pt]{fontsize}
+\usepackage[margin=0.55in,top=0.58in,bottom=0.68in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{iftex}
+\ifPDFTeX\usepackage[utf8]{inputenc}\fi
+\usepackage{XCharter}
+\usepackage[scaled=0.96]{FiraSans}
+\usepackage{microtype}
+\usepackage{etoolbox}
+\usepackage{xcolor}
+\usepackage[document]{ragged2e}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{needspace}
+\usepackage{fancyhdr}
+\definecolor{navy}{HTML}{183A5A}
+\usepackage[colorlinks=true,urlcolor=navy,linkcolor=navy,citecolor=navy]{hyperref}
+
+\begin{document}
+\section*{Warm}
+Priming the bundle cache. \textbf{Bold}, \emph{italic}, \sffamily sans.
+\begin{itemize}[leftmargin=*]\item A list, so enumitem is exercised too.\end{itemize}
+\end{document}

@@ -20,6 +20,12 @@ const run = promisify(execFile);
  */
 
 const COMPILE_TIMEOUT_MS = 40_000;
+/**
+ * Longer than the local one, because it covers a cold start as well as a
+ * compile: a container that scales to zero has to be booted by the first
+ * request after an idle period, and on a free tier that is not fast.
+ */
+const REMOTE_TIMEOUT_MS = 75_000;
 const TEX_NAME = "resume.tex";
 
 export type CompileSuccess = {
@@ -68,10 +74,37 @@ function candidatePaths(): string[] {
   return out;
 }
 
+/**
+ * A compile service to call instead of spawning anything.
+ *
+ * This is what makes the app deployable to a host that cannot run binaries.
+ * A serverless function has no Tectonic, no way to install one, and a
+ * read-only filesystem, so on Vercel the whole document half of the app was
+ * dead: no preview, no PDF download, and — less visibly — no page fitting,
+ * because the length pass measures a document by building it. It reported
+ * "0 pages" and quietly trimmed nothing.
+ *
+ * Set LATEX_SERVICE_URL and every compile goes over HTTP to `service/`, which
+ * is the same Tectonic in a container. Leave it unset and nothing changes:
+ * the local binary is spawned exactly as before, which is what keeps a
+ * developer's machine working with no configuration at all.
+ */
+const SERVICE_URL = process.env.LATEX_SERVICE_URL?.replace(/\/+$/, "") ?? "";
+
 let cachedEngine: string | null | undefined;
 
-/** The tectonic binary, or null if it isn't installed. Probed once per process. */
+/**
+ * Where compiles will happen: a path to a binary, "remote" for the service, or
+ * null when there is neither.
+ *
+ * The service is NOT pinged to answer this. The check runs on every visit to
+ * the resume step, and a service that scales to zero would be woken by each
+ * one — paying a cold start to answer a question whose answer is "yes, it is
+ * configured". A misconfigured URL therefore reports available and fails at the
+ * first real compile, with the service's own error rather than a guess.
+ */
 export async function findEngine(): Promise<string | null> {
+  if (SERVICE_URL) return "remote";
   if (cachedEngine !== undefined) return cachedEngine;
   for (const candidate of candidatePaths()) {
     try {
@@ -86,10 +119,15 @@ export async function findEngine(): Promise<string | null> {
   return null;
 }
 
+const REMOTE_HINT =
+  " On a host that cannot run binaries — Vercel, Netlify, any serverless"
+  + " platform — deploy service/ and set LATEX_SERVICE_URL to it instead. See DEPLOY.md.";
+
 export const INSTALL_HINT =
-  process.platform === "win32"
-    ? 'Tectonic is not installed. Download tectonic.exe from github.com/tectonic-typesetting/tectonic/releases into %LOCALAPPDATA%\\Programs\\tectonic, or set TECTONIC_PATH to point at it.'
-    : "Tectonic is not installed. Install it (brew install tectonic, or cargo install tectonic) or set TECTONIC_PATH to point at the binary.";
+  (process.platform === "win32"
+    ? "Tectonic is not installed. Download tectonic.exe from github.com/tectonic-typesetting/tectonic/releases into %LOCALAPPDATA%\\Programs\\tectonic, or set TECTONIC_PATH to point at it."
+    : "Tectonic is not installed. Install it (brew install tectonic, or cargo install tectonic) or set TECTONIC_PATH to point at the binary.") +
+  REMOTE_HINT;
 
 // --- Log parsing ------------------------------------------------------------
 
@@ -199,9 +237,75 @@ async function readSyncTex(dir: string): Promise<string> {
  * cross-references, so the second pass only ever reproduces the first, and
  * skipping it halves the time to preview.
  */
+/**
+ * The same compile, over HTTP.
+ *
+ * The service returns the two artefacts and the log, and nothing else: page
+ * counting and error formatting stay here, so a remote compile and a local one
+ * produce the identical CompileResult and everything downstream — the preview,
+ * the page-fitting search, the error pane — cannot tell which it got.
+ *
+ * The timeout is generous on purpose. A container that scales to zero is asleep
+ * between applications, and the first compile after that pays for the wake-up
+ * as well as the typesetting.
+ */
+async function compileRemote(tex: string): Promise<CompileResult> {
+  try {
+    const response = await fetch(`${SERVICE_URL}/compile`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(process.env.LATEX_SERVICE_TOKEN
+          ? { Authorization: `Bearer ${process.env.LATEX_SERVICE_TOKEN}` }
+          : {}),
+      },
+      body: JSON.stringify({ tex }),
+      signal: AbortSignal.timeout(REMOTE_TIMEOUT_MS),
+    });
+
+    const data = (await response.json().catch(() => null)) as {
+      pdf?: string;
+      synctex?: string;
+      message?: string;
+      log?: string;
+    } | null;
+
+    if (!data) {
+      return {
+        ok: false,
+        message: `The compile service answered ${response.status} with something that wasn't JSON.`,
+        log: "",
+      };
+    }
+    // A document that doesn't typeset is a 422 carrying the engine's own words,
+    // and is reported as what it is: a problem with the document, not the
+    // service. Anything else is the service itself failing.
+    if (!data.pdf) {
+      return {
+        ok: false,
+        message: data.message ?? `The compile service answered ${response.status}.`,
+        log: data.log ?? "",
+      };
+    }
+
+    const pdf = Buffer.from(data.pdf, "base64");
+    return { ok: true, pdf, pages: await countPages(pdf), synctex: data.synctex ?? "" };
+  } catch (err) {
+    const timedOut = err instanceof Error && err.name === "TimeoutError";
+    return {
+      ok: false,
+      message: timedOut
+        ? `The compile service did not answer within ${REMOTE_TIMEOUT_MS / 1000}s.`
+        : "Could not reach the compile service.",
+      log: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 export async function compileLatex(tex: string): Promise<CompileResult> {
   const engine = await findEngine();
   if (!engine) return { ok: false, message: INSTALL_HINT, log: "" };
+  if (engine === "remote") return compileRemote(tex);
 
   const dir = await mkdtemp(path.join(tmpdir(), "jobhunt-tex-"));
   try {
