@@ -190,10 +190,10 @@
  * value differences that read clearly at the light end collapse into mud.
  *
  * 1. Hairlines do the separating, not elevation. A shadow is invisible against
- *    near-black, and the surface steps below are only about 1.13:1 apart —
+ *    near-black, and the surface steps below are only about 1.18:1 apart —
  *    nowhere near enough on their own. --color-border clears the same 3:1
- *    control-boundary bar as its light counterpart (3.66:1 on a card, 4.15:1
- *    on the canvas, 3.13:1 on an overlay), and --color-border-subtle carries
+ *    control-boundary bar as its light counterpart (3.84:1 on a card, 4.51:1
+ *    on the canvas, 3.14:1 on an overlay), and --color-border-subtle carries
  *    the card edge at 1.35:1. This is what makes a card read as an object
  *    rather than a slightly different patch of background.
  *
@@ -201,7 +201,7 @@
  *    below the card to satisfy a 7:1 floor against --color-text-tertiary, and
  *    the whole report went flat — four barely-tinted black rectangles. They
  *    now sit *above* the card as tinted raised panels, which clears the same
- *    7:1 floor from the other direction (7.3–7.9:1) and lets the hue actually
+ *    7:1 floor from the other direction (7.7–8.0:1) and lets the hue actually
  *    register.
  *
  * 3. The four hues are brighter and the text steps are lifted a notch, so the
@@ -210,21 +210,39 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --color-surface: #0c0e14;
-  --color-surface-raised: #181c26;
-  --color-surface-overlay: #232936;
+  /*
+   * The whole ladder sits a step above where it started, and the gaps between
+   * its rungs are wider: canvas→card was 1.13:1 and is now 1.18:1,
+   * canvas→overlay was 1.32:1 and is now 1.43:1.
+   *
+   * The old set was not unreadable — every text step cleared AA on it — but at
+   * 1.13:1 elevation carried no signal, so a card, the header band and the page
+   * ground all read as one unlit slab with a hairline drawn on it. The canvas
+   * was also close enough to black that nothing could recede below it: an inset
+   * well had to be built by going *up*, which spent the same two steps the
+   * cards needed.
+   *
+   * Widening costs a little text headroom against the card, which is why the
+   * four text steps below moved up with it rather than staying put.
+   */
+  --color-surface: #10141c;
+  --color-surface-raised: #1e2330;
+  --color-surface-overlay: #2a3242;
 
-  --color-border: #6a7589;
-  --color-border-subtle: #2c3342;
+  --color-border: #747e91;
+  --color-border-subtle: #323947;
 
-  /* Measured against --color-surface-raised (#181c26), the ground most body
-     copy sits on: primary 15.5:1, secondary 11.3:1, tertiary 8.4:1, muted 6.0:1 */
-  --color-text-primary: #f2f4f9;
-  --color-text-secondary: #cdd3e0;
-  --color-text-tertiary: #afb6c6;
-  --color-text-muted: #929aac;
-  --color-text-placeholder: #657084;
-  --color-chip: #1f2431;
+  /* Measured against --color-surface-raised (#1e2330), the ground most body
+     copy sits on: primary 14.8:1, secondary 11.3:1, tertiary 8.9:1, muted 6.1:1.
+     The two that decide how far this ramp can sink are measured elsewhere:
+     tertiary is prose, so it holds 7:1 on the *overlay* as well (7.3:1), and
+     muted only owes AA — 5.0:1 there. */
+  --color-text-primary: #f7f8fb;
+  --color-text-secondary: #d7dbe6;
+  --color-text-tertiary: #bcc3d0;
+  --color-text-muted: #99a1b2;
+  --color-text-placeholder: #6b7689;
+  --color-chip: #252a37;
 
   --color-accent: #9a97ff;
   --color-accent-hover: #b0adff;
@@ -237,17 +255,21 @@
   --color-danger: #ff8085;
   --color-danger-muted: #ff808533;
 
-  /* All four lift off the card by a comparable amount (1.13–1.19:1) so no one
+  /* All four lift off the card by a comparable amount (1.11–1.14:1) so no one
      outcome reads as flatter than the rest, while each keeps 7:1 or better
-     under --color-text-tertiary. */
-  --color-danger-surface: #32222a;
-  --color-danger-line: #5e3840;
-  --color-warning-surface: #2c2415;
-  --color-warning-line: #5c4a2c;
-  --color-success-surface: #142c22;
-  --color-success-line: #2d5a48;
-  --color-accent-surface: #242346;
-  --color-accent-line: #45447a;
+     under --color-text-tertiary (7.74–8.00:1).
+
+     Re-picked when the ladder above moved: these are defined as a lift *over*
+     the card rather than as fixed values, so raising the card without raising
+     them would have flattened all four to nothing. */
+  --color-danger-surface: #382830;
+  --color-danger-line: #623d45;
+  --color-warning-surface: #322a1b;
+  --color-warning-line: #604f32;
+  --color-success-surface: #1a3228;
+  --color-success-line: #345f4e;
+  --color-accent-surface: #2a294b;
+  --color-accent-line: #4a497e;
 
   --color-on-accent: #14132e;
   --color-on-success: #04241a;
@@ -382,7 +404,7 @@
     border-radius: var(--radius-sm);
   }
 
-  /* The default dark scrollbar on a #101218 ground is nearly black-on-black.
+  /* The default dark scrollbar on a #10141c ground is nearly black-on-black.
      `color-scheme` handles Firefox and Safari; WebKit needs this. */
   ::-webkit-scrollbar {
     width: 12px;
