@@ -17,7 +17,11 @@ import { loadUsageLog, USAGE_CHANGED_EVENT, type UsageEndpoint } from "@/lib/usa
 const STEP_OF: Record<UsageEndpoint, StepId> = {
   "analyze-match": "match",
   "report-chat": "match",
-  "proofread-resume": "resume",
+  // Runs on the upload page, not the resume one — it is the spelling and
+  // name-variant pass over the file you just dropped in. Filed under "resume"
+  // it was the reason the first stage never showed a figure while quietly
+  // inflating the third.
+  "proofread-resume": "source",
   "triage-document": "resume",
   "tailor-resume": "resume",
   "verify-grounding": "resume",
@@ -125,10 +129,15 @@ export default function StepNav({ hint }: { hint?: string }) {
       </div>
 
       {/* The running total, which is the one number worth carrying at every
-          width — a phone gets it alone, and the per-step breakdown behind it
-          appears from md, where there is room for four more columns. */}
+          width — anything narrow gets it alone, and the per-step breakdown
+          behind it appears from lg.
+
+          It used to appear from md, back when the breakdown only rendered the
+          stages that had spend and so was usually two or three columns wide.
+          Now that it is always five, md is about 8px short of holding the row
+          and the back link starts truncating to pay for it. */}
       {costs.total > 0 && (
-        <div className="shrink-0 text-center leading-tight md:hidden">
+        <div className="shrink-0 text-center leading-tight lg:hidden">
           <p className="eyebrow">Total</p>
           <p className="text-xs font-semibold tabular-nums text-[var(--color-text-primary)]">
             {formatCost(costs.total)}
@@ -136,18 +145,32 @@ export default function StepNav({ hint }: { hint?: string }) {
         </div>
       )}
 
+      {/* Every stage, spent or not. Showing only the ones with a figure made the
+          row a different shape on every page and left the reader to work out
+          whether a missing column meant "free" or "not yet" — a dash says the
+          second outright, and the columns stop moving as you walk the journey.
+
+          The dash is muted where a figure is secondary text, so a row of them
+          reads as an empty ledger rather than as four values you have to check. */}
       {costs.total > 0 && (
-        <dl className="hidden shrink-0 items-center gap-4 text-xs md:flex">
-          {steps
-            .filter((s) => (costs.byStep.get(s.id) ?? 0) > 0)
-            .map((s) => (
+        <dl className="hidden shrink-0 items-center gap-4 text-xs lg:flex">
+          {steps.map((s) => {
+            const spent = costs.byStep.get(s.id) ?? 0;
+            return (
               <div key={s.id} className="text-center leading-tight">
                 <dt className="eyebrow">{s.label}</dt>
-                <dd className="tabular-nums text-[var(--color-text-secondary)]">
-                  {formatCost(costs.byStep.get(s.id) ?? 0)}
+                <dd
+                  className={`tabular-nums ${
+                    spent > 0
+                      ? "text-[var(--color-text-secondary)]"
+                      : "text-[var(--color-text-muted)]"
+                  }`}
+                >
+                  {spent > 0 ? formatCost(spent) : "—"}
                 </dd>
               </div>
-            ))}
+            );
+          })}
           <div className="border-l border-[var(--color-border)] pl-4 text-center leading-tight">
             <dt className="eyebrow">Total</dt>
             <dd className="tabular-nums font-semibold text-[var(--color-text-primary)]">

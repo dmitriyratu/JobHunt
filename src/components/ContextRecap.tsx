@@ -10,9 +10,13 @@ import type { MatchReport } from "@/types";
  *
  * This is provenance rather than input — it says nothing you didn't already
  * decide on an earlier step — so it opens collapsed and stays out of the way of
- * the work. The exception is the company field: when nothing was detected,
- * there is a blank here that actually needs filling, and hiding it behind a
- * disclosure would hide the one thing on this panel that isn't just a recap.
+ * the work. Always: an undetected company used to spring the whole panel open
+ * on arrival, which spent a screen of recap to surface one empty field and made
+ * the step look like it was asking for something before you had done anything.
+ *
+ * The blank still has to be findable, so the summary line says so — that is one
+ * line in a place the eye already lands, and the field itself is one click
+ * behind it.
  */
 
 type Props = {
@@ -77,7 +81,7 @@ export default function ContextRecap({
   onCompanyNameChange,
 }: Props) {
   const needsCompany = !detectedCompany && !companyName.trim();
-  const [open, setOpen] = useState(needsCompany);
+  const [open, setOpen] = useState(false);
 
   // The line answers "which application am I in?", which is the only thing
   // worth knowing at a glance. Shown open or closed, so the header's height
@@ -121,9 +125,15 @@ export default function ContextRecap({
           </svg>
           <span className="min-w-0">
             <span className="block text-sm font-medium">Context carried over</span>
-            {summary.length > 0 && (
+            {(summary.length > 0 || needsCompany) && (
               <span className="block truncate text-xs text-[var(--color-text-muted)]">
                 {summary.join(" · ")}
+                {needsCompany && (
+                  <>
+                    {summary.length > 0 && " · "}
+                    <span className="text-[var(--color-warning)]">no company detected</span>
+                  </>
+                )}
               </span>
             )}
           </span>
