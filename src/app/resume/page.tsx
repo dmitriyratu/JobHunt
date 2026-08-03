@@ -102,7 +102,17 @@ export default function ResumePage() {
    * that has already been read.
    */
   const { id: sessionId, resumeText, jobDescription, recommendedShape } = state;
-  const needsTriage = Boolean(resumeText && jobDescription) && recommendedShape === null;
+  const needsTriage =
+    Boolean(resumeText.trim() && jobDescription.trim()) && recommendedShape === null;
+
+  // A failure belongs to the application it happened on. This is component
+  // state and switching applications doesn't remount the page, so without the
+  // reset the picker tells the next application its posting couldn't be read —
+  // on an application that has no posting, and for which nothing was ever
+  // requested.
+  useEffect(() => {
+    setTriageError("");
+  }, [sessionId]);
 
   useEffect(() => {
     if (!hydrated || !needsTriage) return;
@@ -584,7 +594,14 @@ export default function ResumePage() {
         recommendedReason={state.recommendedShapeReason}
         recommendedConfident={state.recommendedShapeConfident}
         current={state.documentShape}
-        recommendationFailed={Boolean(triageError)}
+        // The message itself, not a boolean: "couldn't read the posting" reads
+        // as a fault in the posting whatever went wrong, when the cause is
+        // usually a missing API key or a rate limit and is worth naming.
+        recommendationError={triageError}
+        // False when nothing was ever going to be read — no posting saved, or
+        // the resume upload was skipped. Distinguished from a failure so the
+        // picker doesn't sit on a spinner that will never resolve.
+        recommendationPending={needsTriage}
         onRetryRecommendation={handleRetryTriage}
         // Saved as you type, so a correction made here survives whether or not
         // you go on to generate.

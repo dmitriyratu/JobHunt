@@ -286,29 +286,6 @@ export default function ResumeDocumentPane({
               </span>
             )}
 
-            {/* The preview stopped following the source, so this is what closes
-                the loop — and it has to carry the fact that it needs pressing,
-                because a document that is quietly one edit out of date looks
-                exactly like one that is current.
-
-                Accented only while there is something to build. A button that
-                shouts whether or not it has work reads as decoration after the
-                second glance, and the state that matters here is the one where
-                what you are reading is not what you wrote. */}
-            <button
-              type="button"
-              onClick={runCompile}
-              disabled={compile.compiling}
-              title="Rebuild the preview from the source (Ctrl/Cmd+Enter)"
-              className={`rounded-md px-3 py-2.5 text-xs font-medium transition-colors disabled:opacity-50 sm:py-1.5 ${
-                compile.dirty
-                  ? "bg-[var(--color-accent)] text-white hover:opacity-90"
-                  : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-secondary)]"
-              }`}
-            >
-              {compile.compiling ? "Typesetting…" : "Recompile"}
-            </button>
-
             {/* Sits with the page count because it is the same kind of fact —
                 what this document is, not something to do about it — and is
                 typeset like it for the same reason. As a bordered chip beside
@@ -551,13 +528,43 @@ export default function ResumeDocumentPane({
               />
             </div>
           </div>
-          <ResumePdfPreview
-            pdfUrl={compile.pdfUrl}
-            compiling={compile.compiling}
-            stale={compile.stale}
-            onLocate={canLocate ? handleLocate : undefined}
-            boxed
-          />
+          {/* The preview stopped following the source, so this is what closes
+              the loop — and it has to carry the fact that it needs pressing,
+              because a document that is quietly one edit out of date looks
+              exactly like one that is current.
+
+              It lives on the document rather than in the toolbar because the
+              document is what it changes, and because it only makes sense here:
+              editing happens in this view, and this is the half of the split
+              that is one edit behind. Outside the scrolling box, so it holds its
+              corner while you read down the page.
+
+              Accented only while there is something to build. A button that
+              shouts whether or not it has work reads as decoration after the
+              second glance, and the state that matters here is the one where
+              what you are reading is not what you wrote. */}
+          <div className="relative min-h-0">
+            <ResumePdfPreview
+              pdfUrl={compile.pdfUrl}
+              compiling={compile.compiling}
+              stale={compile.stale}
+              onLocate={canLocate ? handleLocate : undefined}
+              boxed
+            />
+            <button
+              type="button"
+              onClick={runCompile}
+              disabled={compile.compiling}
+              title="Rebuild the preview from the source (Ctrl/Cmd+Enter)"
+              className={`absolute right-5 top-4 z-10 rounded-md px-3 py-1.5 text-xs font-medium shadow-[var(--shadow-card)] backdrop-blur transition-colors disabled:opacity-50 ${
+                compile.dirty
+                  ? "bg-[var(--color-accent)] text-white hover:opacity-90"
+                  : "border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)]/90 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+              }`}
+            >
+              {compile.compiling ? "Typesetting…" : "Recompile"}
+            </button>
+          </div>
         </div>
       )}
 

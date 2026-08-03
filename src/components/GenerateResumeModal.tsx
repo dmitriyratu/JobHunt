@@ -16,6 +16,11 @@ import type { DocumentShape, ResumePageTarget } from "@/types";
  * actually needs. Sequencing them also puts the format last, after the details
  * and the steer — which is the right order, because the format is the only one
  * of the three that has a recommendation attached and is worth pausing on.
+ *
+ * Length sits on that last step too, above the document type. It is a fact
+ * about the document rather than about the steer it was asked beside, and half
+ * the shapes ignore it outright — so it belongs where the shape is chosen,
+ * where the two can answer each other.
  */
 
 const STEPS = ["Your details", "What to emphasise", "Format"] as const;
@@ -31,7 +36,10 @@ type Props = {
   recommendedConfident: boolean;
   /** What was chosen last time, if anything. Outranks the recommendation. */
   current: DocumentShape | null;
-  recommendationFailed: boolean;
+  /** Why the posting couldn't be read, verbatim. Empty when nothing failed. */
+  recommendationError: string;
+  /** Whether a reading is actually on its way. False means there is nothing to read. */
+  recommendationPending: boolean;
   onRetryRecommendation: () => void;
   onProfileChange: (next: ResumeProfile) => void;
   onEmphasisChange: (next: string) => void;
@@ -49,7 +57,8 @@ export default function GenerateResumeModal({
   recommendedReason,
   recommendedConfident,
   current,
-  recommendationFailed,
+  recommendationError,
+  recommendationPending,
   onRetryRecommendation,
   onProfileChange,
   onEmphasisChange,
@@ -202,10 +211,28 @@ export default function GenerateResumeModal({
               className="input-base resize-none"
               autoFocus
             />
+          </div>
+        )}
 
-            {showLength ? (
-              <div>
-                <p className="mb-1.5 text-xs text-[var(--color-text-muted)]">Length</p>
+        {step === 2 && (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-base font-semibold">Format</h2>
+              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                How long the document runs, and which sections it has.
+              </p>
+            </div>
+
+            {/* Length first. It belongs to the document rather than to the
+                steer, and it is the one answer here that needs no reading of
+                the posting — so it is answerable while the recommendation
+                below is still in flight. Picking a CV underneath replaces the
+                buttons with the reason they no longer apply. */}
+            <div className="mb-5">
+              <p className="mb-1.5 text-xs font-medium text-[var(--color-text-secondary)]">
+                Length
+              </p>
+              {showLength ? (
                 <div className="flex gap-2">
                   {([1, 2] as ResumePageTarget[]).map((n) => (
                     <button
@@ -223,32 +250,40 @@ export default function GenerateResumeModal({
                     </button>
                   ))}
                 </div>
-              </div>
-            ) : (
-              <p className="text-[11px] text-[var(--color-text-muted)]">
-                {SHAPE_DEFS[choice].label} runs as long as it needs to. Nothing is cut for
-                space.
-              </p>
-            )}
-          </div>
-        )}
-
-        {step === 2 && (
-          <div>
-            <div className="mb-4">
-              <h2 className="text-base font-semibold">Which document should this be?</h2>
-              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                The format decides the sections and their order.
-              </p>
+              ) : (
+                <p className="rounded-lg border border-[var(--color-border-subtle)] px-3 py-2 text-[11px] text-[var(--color-text-muted)]">
+                  {SHAPE_DEFS[choice].label} runs as long as it needs to. Nothing is cut for
+                  space.
+                </p>
+              )}
             </div>
+
+            <p className="mb-1.5 text-xs font-medium text-[var(--color-text-secondary)]">
+              Document type
+            </p>
 
             {/* The recommendation and its evidence, above the options — so it
                 reads as a considered suggestion, not a pre-ticked box. */}
-            <div className="mb-4 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-3 py-2.5">
-              {recommendationFailed && recommended === null ? (
-                <div className="flex items-center gap-2">
+            <div className="mb-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-3 py-2.5">
+              {recommended !== null ? (
+                <p className="text-[11px] leading-snug text-[var(--color-text-secondary)]">
+                  <span className="font-medium text-[var(--color-accent)]">
+                    {recommendedConfident ? "Recommended" : "Recommended (close call)"}:{" "}
+                    {SHAPE_DEFS[recommended].label}
+                  </span>
+                  {recommendedReason && <> — {recommendedReason}</>}
+                </p>
+              ) : recommendationError ? (
+                // The reason, verbatim. Every cause used to print the same
+                // sentence, which pointed at the posting when the usual
+                // answers are a missing API key or a rate limit — and left
+                // Retry as the only way to find out which.
+                <div className="flex items-start gap-2">
                   <p className="flex-1 text-[11px] leading-snug text-[var(--color-text-secondary)]">
-                    Couldn&apos;t read the posting for a recommendation — pick whichever fits.
+                    Couldn&apos;t read the posting — pick whichever fits.
+                    <span className="mt-0.5 block text-[var(--color-text-muted)]">
+                      {recommendationError}
+                    </span>
                   </p>
                   <button
                     onClick={onRetryRecommendation}
@@ -257,7 +292,7 @@ export default function GenerateResumeModal({
                     Retry
                   </button>
                 </div>
-              ) : recommended === null ? (
+              ) : recommendationPending ? (
                 <div className="flex items-center gap-2">
                   <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
                   <p className="text-[11px] text-[var(--color-text-secondary)]">
@@ -265,12 +300,12 @@ export default function GenerateResumeModal({
                   </p>
                 </div>
               ) : (
+                // Nothing was ever going to be read: no posting saved on this
+                // application, or the resume upload was skipped. This used to
+                // land on the spinner above and sit there for good.
                 <p className="text-[11px] leading-snug text-[var(--color-text-secondary)]">
-                  <span className="font-medium text-[var(--color-accent)]">
-                    {recommendedConfident ? "Recommended" : "Recommended (close call)"}:{" "}
-                    {SHAPE_DEFS[recommended].label}
-                  </span>
-                  {recommendedReason && <> — {recommendedReason}</>}
+                  No posting saved for this application, so there&apos;s nothing to read a
+                  recommendation from — pick whichever fits.
                 </p>
               )}
             </div>
