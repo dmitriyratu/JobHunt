@@ -11,6 +11,8 @@
     "lint": "next lint",
     "check:templates": "tsx scripts/check-templates.mjs",
     "check:latex": "tsx scripts/probe-latex.ts",
+    "check:linkedin": "tsx scripts/linkedin-url.ts --test",
+    "linkedin": "tsx scripts/linkedin-url.ts",
     "check:grounding": "tsx scripts/probe-sources.mts",
     "check:models": "tsx scripts/probe-tier.ts",
     "check:fit": "tsx scripts/probe-fit.ts",
