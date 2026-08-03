@@ -502,19 +502,52 @@ export default function ResumeDocumentPane({
             {/* Nothing is removed here — head and tail are spliced back on every
                 keystroke, so what compiles and what the chat patches is always
                 the whole document. This only decides how much of it you look at. */}
-            <div className="flex items-center justify-between px-0.5 text-[11px] text-[var(--color-text-muted)]">
-              <span>{showFullSource ? "Full LaTeX source" : "Document content"}</span>
-              {split.hiddenLines > 0 && (
+            <div className="flex items-center justify-between gap-2 px-0.5 text-[11px] text-[var(--color-text-muted)]">
+              <span className="truncate">
+                {showFullSource ? "Full LaTeX source" : "Document content"}
+              </span>
+              <div className="flex shrink-0 items-center gap-1">
+                {split.hiddenLines > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowFullSource((v) => !v)}
+                    className="rounded px-1.5 py-0.5 font-medium text-[var(--color-accent)] transition-colors hover:bg-[var(--color-surface-hover)]"
+                  >
+                    {showFullSource
+                      ? "Hide preamble"
+                      : `Show preamble and layout (${split.hiddenLines} lines)`}
+                  </button>
+                )}
+
+                {/* The preview stopped following the source, so this is what
+                    closes the loop — and it has to carry the fact that it needs
+                    pressing, because a document that is quietly one edit out of
+                    date looks exactly like one that is current.
+
+                    It belongs to the editor, not to the toolbar and not to the
+                    document: what you press it about is the text you just typed,
+                    and it only exists in the view where that text is on screen.
+                    Sitting in the label row it costs no height and lands where
+                    the eye already goes for the preamble toggle.
+
+                    Accented only while there is something to build. A button
+                    that shouts whether or not it has work reads as decoration
+                    after the second glance, and the state that matters here is
+                    the one where what you are reading is not what you wrote. */}
                 <button
                   type="button"
-                  onClick={() => setShowFullSource((v) => !v)}
-                  className="rounded px-1.5 py-0.5 font-medium text-[var(--color-accent)] transition-colors hover:bg-[var(--color-surface-hover)]"
+                  onClick={runCompile}
+                  disabled={compile.compiling}
+                  title="Rebuild the preview from the source (Ctrl/Cmd+Enter)"
+                  className={`rounded px-1.5 py-0.5 font-medium transition-colors disabled:opacity-50 ${
+                    compile.dirty
+                      ? "bg-[var(--color-accent)] text-white hover:opacity-90"
+                      : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-secondary)]"
+                  }`}
                 >
-                  {showFullSource
-                    ? "Hide preamble"
-                    : `Show preamble and layout (${split.hiddenLines} lines)`}
+                  {compile.compiling ? "Typesetting…" : "Recompile"}
                 </button>
-              )}
+              </div>
             </div>
             <div className="min-h-0 flex-1">
               <LatexEditor
@@ -528,43 +561,13 @@ export default function ResumeDocumentPane({
               />
             </div>
           </div>
-          {/* The preview stopped following the source, so this is what closes
-              the loop — and it has to carry the fact that it needs pressing,
-              because a document that is quietly one edit out of date looks
-              exactly like one that is current.
-
-              It lives on the document rather than in the toolbar because the
-              document is what it changes, and because it only makes sense here:
-              editing happens in this view, and this is the half of the split
-              that is one edit behind. Outside the scrolling box, so it holds its
-              corner while you read down the page.
-
-              Accented only while there is something to build. A button that
-              shouts whether or not it has work reads as decoration after the
-              second glance, and the state that matters here is the one where
-              what you are reading is not what you wrote. */}
-          <div className="relative min-h-0">
-            <ResumePdfPreview
-              pdfUrl={compile.pdfUrl}
-              compiling={compile.compiling}
-              stale={compile.stale}
-              onLocate={canLocate ? handleLocate : undefined}
-              boxed
-            />
-            <button
-              type="button"
-              onClick={runCompile}
-              disabled={compile.compiling}
-              title="Rebuild the preview from the source (Ctrl/Cmd+Enter)"
-              className={`absolute right-5 top-4 z-10 rounded-md px-3 py-1.5 text-xs font-medium shadow-[var(--shadow-card)] backdrop-blur transition-colors disabled:opacity-50 ${
-                compile.dirty
-                  ? "bg-[var(--color-accent)] text-white hover:opacity-90"
-                  : "border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)]/90 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
-              }`}
-            >
-              {compile.compiling ? "Typesetting…" : "Recompile"}
-            </button>
-          </div>
+          <ResumePdfPreview
+            pdfUrl={compile.pdfUrl}
+            compiling={compile.compiling}
+            stale={compile.stale}
+            onLocate={canLocate ? handleLocate : undefined}
+            boxed
+          />
         </div>
       )}
 
