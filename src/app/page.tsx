@@ -245,7 +245,13 @@ export default function HomePage() {
       {/* See the resume step: the content block grows so the sticky footer has
           a bottom to sit at on a page shorter than the window. */}
       <main className="app-container py-8 flex flex-1 flex-col">
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start content-start">
+        {/* Two columns when there is room for two, one when there isn't —
+            decided by the width this block actually has rather than by the
+            width of the window. `lg:grid-cols-2` was reading the viewport, and
+            on a landscape tablet the applications rail took 320px out of that
+            viewport after the fact: the columns came out 316px each, narrower
+            than the single column the same tablet gets held upright. */}
+        <div className="auto-grid [--col-min:26rem] flex-1 gap-6 items-start content-start">
           <section>
             <SectionHeader
               step={1}

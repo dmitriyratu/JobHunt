@@ -61,8 +61,44 @@ export type MatchReport = {
 /** A report entry the chat can be asked about — a requirement or a standout. */
 export type ReportEntry = MatchReportItem | StandoutItem;
 
+/**
+ * Something true about the candidate that their uploaded document doesn't say.
+ *
+ * The grounding pass checks every generated line against the file you uploaded,
+ * which is what makes a tailored resume defensible — and also what made an
+ * incomplete resume impossible to correct. Saying "I do know PostgreSQL, it's
+ * just not written down" moved the match report and nothing else: the resume
+ * couldn't cite it, and the skill was pruned for having no literal support.
+ *
+ * A fact fixes that at the source rather than by loosening the check. It is
+ * appended to the document text before indexing, so it earns a line id like any
+ * other line and is held to the same standard from then on. Nothing downstream
+ * needs to know it wasn't typed by the candidate's past self.
+ *
+ * Stored per browser rather than per application: "I know PostgreSQL" does not
+ * stop being true for the next posting, and having to re-state it every time is
+ * how it stops being stated at all.
+ */
+export type AssertedFact = {
+  id: string;
+  /**
+   * One line, written as it would appear on a resume. "PostgreSQL", not "the
+   * user says they have used PostgreSQL" — this becomes source text, and the
+   * grounding pass may fall back to it verbatim.
+   */
+  text: string;
+  /** ISO timestamp. */
+  addedAt: string;
+  /**
+   * The application whose conversation produced it. Provenance, not scope — the
+   * fact applies everywhere; this only says where it came from, so a claim you
+   * don't recognise months later can be traced back.
+   */
+  sessionId: string;
+};
+
 export type ProposalAction = "add" | "modify" | "remove";
-export type ProposalTarget = "requirement" | "standout";
+export type ProposalTarget = "requirement" | "standout" | "fact";
 
 type ProposalBase = {
   id: string;
@@ -83,7 +119,22 @@ export type StandoutProposal = ProposalBase & {
   after: StandoutItem | null;
 };
 
-export type MatchReportProposal = RequirementProposal | StandoutProposal;
+/**
+ * Carries the claim only, not a whole AssertedFact.
+ *
+ * The id, the timestamp and the application it came from are minted when you
+ * accept, because until then there is nothing to identify — a rejected proposal
+ * should leave no trace, and a proposal that sat in the transcript holding a
+ * half-filled record would be a fact that exists but was never agreed to.
+ */
+export type FactProposal = ProposalBase & {
+  target: "fact";
+  /** Always null: the chat only ever adds. Removing one is done in Your details. */
+  before: null;
+  after: { text: string } | null;
+};
+
+export type MatchReportProposal = RequirementProposal | StandoutProposal | FactProposal;
 
 export type ResolvedProposal = MatchReportProposal & {
   resolution: "pending" | "accepted" | "rejected";

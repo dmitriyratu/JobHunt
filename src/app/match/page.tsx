@@ -8,6 +8,7 @@ import ChatPanel, { ChatToggle } from "@/components/ChatPanel";
 import ReportChat from "@/components/ReportChat";
 import SectionHeader from "@/components/SectionHeader";
 import StepNav from "@/components/StepNav";
+import { addAssertedFact, mintAssertedFact, withAssertedFacts } from "@/lib/assertedFacts";
 import { useChatDock, useRegisterChat } from "@/lib/chatDock";
 import { computeOverallScore } from "@/lib/matchReport";
 import { ANALYSIS_RESET } from "@/lib/session";
@@ -55,7 +56,10 @@ export default function MatchPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          resumeText: state.resumeText,
+          // Facts you've stated go in as part of the document. Without this a
+          // requirement you already answered in conversation comes back a gap
+          // on the next analysis, and you argue the same point twice.
+          resumeText: withAssertedFacts(state.resumeText, settings.assertedFacts),
           jobDescription: state.jobDescription,
           apiKey: settings.apiKey || undefined,
         }),
@@ -143,8 +147,41 @@ export default function MatchPage() {
     [setState]
   );
 
+  /**
+   * A fact accepted in this conversation, kept for good.
+   *
+   * Written here rather than inside the setState updater below, for two
+   * reasons: it lands in settings rather than in the application, and an
+   * updater must stay pure — StrictMode invokes them twice, which would record
+   * every fact against a doubled log.
+   */
+  const rememberFact = useCallback(
+    (text: string, sessionId: string) => {
+      setSettings((prev) => {
+        const facts = addAssertedFact(prev.assertedFacts, mintAssertedFact(text, sessionId));
+        // Identity means it was already known — nothing to write.
+        if (facts === prev.assertedFacts) return prev;
+        const next = { ...prev, assertedFacts: facts };
+        queueMicrotask(() => saveSettings(next));
+        return next;
+      });
+    },
+    []
+  );
+
   const handleAcceptProposal = useCallback(
     (messageIndex: number, proposalId: string) => {
+      // Resolved before the updater runs, because a fact is written to settings
+      // rather than to the application and the updater has to stay pure. The
+      // updater re-reads it from `prev` and re-checks the same guards, so a
+      // double click still only records once.
+      const pending = state.reportChatMessages[messageIndex]?.proposals?.find(
+        (p) => p.id === proposalId && p.resolution === "pending"
+      );
+      if (pending?.target === "fact" && pending.after) {
+        rememberFact(pending.after.text, state.id);
+      }
+
       setState((prev) => {
         const msg = prev.reportChatMessages[messageIndex];
         if (!msg?.proposals || !prev.matchReport) return prev;
@@ -155,7 +192,12 @@ export default function MatchPage() {
         // Reports saved before standouts existed have no array here.
         let standouts = prev.matchReport.standouts ?? [];
 
-        if (proposal.target === "standout") {
+        // A fact changes nothing in this report — the requirement proposal
+        // beside it does that. All that happens here is the resolution mark;
+        // the recording itself is done by rememberFact, outside this updater.
+        if (proposal.target === "fact") {
+          // Fall through to the message update below.
+        } else if (proposal.target === "standout") {
           if (proposal.action === "add" && proposal.after) {
             const after = proposal.after;
             standouts = [...standouts, after];
@@ -199,7 +241,7 @@ export default function MatchPage() {
         };
       });
     },
-    [setState]
+    [setState, state.reportChatMessages, state.id, rememberFact]
   );
 
   const handleRejectProposal = useCallback(
@@ -260,7 +302,7 @@ export default function MatchPage() {
                   title="Match report"
                   subtitle="Weighted by how important each requirement is"
                 />
-                {/* Below lg the applications rail is hidden, and with it the
+                {/* Below xl the applications rail is hidden, and with it the
                     assistant's toggle — so it falls back to the page. */}
                 {state.matchReport && (
                   <ChatToggle
@@ -268,7 +310,7 @@ export default function MatchPage() {
                     open={chatOpen}
                     pendingCount={pendingProposals}
                     onClick={toggleChat}
-                    className="shrink-0 lg:hidden"
+                    className="shrink-0 xl:hidden"
                   />
                 )}
               </div>

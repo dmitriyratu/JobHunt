@@ -26,7 +26,7 @@ type Props = {
  * The new-application button and the list of saved applications.
  *
  * Shared by the desktop rail and the phone drawer so the two can't drift apart
- * — the rail is `hidden lg:flex`, which previously left a phone with no way to
+ * — the rail is `hidden xl:flex`, which previously left a phone with no way to
  * create or switch applications at all.
  */
 export default function SessionList({ onNavigate, showNewButton = true }: Props) {

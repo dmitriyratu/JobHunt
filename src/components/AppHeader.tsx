@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { isProfileUsable, type AppSettings } from "@/lib/settings";
 import { useJobHuntState } from "@/lib/useAppState";
 import FeedbackModal from "./FeedbackModal";
+import HeaderMenu from "./HeaderMenu";
 import MobileSessionDrawer from "./MobileSessionDrawer";
 import ProfileModal from "./ProfileModal";
 import SettingsModal from "./SettingsModal";
 import StageNav from "./StageNav";
 import ThemeToggle from "./ThemeToggle";
+import WhatsNewModal from "./WhatsNewModal";
 
 type Props = {
   subtitle: string;
@@ -18,8 +20,13 @@ type Props = {
 };
 
 export default function AppHeader({ subtitle, settings, onSettingsSave }: Props) {
+  // The header owns all four panels now. Two of them used to own their own
+  // trigger button; those triggers moved into the overflow menu, and a
+  // component cannot be both an item in a menu and the panel that item opens.
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const { state, newSession } = useJobHuntState();
   const router = useRouter();
   const profileReady = isProfileUsable(settings.profile);
@@ -35,17 +42,28 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
     <>
       {/* A fixed --app-header-h so the bottom rule lands exactly where the
           applications rail's does; the stage bar below is content-sized and the
-          top row absorbs whatever is left. Height only applies from lg, where
+          top row absorbs whatever is left. Height only applies from xl, where
           the rail exists to align with — below that the row is free to wrap to
           two lines on a narrow phone. */}
-      <header className="border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] lg:flex lg:h-[var(--app-header-h)] lg:flex-col">
+      {/* min-h, not h: at the natural content height the two are identical, so
+          the rule still lands where the rail's does — but if a row ever needs
+          more than the band allows, the header grows instead of clipping what
+          is inside it. A hard height cut the wordmark and the buttons in half
+          the moment --app-header-h was set below what the rows measure. */}
+      <header className="border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] xl:flex xl:min-h-[var(--app-header-h)] xl:flex-col">
         {/* Two deliberate rows on a phone rather than a ragged wrap.
             Five 44px controls and the wordmark cannot share a 390px line — they
             overflow by about ten pixels, which is how this came to wrap by
             accident — so below `sm` the control group is given the full width
             and spreads across it, which reads as a toolbar instead of as an
             overflow. From `sm` everything is back on one line at the right. */}
-        <div className="app-container py-3 sm:py-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 lg:min-h-0 lg:flex-1">
+        {/* py-3 at every width, not py-3 growing to py-4.
+            The row's content is 38px tall — a 36px control, or the wordmark
+            over its subtitle — and at py-4 it sat in a 70px box against the
+            50px stage band below, which made the lighter of the two bands the
+            taller one. 12px a side reads as deliberate rather than roomy, and
+            `items-center` is what keeps it even top and bottom. */}
+        <div className="app-container py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 xl:min-h-0 xl:flex-1">
           <button
             onClick={goHome}
             title="Start a new application"
@@ -73,12 +91,16 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
                 Both this label and Settings' collapse to icon-only below sm.
                 This row was already at the edge of wrapping on a phone before a
                 fourth control joined it, and the icons carry the meaning at that
-                size. Checked on a desktop viewport only — verify the phone
-                layout in devtools before changing the widths here. */}
+                size.
+
+                Height, corner and hover all come from `.hdr-btn` — see
+                globals.css. Written out per button, these six had drifted to
+                three different heights and two different radii, and the drift
+                got worse rather than better on a touch screen. */}
             <button
               onClick={() => setProfileOpen(true)}
               title={profileReady ? "The details at the top of your resumes" : "Add your details"}
-              className="flex h-9 items-center gap-1.5 text-xs font-medium px-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-overlay)] hover:border-[var(--color-text-muted)] transition-colors [@media(pointer:coarse)]:h-11"
+              className="hdr-btn"
             >
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -92,29 +114,19 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
               )}
             </button>
 
-            <button
-              onClick={() => setSettingsOpen(true)}
-              title={
-                settings.apiKey ? "OpenAI key saved in this browser" : "Add your OpenAI key"
-              }
-              className="flex h-9 items-center gap-1.5 text-xs font-medium px-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-overlay)] hover:border-[var(--color-text-muted)] transition-colors [@media(pointer:coarse)]:h-11"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <span className="hidden sm:inline">Settings</span>
-              {!settings.apiKey && (
-                <span
-                  className="h-1.5 w-1.5 rounded-full bg-[var(--color-warning)]"
-                  title="No API key set"
-                />
-              )}
-            </button>
-
-            <FeedbackModal />
-
             <ThemeToggle />
+
+            {/* Settings, What's new and Feedback live in here. All three are
+                set-up and housekeeping rather than things you reach for while
+                working, and out on the bar the five of them wrapped the row to
+                two lines on a 768px tablet. Whatever inside needs attention
+                surfaces as a dot on the trigger. */}
+            <HeaderMenu
+              needsApiKey={!settings.apiKey}
+              onOpenSettings={() => setSettingsOpen(true)}
+              onOpenWhatsNew={() => setWhatsNewOpen(true)}
+              onOpenFeedback={() => setFeedbackOpen(true)}
+            />
 
             <MobileSessionDrawer />
           </div>
@@ -149,6 +161,10 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
         // itself resolves them.
         shape={state.documentShape ?? state.recommendedShape}
       />
+
+      <WhatsNewModal open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />
+
+      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </>
   );
 }

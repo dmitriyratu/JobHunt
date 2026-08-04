@@ -60,7 +60,7 @@ function Guide({
       open={defaultOpen}
       className="group mt-2 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)]"
     >
-      <summary className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+      <summary className="tap flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
         <svg
           className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90"
           fill="none"

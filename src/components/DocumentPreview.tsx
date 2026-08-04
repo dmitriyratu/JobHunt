@@ -59,11 +59,15 @@ export default function DocumentPreview({
 
   return (
     <div className="mt-4">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-xs text-[var(--color-text-secondary)]">Preview</p>
+      {/* Wraps rather than overflowing: the label, a two-tab strip and the
+          expand control have a hard minimum around 276px, which is more than a
+          320px phone has inside the card. `min-w-0` on the label is what lets
+          it give way first. */}
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="min-w-0 text-xs text-[var(--color-text-secondary)]">Preview</p>
         <div className="flex items-center gap-2">
           {hasOriginal && (
-            <div className="flex gap-1 p-1 bg-[var(--color-surface)] rounded-lg">
+            <div className="seg-track bg-[var(--color-surface)]">
               <button type="button" onClick={() => setTab("clean")} className={tabClass(tab === "clean")}>
                 Cleaned text
               </button>
@@ -78,7 +82,9 @@ export default function DocumentPreview({
               onClick={() => setExpanded(true)}
               aria-label="Expand full text"
               title="Expand full text"
-              className="flex h-11 w-11 items-center justify-center rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-overlay)] sm:h-7 sm:w-7"
+              // `tap` rather than `sm:h-7 sm:w-7`: the old rule shrank it to
+              // 28px from 640px up, which is every tablet.
+              className="tap flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-secondary)]"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 3h6m0 0v6m0-6l-7 7M9 21H3m0 0v-6m0 6l7-7" />
@@ -89,7 +95,10 @@ export default function DocumentPreview({
       </div>
 
       {showClean ? (
-        <pre className="text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap max-h-40 overflow-y-auto bg-[var(--color-surface)] rounded-lg p-3 border border-[var(--color-border-subtle)]">
+        // break-words alongside pre-wrap: pre-wrap only breaks at spaces, and a
+        // parsed resume routinely carries a URL or a long path with none in it.
+        // Without this the card grew a horizontal scrollbar on a phone.
+        <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3 text-xs text-[var(--color-text-secondary)]">
           {cleanBody}
         </pre>
       ) : externalUrl ? (
@@ -110,10 +119,10 @@ export default function DocumentPreview({
         <>
           {/* iOS Safari won't render an inline PDF through <embed> — it leaves a
               blank grey box — so small screens get a link out instead. */}
-          <div
-            className="hidden sm:block rounded-lg border border-[var(--color-border-subtle)] overflow-hidden"
-            style={{ height: 320 }}
-          >
+          {/* Height in dvh rather than a flat 320px: a landscape phone — which
+              is wide enough for `sm:` to fire — is only 390px tall, so a fixed
+              320 was most of the screen for a preview you scroll past. */}
+          <div className="hidden h-[clamp(12rem,45dvh,20rem)] overflow-hidden rounded-lg border border-[var(--color-border-subtle)] sm:block">
             <embed src={fileUrl} type="application/pdf" width="100%" height="100%" />
           </div>
           <div className="sm:hidden rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 text-center">
@@ -158,7 +167,7 @@ export default function DocumentPreview({
                 Close
               </button>
             </div>
-            <pre className="flex-1 overflow-y-auto text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap p-5">
+            <pre className="flex-1 overflow-y-auto whitespace-pre-wrap break-words p-5 text-xs text-[var(--color-text-secondary)]">
               {cleanBody}
             </pre>
           </div>
@@ -206,10 +215,14 @@ function marked(text: string, word: string, firstRef: React.Ref<HTMLElement>): R
 }
 
 function tabClass(active: boolean) {
-  // py-2.5 clears 40px on a phone; sm: puts it back to the compact desktop size.
-  return `text-xs font-medium py-2.5 px-3 sm:py-1.5 rounded-md transition-colors ${
-    active
-      ? "bg-[var(--color-surface-overlay)] text-[var(--color-text-primary)]"
-      : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
-  }`;
+  // `.seg-item` — the shared segmented control (globals.css), so this reads the
+  // same as the source/link/file strip on the job card and the editor/PDF strip
+  // on the resume step. Written out here it was 40px on a phone and 28px from
+  // `sm:` up, which is to say it got smaller on a tablet, where the pointer is
+  // still a finger. The shared class asks about the pointer instead.
+  //
+  // Selected is the raised surface on a recessed track. The overlay is a hover
+  // and sits below the track, so reaching for it here drew the chosen tab as
+  // the pressed one — backwards from what the control is saying.
+  return `seg-item ${active ? "seg-item-active" : ""}`;
 }

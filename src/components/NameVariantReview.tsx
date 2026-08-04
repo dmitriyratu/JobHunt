@@ -37,8 +37,9 @@ export default function NameVariantReview({
 
   return (
     <div className="mt-4 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-muted)] px-4 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      {/* Stacks on a phone — see SpellingReview, which has the same header. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <p className="text-sm font-medium">
             {issues.length === 1
               ? "One name is written two ways"
@@ -51,12 +52,12 @@ export default function NameVariantReview({
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
-          <button onClick={onAcceptAll} className="btn-secondary text-xs py-1.5 px-3">
+          <button onClick={onAcceptAll} className="btn-secondary px-3 py-1.5 text-xs">
             Accept all
           </button>
           <button
             onClick={onRejectAll}
-            className="text-xs py-1.5 px-2 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+            className="tap inline-flex items-center justify-center rounded-[var(--radius-control)] px-3 py-1.5 text-xs text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-secondary)]"
           >
             Dismiss
           </button>
@@ -67,7 +68,7 @@ export default function NameVariantReview({
         {issues.map((issue) => (
           <li
             key={issue.preferred}
-            className="rounded-md bg-[var(--color-surface-overlay)] px-3 py-2"
+            className="rounded-[var(--radius-sm)] bg-[var(--color-surface-overlay)] px-3 py-2"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
@@ -82,7 +83,10 @@ export default function NameVariantReview({
                         <button
                           type="button"
                           onClick={() => onSelect(variant.text)}
-                          className={`w-full text-left text-xs ${
+                          // The primary interaction in this panel, and it was a
+                          // 16px-tall line of text. `tap` gives it a real target
+                          // on touch without changing how it reads on a mouse.
+                          className={`tap flex w-full items-center rounded-[var(--radius-sm)] px-1 py-1 text-left text-xs transition-colors hover:bg-[var(--color-surface-raised)] ${
                             selected === variant.text ? "underline underline-offset-2" : ""
                           }`}
                           aria-label={`Show "${variant.text}" in the preview`}
@@ -108,13 +112,13 @@ export default function NameVariantReview({
               <div className="flex shrink-0 gap-1.5">
                 <button
                   onClick={() => onAccept(issue)}
-                  className="btn-secondary text-xs py-1 px-2.5"
+                  className="btn-secondary px-2.5 py-1 text-xs"
                 >
                   Unify
                 </button>
                 <button
                   onClick={() => onReject(issue)}
-                  className="text-xs py-1 px-2 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+                  className="tap inline-flex items-center justify-center rounded-[var(--radius-control)] px-2.5 py-1 text-xs text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-secondary)]"
                 >
                   Leave
                 </button>

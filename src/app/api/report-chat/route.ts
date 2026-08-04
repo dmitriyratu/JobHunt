@@ -42,6 +42,14 @@ target "standout":
 - action "add": Set targetItemId to null. Fill credential/evidence/whyValuable. Only do this for something genuinely rare and prized that the posting did not ask for — an ordinary skill belongs in items, not here.
 - Leave requirement/importance/status/strength as empty strings or defaults.
 
+target "fact":
+- The candidate's resume is the only thing the later steps are allowed to build from. When the user tells you something true about themselves that their resume does not say — a skill they never listed, a tool they have used, a scope or a number that never made it onto the page — the report alone is not enough: the resume writer cannot use it, and will drop a skill it cannot find in the document.
+- So propose a "fact" to record it. action is always "add", targetItemId is null, and "fact" holds the claim. Leave every other field empty.
+- Write it as ONE short line, in the register of a resume, with no attribution: "PostgreSQL", "Managed a team of six engineers", "Migrated a 40TB warehouse to Snowflake". NOT "the user says they know PostgreSQL", not a sentence about the conversation. This text is added to the candidate's document verbatim and may be printed on a resume exactly as you write it.
+- Propose it ALONGSIDE the requirement change, not instead of it. "I do know PostgreSQL, it just isn't on my resume" is two proposals: modify that requirement, and add the fact.
+- A skill is a fact. Do not ask the user to produce evidence, a project or a metric before recording one — that they have told you is what a fact records, and they can reject the proposal if you got it wrong. Ask for detail only when the claim is too vague to write as a line.
+- Only what the user actually stated. Never propose a fact to fill a gap they have not spoken to, never infer one from another, and never restate something the resume already says.
+
 If the user tells you they clear a requirement by a wide margin, prefer modifying that item to strength "exceeds" over adding a standout — standouts are only for things the posting never asked about at all.
 
 Never invent evidence not supported by the resume or by what the user just told you. rationale is a single short sentence explaining why you're proposing the change.`;
@@ -50,7 +58,7 @@ const PROPOSAL_ITEM_SCHEMA = {
   type: "object",
   properties: {
     action: { type: "string", enum: ["add", "modify", "remove"] },
-    target: { type: "string", enum: ["requirement", "standout"] },
+    target: { type: "string", enum: ["requirement", "standout", "fact"] },
     targetItemId: { type: ["string", "null"] },
     // Requirement fields
     requirement: { type: "string" },
@@ -64,6 +72,8 @@ const PROPOSAL_ITEM_SCHEMA = {
     // Standout fields
     credential: { type: "string" },
     whyValuable: { type: "string" },
+    // Fact field — one resume-register line, added to the source document.
+    fact: { type: "string" },
     // Shared
     evidence: { type: "string" },
     rationale: { type: "string" },
@@ -81,6 +91,7 @@ const PROPOSAL_ITEM_SCHEMA = {
     "note",
     "credential",
     "whyValuable",
+    "fact",
     "evidence",
     "rationale",
   ],
@@ -111,6 +122,7 @@ type RawProposal = {
   note: string;
   credential: string;
   whyValuable: string;
+  fact: string;
   evidence: string;
   rationale: string;
 };
@@ -270,6 +282,26 @@ export async function POST(request: NextRequest) {
       const action = rawProposal.action as ProposalAction;
       const id = `p${i + 1}`;
       const rationale = rawProposal.rationale?.trim() ?? "";
+
+      // Add-only, and never longer than a line. A fact is appended to the
+      // candidate's document verbatim and can be reverted to as a resume line
+      // if a rewrite of it fails grounding, so a paragraph here would print as
+      // a bullet. Anything that long is the model narrating the conversation
+      // rather than stating a claim, which is the failure this guards.
+      if (rawProposal.target === "fact") {
+        const text = rawProposal.fact?.trim();
+        if (action !== "add" || !text || text.length > 200) return;
+        proposals.push({
+          id,
+          target: "fact",
+          action: "add",
+          targetItemId: null,
+          before: null,
+          after: { text },
+          rationale,
+        });
+        return;
+      }
 
       if (rawProposal.target === "standout") {
         if (action === "add") {

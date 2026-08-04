@@ -115,27 +115,53 @@ function StandoutPreview({
   );
 }
 
+/**
+ * A fact has no before and no after — it is one claim, appearing for the first
+ * time — so it gets a single panel rather than the two-column diff.
+ *
+ * The second line is the part worth reading: unlike every other proposal here,
+ * accepting this one reaches past the application you are looking at. Said once,
+ * plainly, and not repeated on the card.
+ */
+function FactPreview({ text }: { text: string }) {
+  return (
+    <div className={PREVIEW_CLASS}>
+      <p className="text-sm font-medium">{text}</p>
+      <p className="mt-1.5 text-xs text-[var(--color-text-muted)]">
+        Added to what your resume says about you, for this application and every one after
+        it. Remove it any time under Your details.
+      </p>
+    </div>
+  );
+}
+
 export default function ProposalDiffCard({ proposal, onAccept, onReject }: Props) {
   const { action, rationale, resolution } = proposal;
 
   // Narrow on `target` rather than destructuring before/after up front, so the
   // union keeps the correlation between the target and the payload type.
   const before =
-    proposal.target === "standout"
-      ? proposal.before && <StandoutPreview item={proposal.before} />
-      : proposal.before && <ItemPreview item={proposal.before} />;
+    proposal.target === "fact"
+      ? null
+      : proposal.target === "standout"
+        ? proposal.before && <StandoutPreview item={proposal.before} />
+        : proposal.before && <ItemPreview item={proposal.before} />;
   const after =
-    proposal.target === "standout"
-      ? proposal.after && (
-          <StandoutPreview item={proposal.after} compareTo={proposal.before} />
-        )
-      : proposal.after && <ItemPreview item={proposal.after} compareTo={proposal.before} />;
+    proposal.target === "fact"
+      ? proposal.after && <FactPreview text={proposal.after.text} />
+      : proposal.target === "standout"
+        ? proposal.after && (
+            <StandoutPreview item={proposal.after} compareTo={proposal.before} />
+          )
+        : proposal.after && <ItemPreview item={proposal.after} compareTo={proposal.before} />;
 
   return (
     <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-3 mt-2">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-semibold text-[var(--color-accent)] uppercase tracking-wide">
-          {ACTION_LABEL[action]}
+          {/* "Added" alone would read as another edit to this report, which is
+              the one thing this proposal is not. */}
+          {proposal.target === "fact" ? "Remember about you" : ACTION_LABEL[action]}
           {proposal.target === "standout" ? " standout" : ""}
         </span>
         {resolution !== "pending" && (
@@ -151,7 +177,14 @@ export default function ProposalDiffCard({ proposal, onAccept, onReject }: Props
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+      {/* A fact has nothing to compare against, so it takes the full width and
+          drops the Before/After captions — "After" over a lone panel describes
+          a change that never had a before. */}
+      {/* Stacked, always. Before/after side by side needs about 340px, and this
+          card lives inside a 380px chat panel at every window size — so `sm:`
+          was reading a viewport the card has no relationship to, and on any
+          tablet it split the two previews into 165px columns. */}
+      <div className="mb-2 grid grid-cols-1 gap-2">
         {before && (
           <div>
             <p className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide mb-1">
@@ -162,9 +195,11 @@ export default function ProposalDiffCard({ proposal, onAccept, onReject }: Props
         )}
         {after && (
           <div>
-            <p className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide mb-1">
-              After
-            </p>
+            {proposal.target !== "fact" && (
+              <p className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wide mb-1">
+                After
+              </p>
+            )}
             {after}
           </div>
         )}

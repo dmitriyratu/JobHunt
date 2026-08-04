@@ -163,7 +163,10 @@ export default function ProfileFields({
                     onClick={() => dismiss(kind)}
                     aria-label={`Remove ${def.label}`}
                     title={`Remove ${def.label}`}
-                    className="-m-1 rounded p-1 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-secondary)]"
+                    // `tap-area`: the mark stays 20px so it doesn't crowd the
+                    // label it sits beside, and the touch target around it is a
+                    // real 44. There is one of these per link field.
+                    className="tap-area -m-1 flex h-5 w-5 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-secondary)]"
                   >
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -194,7 +197,7 @@ export default function ProfileFields({
                 key={kind}
                 type="button"
                 onClick={() => restore(kind)}
-                className="rounded-full border border-[var(--color-border)] px-2.5 py-1 text-[11px] text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)]"
+                className="tap inline-flex items-center justify-center rounded-full border border-[var(--color-border)] px-3 py-1.5 text-[11px] text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)]"
               >
                 + {LINK_DEF[kind].label}
               </button>

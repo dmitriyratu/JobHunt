@@ -45,8 +45,10 @@ export default function SpellingReview({
 
   return (
     <div className="mt-4 rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning-muted)] px-4 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      {/* Stacks on a phone. Side by side, the shrink-0 action pair left the
+          three-sentence explanation about 180px wide and ten lines long. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <p className="text-sm font-medium text-[var(--color-warning)]">
             {suggestions.length === 1
               ? "One possible typo in your resume"
@@ -59,13 +61,17 @@ export default function SpellingReview({
             preview above.
           </p>
         </div>
+        {/* Both buttons, not one button and one piece of text: Dismiss was a
+            bare 28px control beside a 44px one, so the pair read as unfinished
+            and the quieter half was under the touch minimum. Weight carries the
+            hierarchy instead. */}
         <div className="flex shrink-0 gap-2">
-          <button onClick={onAcceptAll} className="btn-secondary text-xs py-1.5 px-3">
+          <button onClick={onAcceptAll} className="btn-secondary px-3 py-1.5 text-xs">
             Accept all
           </button>
           <button
             onClick={onRejectAll}
-            className="text-xs py-1.5 px-2 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+            className="tap inline-flex items-center justify-center rounded-[var(--radius-control)] px-3 py-1.5 text-xs text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-secondary)]"
           >
             Dismiss
           </button>
@@ -79,7 +85,7 @@ export default function SpellingReview({
           return (
             <li
               key={suggestion.wrong}
-              className={`flex items-start justify-between gap-3 rounded-md px-3 py-2 transition-colors ${
+              className={`flex items-start justify-between gap-3 rounded-[var(--radius-sm)] px-3 py-2 transition-colors ${
                 isSelected
                   ? "bg-[var(--color-surface-overlay)] ring-1 ring-[var(--color-warning)]/50"
                   : "bg-[var(--color-surface-overlay)]"
@@ -109,7 +115,9 @@ export default function SpellingReview({
                   )}
                 </p>
                 {context && (
-                  <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                  // break-words: this is raw resume text, so it can carry a URL
+                  // or a long path with nothing in it to break at.
+                  <p className="mt-1 break-words text-xs leading-relaxed text-[var(--color-text-secondary)]">
                     {context.before}
                     <span className="rounded-sm bg-[var(--color-warning)]/20 px-0.5 font-medium text-[var(--color-text-primary)]">
                       {context.word}
@@ -121,13 +129,13 @@ export default function SpellingReview({
               <div className="flex shrink-0 gap-1.5">
                 <button
                   onClick={() => onAccept(suggestion)}
-                  className="btn-secondary text-xs py-1 px-2.5"
+                  className="btn-secondary px-2.5 py-1 text-xs"
                 >
                   Fix
                 </button>
                 <button
                   onClick={() => onReject(suggestion)}
-                  className="text-xs py-1 px-2 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+                  className="tap inline-flex items-center justify-center rounded-[var(--radius-control)] px-2.5 py-1 text-xs text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-secondary)]"
                 >
                   Keep
                 </button>

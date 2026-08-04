@@ -46,6 +46,20 @@ for name, t in themes.items():
     print("-- verdict fill lift off the card (tint must register) --")
     for k in ('danger', 'warning', 'success', 'accent'):
         print(f"       {k:10}{cr(t[f'color-{k}-surface'], grounds['card']):6.3f}")
+    # Every check above measures ink against a ground. None of them measured the
+    # grounds against each other, which is how the light theme spent a long time
+    # passing all of them while reading as one flat white sheet: its canvas was
+    # 1.06:1 off a card. The bars are the dark theme's own spacing, rounded down
+    # — it never had the problem, so it is the reference.
+    print("-- the surface ladder (planes must separate) --")
+    for label, a, b, bar in (
+        ('card off canvas', 'color-surface-raised', 'color-surface', 1.12),
+        ('canvas to overlay', 'color-surface', 'color-surface-overlay', 1.12),
+        ('card hairline', 'color-border-subtle', 'color-surface-raised', 1.30),
+        ('chip off canvas', 'color-chip', 'color-surface', 1.18),
+    ):
+        v = cr(t[a], t[b]); ok = v >= bar; fails += not ok
+        print(f"   {'ok ' if ok else 'FAIL'} {label:18}{v:6.3f}  (bar {bar})")
 
 print(f"\n{'ALL CHECKS PASS' if not fails else str(fails) + ' FAILURES'}")
 sys.exit(1 if fails else 0)

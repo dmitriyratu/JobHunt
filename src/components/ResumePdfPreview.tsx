@@ -225,7 +225,9 @@ export default function ResumePdfPreview({
       />
 
       {!pdfUrl && (
-        <div className="flex h-64 items-center justify-center rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-8 text-center">
+        // dvh-relative rather than a flat 256px, which was two-thirds of a
+        // landscape phone for a panel that says "nothing here yet".
+        <div className="flex h-[clamp(9rem,35dvh,16rem)] items-center justify-center rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 text-center">
           <p className="text-sm text-[var(--color-text-muted)]">
             {compiling ? "Typesetting…" : "Nothing to preview yet."}
           </p>

@@ -101,7 +101,7 @@ export default function GenerateResumeModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--color-scrim)] p-3 sm:p-6"
+      className="modal-overlay"
       onClick={onClose}
     >
       <div
@@ -111,8 +111,10 @@ export default function GenerateResumeModal({
         onClick={(e) => e.stopPropagation()}
         // Capped and column-flexed so the step body scrolls internally and the
         // Back/Continue footer stays put. The format step is tall enough to
-        // push its own footer off a laptop screen otherwise.
-        className="glass-panel my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col p-5 sm:p-6"
+        // push its own footer off a laptop screen otherwise. The cap comes from
+        // `.modal-panel` now, which subtracts the padding the overlay actually
+        // reserves — the local one subtracted 2rem against 1.5rem a side.
+        className="modal-panel glass-panel max-w-3xl p-5 sm:p-6"
       >
         {/* Step rail — three short answers, so the count is worth showing up
             front rather than revealing one surprise at a time. */}
@@ -240,7 +242,9 @@ export default function GenerateResumeModal({
                       type="button"
                       aria-pressed={pageTarget === n}
                       onClick={() => onPageTargetChange(n)}
-                      className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                      // 34px and an 8px corner, against a 44px 12px-cornered
+                      // footer in the same dialog. Both settled now.
+                      className={`tap flex-1 rounded-[var(--radius-control)] border px-3 py-2 text-xs font-medium transition-colors ${
                         pageTarget === n
                           ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)] text-[var(--color-accent)]"
                           : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-text-muted)]"
@@ -287,7 +291,7 @@ export default function GenerateResumeModal({
                   </p>
                   <button
                     onClick={onRetryRecommendation}
-                    className="shrink-0 text-[11px] text-[var(--color-accent)] hover:underline"
+                    className="tap inline-flex shrink-0 items-center justify-center rounded-[var(--radius-sm)] px-2 py-1 text-[11px] text-[var(--color-accent)] hover:bg-[var(--color-accent-muted)] hover:underline"
                   >
                     Retry
                   </button>
@@ -333,9 +337,11 @@ export default function GenerateResumeModal({
                     {/* The pill sits above the label rather than beside it: at
                         a third of the row there is no width to share, and the
                         label wraps to two lines under a floated badge. */}
-                    <div className="mb-1.5 flex min-h-[14px] items-center">
+                    <div className="mb-1.5 flex min-h-[16px] items-center">
                       {recommended === shape && (
-                        <span className="rounded-full bg-[var(--color-accent)] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-[var(--color-on-accent)]">
+                        // 8px was below the size at which uppercase tracking is
+                        // legible at arm's length on a phone.
+                        <span className="rounded-full bg-[var(--color-accent)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-on-accent)]">
                           Recommended
                         </span>
                       )}
@@ -361,7 +367,7 @@ export default function GenerateResumeModal({
                     </p>
                     {/* Pushed to the bottom so the length line sits on one
                         baseline across a row of unequal descriptions. */}
-                    <p className="mt-auto pt-1.5 text-[9px] uppercase tracking-wide text-[var(--color-text-muted)]">
+                    <p className="mt-auto pt-1.5 text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
                       {def.lengthNote}
                     </p>
                   </button>

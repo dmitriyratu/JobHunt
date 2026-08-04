@@ -53,7 +53,9 @@ export default function ThemeToggle() {
       onClick={toggle}
       aria-label={`Switch to ${next} theme`}
       title={`Switch to ${next} theme`}
-      className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-overlay)] hover:border-[var(--color-text-muted)] [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11"
+      // Square, and the same height as the labelled controls beside it — see
+      // `.hdr-btn` in globals.css.
+      className="hdr-btn hdr-btn-icon"
     >
       {/* Held blank for the one frame before the stored theme is read, so
           server and first client render agree. The page itself is already in

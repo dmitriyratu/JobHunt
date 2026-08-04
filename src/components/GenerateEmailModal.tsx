@@ -49,7 +49,7 @@ export default function GenerateEmailModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--color-scrim)] p-3 sm:p-6"
+      className="modal-overlay"
       onClick={onClose}
     >
       <div
@@ -57,9 +57,13 @@ export default function GenerateEmailModal({
         aria-modal="true"
         aria-label="Write the email"
         onClick={(e) => e.stopPropagation()}
-        className="glass-panel my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col p-5 sm:p-6"
+        // The cap is `.modal-panel`'s, which subtracts the overlay's real
+        // padding. Written here it subtracted 2rem against an overlay that
+        // reserved 1.5rem a side from `sm:` up, so the panel overhung the
+        // backdrop by 16px and put the page into a second scroll.
+        className="modal-panel glass-panel max-w-lg p-5 sm:p-6"
       >
-        <div className="mb-4">
+        <div className="modal-head mb-4">
           <h2 className="text-base font-semibold">Write the email</h2>
           <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-secondary)]">
             Both optional. Everything from the earlier steps — your resume, the posting and the
@@ -68,7 +72,7 @@ export default function GenerateEmailModal({
           </p>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+        <div className="modal-body space-y-4">
           <div>
             <label
               htmlFor="letter-recipient"

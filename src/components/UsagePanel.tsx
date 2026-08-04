@@ -48,7 +48,7 @@ function Disclosure({
 }) {
   return (
     <details className="group rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
-      <summary className="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-3 text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+      <summary className="tap flex cursor-pointer items-center gap-2 rounded-lg px-4 py-3 text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
         <svg
           className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90"
           fill="none"
@@ -179,7 +179,9 @@ export default function UsagePanel({ adminApiKey }: Props) {
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3">
+      {/* Stacks on a phone: inside the settings dialog the sentence had about
+          166px left once the button had taken its width. */}
+      <div className="flex flex-col items-start gap-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-[var(--color-text-secondary)]">
           Your remaining balance lives on OpenAI&rsquo;s site — they don&rsquo;t share it with apps.
         </p>
@@ -194,7 +196,9 @@ export default function UsagePanel({ adminApiKey }: Props) {
       </div>
 
       <Disclosure label="Recent activity">
-        <div className="max-h-[280px] overflow-y-auto overflow-x-auto">
+        {/* dvh-relative: a flat 280px is taller than what a landscape phone has
+            left inside a dialog that is itself capped to the window. */}
+        <div className="max-h-[clamp(10rem,40dvh,17.5rem)] overflow-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-[var(--color-surface)]">
               <tr className="border-b border-[var(--color-border-subtle)] text-left text-xs text-[var(--color-text-muted)]">

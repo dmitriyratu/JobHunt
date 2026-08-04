@@ -143,7 +143,10 @@ export default function ResumeChat({
             <div key={i}>
               <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm leading-relaxed ${
+                  // break-words: the assistant quotes LaTeX and file paths, and
+                  // one `\section{Professional Experience}` with no space in it
+                  // pushed the bubble past the 366px chat panel.
+                  className={`max-w-[85%] whitespace-pre-wrap break-words rounded-xl px-4 py-2.5 text-sm leading-relaxed ${
                     msg.role === "user"
                       ? "bg-[var(--color-accent)] text-[var(--color-on-accent)]"
                       : "bg-[var(--color-surface-overlay)] text-[var(--color-text-primary)]"

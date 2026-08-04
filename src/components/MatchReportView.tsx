@@ -359,8 +359,11 @@ function Block({
         )}
         {label}
       </p>
+      {/* break-words: this renders lines quoted straight out of a resume or a
+          posting, which is where the URLs and the slash-separated tech runs
+          live. Without it one of those paints outside the tinted card. */}
       <p
-        className={`mt-1 leading-relaxed ${
+        className={`mt-1 break-words leading-relaxed ${
           verdict
             ? "text-xs text-[var(--color-text-primary)]"
             : "text-[11px] text-[var(--color-text-tertiary)]"
@@ -381,11 +384,21 @@ function AttachedNote() {
 }
 
 /**
- * Cards side by side: three across on a wide window, two on a laptop, one on a
- * phone. The breakpoints are set by the narrowest a card can get and still hold
- * a requirement and its outcome pill on one line — around 350px.
+ * Cards side by side: as many across as fit, one on a phone.
+ *
+ * The number that matters is the narrowest a card can get and still hold a
+ * requirement and its outcome pill on one line — around 350px — so that is the
+ * number this states, and the column count follows from it.
+ *
+ * It used to be `md:grid-cols-2 xl:grid-cols-3`, which asked the window how
+ * wide the cards were. The window is the wrong thing to ask: the report sits
+ * left of a rail that is 0, 68 or 320px depending on state, so `xl` — the point
+ * at which a third column was added — is also the point at which 320px is taken
+ * away. Three columns came out *narrower* than two: 256px against 307px, both
+ * well under the 350 this grid is built around, and the pill dropped below the
+ * requirement on nearly every card.
  */
-const CARD_GRID = "grid gap-2.5 md:grid-cols-2 xl:grid-cols-3";
+const CARD_GRID = "auto-grid auto-grid-fill [--col-min:22rem] gap-2.5";
 
 /**
  * The whole report in one line: how many of each outcome.
@@ -525,7 +538,7 @@ export default function MatchReportView({
         <ScoreRing score={report.overallScore} />
         <div className="min-w-0 flex-1">
           <h3 className="text-[0.9375rem] font-semibold tracking-[-0.01em] mb-1">Match report</h3>
-          <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+          <p className="break-words text-xs leading-relaxed text-[var(--color-text-secondary)]">
             {report.summary}
           </p>
           <OutcomeTally items={report.items} />
@@ -566,7 +579,7 @@ export default function MatchReportView({
                     onClick={() => onAttachItem(item.id)}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="min-w-0 text-sm font-semibold leading-snug text-[var(--color-text-primary)]">
+                      <p className="min-w-0 break-words text-sm font-semibold leading-snug text-[var(--color-text-primary)]">
                         {item.requirement}
                       </p>
                       <Pill style={OUTCOME[outcome]} icon={OUTCOME_ICON[outcome]} />
@@ -613,7 +626,7 @@ export default function MatchReportView({
                   onClick={() => onAttachItem(standout.id)}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="min-w-0 text-sm font-semibold leading-snug text-[var(--color-text-primary)]">
+                    <p className="min-w-0 break-words text-sm font-semibold leading-snug text-[var(--color-text-primary)]">
                       {standout.credential}
                     </p>
                     <Pill style={STANDOUT_STYLE} icon={STANDOUT_ICON} />

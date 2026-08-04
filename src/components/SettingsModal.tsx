@@ -78,9 +78,11 @@ export default function SettingsModal({
     onSave({
       apiKey: draftKey.trim(),
       adminApiKey: draftAdminKey.trim(),
-      // Carried through untouched. This dialog no longer edits the profile, but
-      // it still writes the whole settings blob, so omitting it would erase it.
+      // Carried through untouched. This dialog edits neither the profile nor
+      // the stated facts, but it still writes the whole settings blob, so
+      // omitting either would erase it.
       profile: settings.profile,
+      assertedFacts: settings.assertedFacts,
       ...next,
     });
     setSavedFlash(true);
@@ -92,17 +94,17 @@ export default function SettingsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--color-scrim)] p-2 sm:p-6"
+      className="modal-overlay"
       onClick={onClose}
     >
       <div
-        className="glass-panel my-2 w-full max-w-3xl overflow-hidden p-0 sm:my-8"
+        className="modal-panel glass-panel max-w-3xl p-0"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Settings"
       >
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] px-5 py-4">
+        <div className="modal-head flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] px-5 py-4">
           <h2 className="text-sm font-medium">Settings</h2>
           <button onClick={onClose} className="btn-secondary px-3 py-1.5 text-xs">
             Close
@@ -114,7 +116,7 @@ export default function SettingsModal({
         <div
           role="tablist"
           aria-label="Settings sections"
-          className="flex gap-1 border-b border-[var(--color-border-subtle)] px-3 pt-2"
+          className="modal-head flex gap-1 border-b border-[var(--color-border-subtle)] px-3 pt-2"
         >
           {(
             [
@@ -127,7 +129,7 @@ export default function SettingsModal({
               role="tab"
               aria-selected={tab === id}
               onClick={() => setTab(id)}
-              className={`rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+              className={`tap rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
                 tab === id
                   ? "border-b-2 border-[var(--color-accent)] text-[var(--color-accent)]"
                   : "border-b-2 border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
@@ -144,7 +146,7 @@ export default function SettingsModal({
           ))}
         </div>
 
-        <div className="p-4 sm:p-5">
+        <div className="modal-body p-4 sm:p-5">
           {tab === "setup" ? (
             <div className="space-y-4">
               {hasKey && !editingKey ? (
@@ -158,9 +160,14 @@ export default function SettingsModal({
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="input-base flex flex-1 items-center gap-2 bg-[var(--color-surface-overlay)] font-mono text-sm text-[var(--color-text-secondary)]">
-                      {maskApiKey(settings.apiKey)}
+                  {/* The masked key is `.input-base`, so it is 48px tall; the
+                      two buttons beside it were 34px. `items-stretch` makes the
+                      row agree on one height rather than centring three
+                      different ones, and the key keeps a line of its own on a
+                      phone where it cannot share with two buttons. */}
+                  <div className="flex flex-wrap items-stretch gap-3">
+                    <span className="input-base flex w-full min-w-0 flex-1 items-center gap-2 overflow-hidden font-mono text-sm text-[var(--color-text-secondary)] sm:w-auto">
+                      <span className="truncate">{maskApiKey(settings.apiKey)}</span>
                     </span>
                     <button
                       onClick={() => {
@@ -214,7 +221,7 @@ export default function SettingsModal({
                       <button
                         type="button"
                         onClick={() => setShowKey((v) => !v)}
-                        className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-secondary)]"
+                        className="tap-area absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-secondary)]"
                         aria-label={showKey ? "Hide key" : "Show key"}
                       >
                         <EyeIcon off={showKey} />
@@ -244,7 +251,7 @@ export default function SettingsModal({
               )}
 
               <details className="group rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
-                <summary className="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-3 text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                <summary className="tap flex cursor-pointer items-center gap-2 rounded-lg px-4 py-3 text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
                   <svg
                     className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90"
                     fill="none"

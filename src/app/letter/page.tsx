@@ -7,6 +7,7 @@ import ContextRecap from "@/components/ContextRecap";
 import GenerateEmailModal from "@/components/GenerateEmailModal";
 import LetterOutput from "@/components/LetterOutput";
 import StepNav from "@/components/StepNav";
+import { withAssertedFacts } from "@/lib/assertedFacts";
 import { plainTextToHtml } from "@/lib/plainTextToHtml";
 import { resolveCompany } from "@/lib/session";
 import { resumeToPlainText } from "@/lib/tailoredResume";
@@ -43,7 +44,10 @@ export default function LetterPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          resumeText: state.resumeText,
+          // Same document the resume was written from, supplement included —
+          // the letter is allowed to draw on match-report evidence, so without
+          // this the two steps would be arguing from different facts.
+          resumeText: withAssertedFacts(state.resumeText, settings.assertedFacts),
           jobDescription: state.jobDescription,
           matchReport: state.matchReport,
           letterContext: state.letterContext || undefined,
@@ -124,6 +128,7 @@ export default function LetterPage() {
                   report={state.matchReport}
                   jobTitle={state.detectedJobTitle}
                   detectedCompany={state.detectedCompany}
+                  assertedFacts={settings.assertedFacts}
                   companyName={state.companyName}
                   onCompanyNameChange={(v) => update("companyName", v)}
                 />

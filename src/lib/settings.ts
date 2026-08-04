@@ -1,9 +1,11 @@
+import { readAssertedFacts } from "./assertedFacts";
 import {
   isLinkKind,
   migrateLegacyLinks,
   type LinkKind,
   type ProfileLink,
 } from "./profileLinks";
+import type { AssertedFact } from "@/types";
 
 export const SETTINGS_STORAGE_KEY = "jobhunt-settings";
 
@@ -70,6 +72,15 @@ export type AppSettings = {
    */
   adminApiKey: string;
   profile: ResumeProfile;
+  /**
+   * Things you told the app that your uploaded document doesn't say.
+   *
+   * Beside the profile rather than inside it: the profile is the contact block
+   * printed on a document, these are content the document is written from. They
+   * share a home only because both outlive any one application — see
+   * AssertedFact in @/types.
+   */
+  assertedFacts: AssertedFact[];
 };
 
 export const EMPTY_PROFILE: ResumeProfile = {
@@ -86,6 +97,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   apiKey: "",
   adminApiKey: "",
   profile: EMPTY_PROFILE,
+  assertedFacts: [],
 };
 
 /**
@@ -173,6 +185,7 @@ export function loadSettings(): AppSettings {
       apiKey: parsed.apiKey ?? "",
       adminApiKey: parsed.adminApiKey ?? "",
       profile: readProfile(parsed.profile),
+      assertedFacts: readAssertedFacts(parsed.assertedFacts),
     };
   } catch {
     return DEFAULT_SETTINGS;

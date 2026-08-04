@@ -128,7 +128,12 @@ export default function ResumeUpload({
               </svg>
             </div>
             <div className="min-w-0">
-              <p className="font-medium text-sm truncate">{resumeFilename}</p>
+              {/* `title` because the name is truncated and a phone has about
+                  twenty characters of it — long enough to lose the part that
+                  tells two versions of a resume apart. */}
+              <p className="truncate text-sm font-medium" title={resumeFilename}>
+                {resumeFilename}
+              </p>
               <p className="text-[var(--color-text-secondary)] text-xs mt-0.5">
                 {resumeText.length.toLocaleString()} characters extracted
               </p>

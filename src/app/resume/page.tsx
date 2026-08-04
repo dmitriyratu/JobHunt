@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 import ChatPanel, { ChatToggle } from "@/components/ChatPanel";
@@ -10,6 +10,7 @@ import ResumeChat from "@/components/ResumeChat";
 import ResumeDocumentPane from "@/components/ResumeDocumentPane";
 import type { FitSummary, GroundingSummary } from "@/components/ChangeAuditModal";
 import StepNav from "@/components/StepNav";
+import { withAssertedFacts } from "@/lib/assertedFacts";
 import { resumeFilename } from "@/lib/filePaths";
 import { saveToDownloads } from "@/lib/saveDownload";
 import { buildResumeBlob } from "@/lib/resumeDocx";
@@ -89,6 +90,20 @@ export default function ResumePage() {
     setSettings(next);
     saveSettings(next);
   }, []);
+
+  /**
+   * What every step here treats as "the candidate's document".
+   *
+   * The uploaded file plus the facts you've stated it leaves out — see
+   * @/lib/assertedFacts. Computed once and used by both the generator and the
+   * chat, because the two have to agree: the chat proposes patches whose
+   * grounding is checked against this text, and a chat working from a shorter
+   * document than the generator did would reject the generator's own bullets.
+   */
+  const sourceDocument = useMemo(
+    () => withAssertedFacts(state.resumeText, settings.assertedFacts),
+    [state.resumeText, settings.assertedFacts]
+  );
 
   // --- Document triage ------------------------------------------------------
 
@@ -192,7 +207,11 @@ export default function ResumePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          resumeText: state.resumeText,
+          // The document plus anything you've told the app it leaves out. This
+          // is the only way an asserted fact can reach the resume: every bullet
+          // cites a line id from this text, and a skill with no literal support
+          // in it is pruned. Appending is what gives the fact a line to cite.
+          resumeText: sourceDocument,
           jobDescription: state.jobDescription,
           matchReport: state.matchReport,
           emphasis: state.resumeEmphasis || undefined,
@@ -266,7 +285,7 @@ export default function ResumePage() {
       setGenerating(false);
     }
     },
-    [state, settings, patch]
+    [state, settings, sourceDocument, patch]
   );
 
   const handlePickShape = useCallback(
@@ -454,13 +473,14 @@ export default function ResumePage() {
                   report={state.matchReport}
                   jobTitle={state.detectedJobTitle}
                   detectedCompany={state.detectedCompany}
+                  assertedFacts={settings.assertedFacts}
                   companyName={state.companyName}
                   onCompanyNameChange={(v) => update("companyName", v)}
                 />
               </div>
 
               <div className="flex w-full items-stretch gap-2 sm:w-auto">
-                {/* Below lg the applications rail is hidden, and with it the
+                {/* Below xl the applications rail is hidden, and with it the
                     assistant's toggle — so it falls back to the page. */}
                 {hasResume && (
                   <ChatToggle
@@ -468,7 +488,7 @@ export default function ResumePage() {
                     open={chatOpen}
                     pendingCount={pendingProposals}
                     onClick={toggleChat}
-                    className="h-12 flex-1 sm:h-[var(--recap-h)] sm:flex-none lg:hidden"
+                    className="h-12 flex-1 sm:h-[var(--recap-h)] sm:flex-none xl:hidden"
                   />
                 )}
 
@@ -574,7 +594,7 @@ export default function ResumePage() {
             tex={state.resumeTex}
             resume={state.tailoredResume}
             messages={state.resumeChatMessages}
-            resumeText={state.resumeText}
+            resumeText={sourceDocument}
             jobDescription={state.jobDescription}
             apiKey={settings.apiKey}
             sessionId={state.id}

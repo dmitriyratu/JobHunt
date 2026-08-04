@@ -122,7 +122,10 @@ export default function LetterEditor({ html, onChange }: Props) {
           </ToolbarButton>
         </div>
       </div>
-        <div className="bg-[var(--color-surface)] p-4 sm:p-5 max-h-[500px] overflow-y-auto">
+        {/* dvh rather than a flat 500px: on a landscape phone that cap was
+            taller than the whole screen, so the toolbar above scrolled out of
+            reach as soon as you started typing. */}
+        <div className="max-h-[clamp(14rem,60dvh,31rem)] overflow-y-auto bg-[var(--color-surface)] p-4 sm:p-5">
           <EditorContent editor={editor as Editor} />
         </div>
       </div>
@@ -154,15 +157,17 @@ function ToolbarButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      // 36×40 on a phone, 28px from sm: up. Seven of these sit in a row above
-      // the email body, and at 28px they are a thumb-width apart on a touch
-      // screen — under both the Apple HIG target and what WCAG 2.5.8 asks for.
-      // Not the full 44 square: seven of those are wider than the card on a
-      // 360px phone, and a toolbar that wraps to two rows costs more than the
-      // last few pixels of target buy. Mobile-first rather than a
-      // pointer-coarse variant so the size is decided by available room, which
-      // is the thing that actually varies.
-      className={`h-10 w-9 sm:h-7 sm:w-7 flex items-center justify-center rounded text-sm transition-colors ${
+      // 40px square wherever the pointer is a finger, 32px where it is a mouse.
+      //
+      // This was the other way round — 36×40 on a phone shrinking to 28px from
+      // `sm:` up — which made the buttons smallest on a tablet, the one device
+      // that is both wide and touched. Room was never the constraint above 640:
+      // seven 28px buttons occupy 230px of a 680px row.
+      //
+      // Not the full 44 square: seven of those come to 320px, wider than the
+      // card on a 390px phone, and a toolbar that wraps to two rows costs more
+      // than the last four pixels of target buy.
+      className={`flex h-10 w-10 items-center justify-center rounded-[var(--radius-sm)] text-sm transition-colors [@media(pointer:fine)]:h-8 [@media(pointer:fine)]:w-8 ${
         active
           ? "bg-[var(--color-accent-muted)] text-[var(--color-accent)]"
           : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-overlay)]"

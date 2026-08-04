@@ -153,7 +153,12 @@ export default function SessionCard({
           // Revealed on hover on a mouse, but always present on a touch screen —
           // there is no hover there, so hiding it made deleting impossible on a
           // phone.
-          className="absolute top-2 right-2 p-1 rounded text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(pointer:coarse)]:opacity-100 hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-danger)] transition-opacity"
+          // `tap-area`, not `tap`: the card only reserves 20px of right padding
+          // for this, so a button that actually grew to 44px would sit on the
+          // job title. The mark stays 28px and the touch target around it is
+          // 44 — it was 22px, permanently visible on touch, which made the one
+          // destructive control here the smallest target in the app.
+          className="tap-area absolute top-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-danger)] [@media(pointer:coarse)]:opacity-100"
         >
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
@@ -169,15 +174,18 @@ export default function SessionCard({
           <p className="min-w-0 flex-1 text-xs text-[var(--color-text-secondary)]">
             Delete this application?
           </p>
+          {/* Same corner and the same touch minimum on both. They had drifted
+              to 8px against 6px, and to a 40px coarse target where every .btn-*
+              in the app uses 44. */}
           <button
             onClick={onDelete}
-            className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--color-danger)] px-3 py-1.5 text-xs font-medium text-[var(--color-on-danger)] [@media(pointer:coarse)]:min-h-[40px]"
+            className="tap shrink-0 rounded-[var(--radius-sm)] bg-[var(--color-danger)] px-3 py-1.5 text-xs font-medium text-[var(--color-on-danger)]"
           >
             Delete
           </button>
           <button
             onClick={() => setConfirming(false)}
-            className="shrink-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-secondary)] [@media(pointer:coarse)]:min-h-[40px]"
+            className="tap shrink-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-secondary)]"
           >
             Cancel
           </button>

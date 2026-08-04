@@ -94,8 +94,12 @@ function ChevronIcon({ pointsRight }: { pointsRight: boolean }) {
  * journey (resume & job → match report → letter) rather than remounting per
  * page.
  *
- * Desktop only — below `lg` there isn't room for a permanent 320px column, so
+ * Desktop only — below `xl` there isn't room for a permanent 320px column, so
  * MobileSessionDrawer presents the same list from the header instead.
+ *
+ * `xl` (1280) rather than `lg` (1024). At 1024 this was appearing on a
+ * landscape tablet and leaving 704px for the document — less than the same
+ * tablet gives you upright, which made turning the device sideways a downgrade.
  *
  * Collapses to a strip of company logos. The collapsed choice is remembered,
  * because a rail you have to re-collapse on every visit is worse than one that
@@ -126,24 +130,50 @@ export default function SessionRail() {
   // see --rail-w in globals.css. Written here rather than derived in CSS
   // because the width lives in this component's state.
   useEffect(() => {
-    document.documentElement.style.setProperty("--rail-w-lg", collapsed ? "68px" : "320px");
+    document.documentElement.style.setProperty("--rail-w-open", collapsed ? "68px" : "320px");
   }, [collapsed]);
+
+  /**
+   * Kept out of the state updater: StrictMode invokes updaters twice to surface
+   * impurity, so a write in there runs twice per click.
+   */
+  const remember = useCallback((next: boolean) => {
+    try {
+      localStorage.setItem(COLLAPSED_KEY, next ? "1" : "0");
+    } catch {
+      // Non-fatal: the rail still toggles for this session.
+    }
+  }, []);
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
       const next = !prev;
-      // Persisted outside the updater: StrictMode invokes updaters twice to
-      // surface impurity, so a write in here runs twice per click.
-      queueMicrotask(() => {
-        try {
-          localStorage.setItem(COLLAPSED_KEY, next ? "1" : "0");
-        } catch {
-          // Non-fatal: the rail still toggles for this session.
-        }
-      });
+      queueMicrotask(() => remember(next));
       return next;
     });
-  }, []);
+  }, [remember]);
+
+  /**
+   * Picking an application out of the collapsed strip opens the rail.
+   *
+   * The strip is a way to keep the rail out of the way, not a way to work in
+   * it: a 44px logo says which application you landed on and nothing else, so a
+   * switch made from there left you on a new application with no title, no
+   * score and no way to tell it from the one you just left. Opening answers the
+   * question the click was really asking.
+   *
+   * Remembered like any other open, because the rail's stored state is just
+   * "the state you left it in" — persisting the toggle but not this would put
+   * the two out of step on the next load.
+   */
+  const openWithSession = useCallback(
+    (id: string) => {
+      switchSession(id);
+      setCollapsed(false);
+      remember(false);
+    },
+    [switchSession, remember]
+  );
 
   const handleNewCollapsed = useCallback(async () => {
     setCreating(true);
@@ -157,7 +187,7 @@ export default function SessionRail() {
 
   return (
     <aside
-      className={`hidden lg:flex flex-col shrink-0 border-l border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] sticky top-0 h-dvh ${
+      className={`hidden xl:flex flex-col shrink-0 border-l border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] sticky top-0 h-dvh ${
         collapsed ? "w-[68px]" : "w-[320px]"
       } ${prefLoaded ? "transition-[width] duration-200 ease-out" : ""}`}
       aria-label="Applications"
@@ -208,7 +238,7 @@ export default function SessionRail() {
                 return (
                   <button
                     key={session.id}
-                    onClick={() => switchSession(session.id)}
+                    onClick={() => openWithSession(session.id)}
                     title={title}
                     aria-label={title}
                     aria-current={active ? "true" : undefined}

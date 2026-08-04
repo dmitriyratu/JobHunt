@@ -116,10 +116,14 @@ export default function JobDescriptionInput({
             {/* A posting URL is mostly tracking parameters, so only its host is
                 shown; the char count stays intact beside it rather than
                 splitting into "5,799 c / hars". */}
-            <p className="text-[var(--color-text-secondary)] text-xs mt-0.5">
+            {/* Wraps to a second line before the host truncates. As one <p> the
+                nowrap count could not give up any width, so on a narrow card the
+                link shrank to an ellipsis to protect a number — the opposite of
+                the priority above. */}
+            <p className="mt-0.5 flex flex-wrap items-baseline gap-x-1 text-xs text-[var(--color-text-secondary)]">
               <SourceLink source={jobSource} className="inline-block max-w-full truncate align-bottom" />
               <span className="whitespace-nowrap">
-                {" · "}
+                {"· "}
                 {jobDescription.length.toLocaleString()} chars
               </span>
             </p>
@@ -147,16 +151,19 @@ export default function JobDescriptionInput({
 
   return (
     <div className="glass-panel p-5">
-      <div className="flex gap-1 p-1 bg-[var(--color-surface)] rounded-lg mb-4">
+      {/* `.seg-track` / `.seg-item` — the shared segmented control. Written out
+          here it was a flat 32px at every width, against 40/28px for the
+          identical-looking strip in DocumentPreview: two controls that are
+          meant to read as the same thing, at three different heights. */}
+      <div className="seg-track mb-4 bg-[var(--color-surface)]">
+        {/* The selected tab is the raised surface on a recessed track, not the
+            overlay — the overlay is a hover and sits *below* the track, so
+            using it here drew the chosen tab as the pressed one. */}
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => { setTab(t.id); setError(""); }}
-            className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors ${
-              tab === t.id
-                ? "bg-[var(--color-surface-overlay)] text-[var(--color-text-primary)]"
-                : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
-            }`}
+            className={`seg-item ${tab === t.id ? "seg-item-active" : ""}`}
           >
             {t.label}
           </button>
@@ -189,7 +196,10 @@ export default function JobDescriptionInput({
             ref={fileRef}
             type="file"
             accept=".pdf,.docx,.txt,.md"
-            className="input-base file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-[var(--color-accent-muted)] file:text-[var(--color-accent)]"
+            // The UA draws the "Choose file" button itself and the only lever on
+            // its height is this padding — at py-1 it came out around 24px, the
+            // smallest target in the app.
+            className="input-base file:mr-3 file:min-h-9 file:rounded-[var(--radius-sm)] file:border-0 file:bg-[var(--color-accent-muted)] file:px-3 file:py-2 file:text-xs file:font-medium file:text-[var(--color-accent)]"
           />
           <p className="text-xs text-[var(--color-text-muted)] mt-2">PDF, DOCX, or plain text</p>
         </div>

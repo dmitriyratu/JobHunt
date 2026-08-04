@@ -12,10 +12,20 @@ const PAGE_LABEL: Record<string, string> = {
 
 type Status = "idle" | "sending" | "sent" | "undelivered";
 
-export default function FeedbackModal() {
+/**
+ * Opened from the header's overflow menu, so the trigger lives there and this
+ * is controlled from outside. It used to own its own header button; a component
+ * that is both an item in a menu and the panel that item opens cannot be either
+ * one cleanly.
+ */
+type Props = {
+  open: boolean;
+  onClose: () => void;
+};
+
+export default function FeedbackModal({ open, onClose }: Props) {
   const pathname = usePathname();
   const { state } = useJobHuntState();
-  const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>("idle");
@@ -24,13 +34,13 @@ export default function FeedbackModal() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const close = useCallback(() => {
-    setOpen(false);
+    onClose();
     setStatus("idle");
     setMessage("");
     setScreenshot(null);
     setError("");
     setCopied(false);
-  }, []);
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -106,33 +116,13 @@ export default function FeedbackModal() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        title="Send feedback"
-        aria-label="Send feedback"
-        // The label is hidden below sm:, which leaves a 39x31 icon button — the
-        // smallest target in the header. min-h/w restore a real one without
-        // disturbing the size once the label is back.
-        className="flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-[var(--color-border)] px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)] sm:min-h-0 sm:min-w-0"
-      >
-        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-          />
-        </svg>
-        <span className="hidden sm:inline">Feedback</span>
-      </button>
-
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--color-scrim)] p-2 sm:p-6"
+          className="modal-overlay"
           onClick={close}
         >
           <div
-            className="glass-panel my-2 w-full max-w-lg overflow-hidden p-0 sm:my-8"
+            className="modal-panel glass-panel max-w-lg p-0"
             onClick={(e) => e.stopPropagation()}
             onPaste={(e) => {
               const item = [...e.clipboardData.items].find((i) => i.type.startsWith("image/"));
@@ -142,7 +132,7 @@ export default function FeedbackModal() {
             aria-modal="true"
             aria-label="Send feedback"
           >
-            <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] px-5 py-4">
+            <div className="modal-head flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] px-5 py-4">
               <div className="min-w-0">
                 <h2 className="text-sm font-medium">Send feedback</h2>
                 <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
@@ -154,7 +144,7 @@ export default function FeedbackModal() {
               </button>
             </div>
 
-            <div className="p-4 sm:p-5">
+            <div className="modal-body p-4 sm:p-5">
               {status === "sent" ? (
                 <div className="flex flex-col items-center gap-2 py-10 text-center">
                   <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-success-muted)] text-2xl text-[var(--color-success)]">

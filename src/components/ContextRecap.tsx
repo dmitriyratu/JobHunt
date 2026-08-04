@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import SourceLink from "./SourceLink";
-import type { MatchReport } from "@/types";
+import type { AssertedFact, MatchReport } from "@/types";
 
 /**
  * What the next step will be given, folded away.
@@ -29,6 +29,14 @@ type Props = {
   detectedCompany: string;
   companyName: string;
   onCompanyNameChange: (v: string) => void;
+  /**
+   * Facts you stated that the uploaded file doesn't contain. Listed here
+   * because this panel's promise is that it shows everything the next step is
+   * given, and these are the only part of that which isn't a file you chose or
+   * a report you can see — they were agreed to in passing, possibly on a
+   * different application, and this is where they become visible again.
+   */
+  assertedFacts: AssertedFact[];
 };
 
 /**
@@ -79,6 +87,7 @@ export default function ContextRecap({
   detectedCompany,
   companyName,
   onCompanyNameChange,
+  assertedFacts,
 }: Props) {
   const needsCompany = !detectedCompany && !companyName.trim();
   const [open, setOpen] = useState(false);
@@ -142,7 +151,7 @@ export default function ContextRecap({
         {open && (
           <Link
             href="/match"
-            className="shrink-0 text-xs font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent-muted)] hover:underline rounded-md px-2 py-1.5 -my-1.5"
+            className="tap -my-1.5 inline-flex shrink-0 items-center justify-center rounded-[var(--radius-sm)] px-2 py-1.5 text-xs font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent-muted)] hover:underline"
           >
             Edit match report
           </Link>
@@ -151,7 +160,12 @@ export default function ContextRecap({
 
       {!open ? null : (
         <div className="mt-4">
-      <dl className="grid grid-cols-[5rem_minmax(0,1fr)] sm:grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 sm:gap-x-4 gap-y-3 text-xs items-baseline">
+      {/* Labels above their values on a phone, beside them from `sm`. The 5rem
+          label column was narrower than "Job description" at this size, so the
+          label wrapped to two lines and `items-baseline` then aligned its
+          *second* line with the value — the row read as broken rather than
+          tight. */}
+      <dl className="grid grid-cols-1 gap-x-3 gap-y-3 text-xs sm:grid-cols-[6.5rem_minmax(0,1fr)] sm:gap-x-4 sm:items-baseline">
         {jobTitle && <Row label="Role">{jobTitle}</Row>}
 
         {detectedCompany ? (
@@ -169,7 +183,12 @@ export default function ContextRecap({
                 placeholder="Not detected — type it here"
                 // text-base below sm: a sub-16px field makes iOS zoom the whole
                 // page on focus and never zoom back out.
-                className="input-base py-1.5 text-base sm:text-xs"
+                //
+                // No `py-1.5`: it overrode .input-base's own padding and left
+                // the panel's one editable field 30px tall on a tablet, where
+                // the pointer is a finger. text-sm rather than text-xs from
+                // `sm:` for the same reason — 12px is a caption, not a field.
+                className="input-base text-base sm:text-sm"
               />
             </dd>
           </>
@@ -183,6 +202,30 @@ export default function ContextRecap({
             {resumeText.length.toLocaleString()} chars, sent in full
           </span>
         </Row>
+
+        {/* Listed rather than counted. "3 stated facts" tells you nothing about
+            whether they are still true, and these go onto a document you send
+            to an employer — the whole reason to show them here is so you can
+            read one and think "that shouldn't be on this application". */}
+        {assertedFacts.length > 0 && (
+          <Row label="Also told us">
+            {/* Wrapped, not truncated. These are the whole point of the row —
+                you are meant to read one and think "that shouldn't be on this
+                application" — and a `title` tooltip is the one affordance a
+                touch screen doesn't have, so on a phone the ellipsis was the
+                end of the story. */}
+            <ul className="space-y-0.5">
+              {assertedFacts.map((fact) => (
+                <li key={fact.id} className="break-words">
+                  {fact.text}
+                </li>
+              ))}
+            </ul>
+            <span className="block text-[var(--color-text-muted)]">
+              Treated as part of your resume. Edit under Your details.
+            </span>
+          </Row>
+        )}
         <Row label="Job description">
           <JobSourceValue jobSource={jobSource} charCount={jobDescription.length} />
         </Row>

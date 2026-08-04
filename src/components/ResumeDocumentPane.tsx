@@ -239,7 +239,7 @@ export default function ResumeDocumentPane({
   const canDownloadPdf = Boolean(compile.pdfUrl) && !compile.stale;
 
   return (
-    <div className="glass-panel flex flex-col p-5 sm:p-6">
+    <div className="doc-split-host glass-panel flex flex-col p-5 sm:p-6">
       <div className="mb-4 space-y-3 border-b border-[var(--color-border-subtle)] pb-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* The length of the document belongs with the view of it, not with
@@ -247,22 +247,18 @@ export default function ResumeDocumentPane({
               beside "Download PDF" it read as something about the file you were
               about to save. */}
           <div className="flex flex-wrap items-center gap-3">
-            <div
-              role="tablist"
-              aria-label="Document view"
-              className="flex gap-1 rounded-lg bg-[var(--color-surface-overlay)] p-1"
-            >
+            {/* `.seg-track` / `.seg-item` — the shared segmented control, which
+                this and the two on the upload step now all use. This one had
+                been shrinking to 28px at `sm:`, which is a tablet, so the
+                target got smaller exactly as the pointer got blunter. */}
+            <div role="tablist" aria-label="Document view" className="seg-track">
               {VIEWS.map(([id, label]) => (
                 <button
                   key={id}
                   role="tab"
                   aria-selected={view === id}
                   onClick={() => setView(id)}
-                  className={`rounded-md px-3 py-2.5 text-xs font-medium transition-colors sm:py-1.5 ${
-                    view === id
-                      ? "bg-[var(--color-surface-raised)] text-[var(--color-text-primary)] shadow-[var(--shadow-sm)]"
-                      : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
-                  }`}
+                  className={`seg-item ${view === id ? "seg-item-active" : ""}`}
                 >
                   {label}
                 </button>
@@ -413,11 +409,13 @@ export default function ResumeDocumentPane({
               )}
             </button>
 
-            {/* .docx for the portals that still reject a PDF upload. */}
+            {/* .docx for the portals that still reject a PDF upload. Same type
+                size as the primary beside it — at text-xs it sat a couple of
+                pixels shorter and the pair read as unrelated. */}
             <button
               onClick={onDownloadDocx}
               disabled={downloading}
-              className="btn-secondary shrink-0 px-4 py-2 text-xs"
+              className="btn-secondary shrink-0 px-4 py-2 text-sm"
             >
               .docx
             </button>
@@ -483,12 +481,11 @@ export default function ResumeDocumentPane({
           Split needs a bound: an editor is an unbounded amount of text, and
           beside it the preview has to agree on a height.
 
-          Split stacks on a phone and goes side by side from lg: up. On the
-          stacked layout grid-rows-2 is load-bearing: left to size themselves the
-          rows are `auto`, and the preview — a full page of PDF canvas — took
-          what it wanted, squeezing the editor to 131px, about six visible lines.
-          Two explicit 1fr rows split the box evenly instead, and lg:grid-rows-1
-          hands the constraint back to the columns. */}
+          Both the stacking and the bound live in `.doc-split` (globals.css),
+          keyed off the width of this pane rather than of the window — the rail
+          takes 320px out of the window after any breakpoint has already made
+          its decision. Stacked, each half keeps a workable height of its own;
+          side by side, they share one derived from the viewport height. */}
       {view === "pdf" ? (
         <ResumePdfPreview
           pdfUrl={compile.pdfUrl}
@@ -497,7 +494,7 @@ export default function ResumeDocumentPane({
           onLocate={canLocate ? handleLocate : undefined}
         />
       ) : (
-        <div className="grid h-[clamp(420px,calc(100dvh-18rem),900px)] grid-cols-1 grid-rows-2 gap-3 lg:grid-cols-2 lg:grid-rows-1">
+        <div className="doc-split">
           <div className="flex min-h-0 flex-col gap-1.5">
             {/* Nothing is removed here — head and tail are spliced back on every
                 keystroke, so what compiles and what the chat patches is always
@@ -511,7 +508,10 @@ export default function ResumeDocumentPane({
                   <button
                     type="button"
                     onClick={() => setShowFullSource((v) => !v)}
-                    className="rounded px-1.5 py-0.5 font-medium text-[var(--color-accent)] transition-colors hover:bg-[var(--color-surface-hover)]"
+                    // `tap` rather than the bare 19px this used to be: it is a
+                    // real control, and on a touch screen it was a third of a
+                    // finger tall. It only grows where the pointer is coarse.
+                    className="tap inline-flex items-center justify-center rounded-[var(--radius-sm)] px-2 py-1 font-medium text-[var(--color-accent)] transition-colors hover:bg-[var(--color-surface-overlay)]"
                   >
                     {showFullSource
                       ? "Hide preamble"
@@ -539,10 +539,10 @@ export default function ResumeDocumentPane({
                   onClick={runCompile}
                   disabled={compile.compiling}
                   title="Rebuild the preview from the source (Ctrl/Cmd+Enter)"
-                  className={`rounded px-1.5 py-0.5 font-medium transition-colors disabled:opacity-50 ${
+                  className={`tap inline-flex items-center justify-center rounded-[var(--radius-sm)] px-2 py-1 font-medium transition-colors disabled:opacity-50 ${
                     compile.dirty
-                      ? "bg-[var(--color-accent)] text-white hover:opacity-90"
-                      : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-secondary)]"
+                      ? "bg-[var(--color-accent)] text-[var(--color-on-accent)] hover:opacity-90"
+                      : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text-secondary)]"
                   }`}
                 >
                   {compile.compiling ? "Typesetting…" : "Recompile"}

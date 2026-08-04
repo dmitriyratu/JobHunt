@@ -3,9 +3,9 @@
 /*
  * ── Mist ──────────────────────────────────────────────────────────────────
  *
- * A near-white cool ground, white cards, and hairlines pulled back almost to
- * nothing — separation comes from soft wide shadows and whitespace instead of
- * lines. Generous radii, a violet-blue accent.
+ * A cool grey ground, white cards, and hairlines kept soft — separation comes
+ * from the step between the ground and the card, helped by a wide shadow,
+ * rather than from lines. Generous radii, a violet-blue accent.
  *
  * The palette lives on :root rather than inside @theme because @theme values
  * are static and this app has two of them. Nothing in src/ uses a generated
@@ -23,9 +23,28 @@
 :root {
   color-scheme: light;
 
-  --color-surface: #f7f8fa;
+  /*
+   * The surface ladder, and the one thing this theme had wrong for longest.
+   *
+   * Every contrast check in audit_contrast.py passed while the app still read
+   * as one flat sheet, because all of them measure *ink on a ground* and none
+   * measured the grounds against each other. The canvas was #f7f8fa, which is
+   * 1.06:1 off a white card — a step you cannot see. Cards, the header band and
+   * the page ground were the same white slab, and the only thing distinguishing
+   * a card was a shadow it was too pale to cast.
+   *
+   * The dark theme never had this problem: it spaces canvas→card at 1.18:1 and
+   * canvas→overlay at 1.43:1, which is why it reads as built out of planes.
+   * Light now uses the same spacing (1.18:1 and 1.15:1) — the ground moved down
+   * rather than the card moving up, because the card being paper-white is what
+   * makes it read as the lit thing.
+   *
+   * The overlay is a real step below the canvas now (1.36:1 off a card), so a
+   * hover on a white row registers without hunting for it.
+   */
+  --color-surface: #eaecf2;
   --color-surface-raised: #ffffff;
-  --color-surface-overlay: #f0f2f6;
+  --color-surface-overlay: #dadde7;
 
   /*
    * Two borders doing genuinely different jobs, which is why only one of them
@@ -34,35 +53,45 @@
    * `border` outlines controls — inputs, secondary buttons, the header
    * buttons. WCAG 1.4.11 asks for 3:1 against the adjacent colour for anything
    * that identifies a control, and these sit on three different grounds, so
-   * this clears 3:1 on all of them (3.42:1 on a card, 3.22:1 on the canvas,
-   * 3.05:1 on an overlay). An earlier pass had it at 1.24:1, which looked
-   * pleasantly airy and left the text fields with no findable edge.
+   * this clears 3:1 on all of them (4.19:1 on a card, 3.55:1 on the canvas,
+   * 3.09:1 on an overlay). An earlier pass had it at 1.24:1, which looked
+   * pleasantly airy and left the text fields with no findable edge. It darkened
+   * again when the ladder above moved down: the same grey that cleared 3:1 on a
+   * #f7f8fa canvas only managed 2.92:1 on this one.
    *
    * `border-subtle` is the card hairline, and stays soft on purpose — a card's
-   * edge is the shadow's job here, and this only keeps the corners from
-   * dissolving where the shadow is weakest.
+   * edge is mostly the step down to the ground, and this only keeps the corners
+   * from dissolving. It now matches the dark theme's 1.35:1 against the card;
+   * at 1.25:1 on the old near-white canvas it was the *only* thing marking the
+   * edge and still could not be seen.
    */
-  --color-border: #848b9a;
-  --color-border-subtle: #e2e6ee;
+  --color-border: #757c8b;
+  --color-border-subtle: #d8dce7;
 
   /*
    * Four text steps, each measured against the *worst* ground it actually
    * lands on — not against white. Body copy sits on the canvas, on a card, on
-   * a hover overlay and on all four verdict fills, and the accent fill is
+   * a hover overlay and on all four verdict fills, and the hover overlay is now
    * darker than any of the others:
    *
-   *   primary 15.0:1   secondary 9.1:1   tertiary 7.0:1   muted 4.6:1
+   *   primary 12.7:1   secondary 8.9:1   tertiary 7.1:1   muted 4.6:1
+   *
+   * The bottom three moved down with the ladder rather than staying put — the
+   * same trade the dark theme made in reverse when it widened its own. Holding
+   * them where they were would have meant either a canvas too pale to see the
+   * cards against, or prose that quietly dropped under its floor on the one
+   * ground it lands on most.
    *
    * Tertiary is the last step that clears 7:1, so it is the floor for prose
    * you actually expect someone to read. Muted is for genuinely subordinate
-   * text — timestamps, counts, captions — and now clears AA on every one of
-   * those grounds; measured against white alone it had been passing at 4.5
-   * while sitting at 4.27 on the tinted ones, which is where it is mostly used.
+   * text — timestamps, counts, captions — and clears AA on every one of those
+   * grounds; measured against white alone it had been passing at 4.5 while
+   * sitting at 4.27 on the tinted ones, which is where it is mostly used.
    */
   --color-text-primary: #191b22;
-  --color-text-secondary: #3a3f4d;
-  --color-text-tertiary: #4a505e;
-  --color-text-muted: #656b7d;
+  --color-text-secondary: #313641;
+  --color-text-tertiary: #3f4552;
+  --color-text-muted: #5a6070;
 
   /*
    * Placeholders sit well below the muted step, and deliberately below AA.
@@ -78,13 +107,14 @@
   /*
    * A filled chip on the app's own ground — the stage nav's steps.
    *
-   * A step deliberately below --color-surface-overlay, which is barely a step
-   * off the canvas and disappears when used as a shape rather than a hover.
-   * This exists because outlining these chips did not work: a 1px hairline
-   * renders at 0.667px on a 1.5x display, so the outlined version read softer
-   * than an unoutlined filled one. A solid fill has no sub-pixel edge to blur.
+   * A step deliberately below --color-surface-overlay: the overlay is a hover,
+   * which is a state you are pointing at, and this is a shape you are supposed
+   * to find without looking for it. This exists because outlining these chips
+   * did not work: a 1px hairline renders at 0.667px on a 1.5x display, so the
+   * outlined version read softer than an unoutlined filled one. A solid fill
+   * has no sub-pixel edge to blur.
    */
-  --color-chip: #e6e8ef;
+  --color-chip: #d1d5e3;
 
   --color-accent: #5b5bd6;
   --color-accent-hover: #4a4ac0;
@@ -155,16 +185,19 @@
   --color-scrim: rgba(25, 27, 34, 0.34);
 
   /*
-   * Elevation. Mist leans on these hard, so they are two-part: a tight contact
-   * shadow that anchors the edge, and a wide diffuse one that lifts it.
+   * Elevation. Two-part: a tight contact shadow that anchors the edge, and a
+   * wide diffuse one that lifts it. The contact shadow carries most of the
+   * weight now — against a ground this pale it was landing at four percent of
+   * black over near-white and doing nothing, and it is the part that says where
+   * the card stops.
    */
-  --shadow-sm: 0 1px 2px rgba(25, 27, 34, 0.05);
+  --shadow-sm: 0 1px 2px rgba(25, 27, 34, 0.06);
   --shadow-card:
-    0 1px 2px rgba(25, 27, 34, 0.04),
-    0 14px 34px -12px rgba(25, 27, 34, 0.16);
+    0 1px 2px rgba(25, 27, 34, 0.07),
+    0 14px 34px -12px rgba(25, 27, 34, 0.18);
   --shadow-card-hover:
-    0 2px 6px rgba(25, 27, 34, 0.06),
-    0 20px 42px -14px rgba(25, 27, 34, 0.22);
+    0 2px 6px rgba(25, 27, 34, 0.09),
+    0 20px 42px -14px rgba(25, 27, 34, 0.24);
   --shadow-pop:
     0 4px 12px rgba(25, 27, 34, 0.08),
     0 28px 64px -20px rgba(25, 27, 34, 0.32);
@@ -324,8 +357,8 @@
    * How much room the applications rail is taking on the right.
    *
    * Published so viewport-fixed things — the floating assistant — can sit
-   * clear of it. The rail writes `--rail-w-lg` as it collapses and expands;
-   * this stays 0 below `lg`, where the rail isn't rendered at all.
+   * clear of it. The rail writes `--rail-w-open` as it collapses and expands;
+   * this stays 0 below `xl`, where the rail isn't rendered at all.
    */
   :root {
     --rail-w: 0px;
@@ -352,13 +385,46 @@
      * stacked buttons, and nothing was making them agree. Both now set this as
      * a border-box height, so the rules land on the same pixel whatever either
      * side happens to contain.
+     *
+     * 7rem is those two rows added up rather than a round number picked in
+     * advance: a 62px top row (36px of content in 12px of padding a side, once
+     * three of the five utility buttons moved into the overflow menu) over the
+     * 50px the stage band measures, with a couple of pixels of slack so
+     * sub-pixel rounding can never push the content past the box.
+     *
+     * It was 7.5rem, which left the top row 70px — the taller of the two bands
+     * while carrying the lighter of the two jobs. It must not go below what the
+     * rows measure: the header takes this as a minimum and grows rather than
+     * clipping, and a header taller than the value is a header whose bottom
+     * rule no longer meets the rail's.
      */
-    --app-header-h: 7.5rem;
+    --app-header-h: 7rem;
   }
 
-  @media (min-width: 1024px) {
+  /*
+   * There is no short-window variant of this, and there was briefly a bad one.
+   *
+   * 120px of header on a 585px-tall window is a lot, so a `max-height: 640px`
+   * rule trimmed it to 96. But 7.5rem is not a preference — it is roughly what
+   * the two stacked rows measure, so taking 24px out of it took 24px out of the
+   * top row: the wordmark's subtitle and the bottom of every header button were
+   * cut off by the stage band. Anything that reclaims height here has to reduce
+   * what the rows contain first, not the box they sit in.
+   */
+
+  /*
+   * `xl`, not `lg`.
+   *
+   * A permanent 320px column costs the same 320px whatever the window is, and
+   * at 1024 — a landscape tablet, and the width `lg` was gating this on — it
+   * left 704px of working area. That is less than the same tablet gets held
+   * upright (720px), which is the wrong way round: turning a device sideways
+   * should not take width away from the document. Below 1280 the list is
+   * reached from the header drawer instead, which costs nothing until opened.
+   */
+  @media (min-width: 1280px) {
     :root {
-      --rail-w: var(--rail-w-lg, 320px);
+      --rail-w: var(--rail-w-open, 320px);
     }
   }
 
@@ -480,6 +546,104 @@
     margin-inline: calc(var(--app-pad) * -1);
     padding-inline: var(--app-pad);
   }
+
+  /*
+   * Columns decided by the room available, not by the width of the window.
+   *
+   * Every multi-column block in this app sits to the left of a rail that is
+   * 0, 68 or 320px wide depending on state, so a `lg:grid-cols-2` asks the
+   * wrong question: it reads the viewport while the answer depends on what is
+   * left of it. `auto-fit` reads the actual box. `--col-min` is the narrowest
+   * a column may get before the grid drops one; below that it is a single
+   * column, with no breakpoint to pick.
+   *
+   * minmax(0, …) rather than minmax(--col-min, …) in the fallback branch is
+   * what keeps a grid item from being forced wider than its track by a long
+   * unbreakable word — without it the whole grid overflows instead.
+   */
+  .auto-grid {
+    --col-min: 22rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(var(--col-min), 100%), 1fr));
+  }
+
+  /*
+   * auto-fill, for grids that appear more than once on a page.
+   *
+   * auto-fit collapses the tracks it doesn't fill, so a section holding two
+   * cards stretches them across the room three would have used. That is the
+   * right answer for a block that stands alone and the wrong one for the match
+   * report, where four of these sit stacked and a section with two entries drew
+   * cards half again as wide as the section above it.
+   */
+  .auto-grid-fill {
+    grid-template-columns: repeat(auto-fill, minmax(min(var(--col-min), 100%), 1fr));
+  }
+
+  /*
+   * A real touch target on a touch device, and nothing at all on a mouse.
+   *
+   * Pointer-coarse rather than a width query: the thing that decides whether
+   * 28px is reachable is the finger, not the window. Several controls in here
+   * were shrinking at `sm` — which is to say, at exactly the widths tablets
+   * have — because `sm:` was standing in for "probably a desktop".
+   */
+  .tap {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+
+  @media (pointer: fine) {
+    .tap {
+      min-height: 0;
+      min-width: 0;
+    }
+  }
+
+  /*
+   * The same 44px, given to the touch alone rather than to the box.
+   *
+   * `tap` grows the control, which is right wherever there is room. This is for
+   * the ones tucked into a corner that has none — the delete affordance on an
+   * application card sits 6px from the edge and would cover the job title if it
+   * actually became 44px wide. The mark stays small; what you can hit doesn't.
+   */
+  .tap-area {
+    position: relative;
+  }
+
+  .tap-area::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 2.75rem;
+    height: 2.75rem;
+    transform: translate(-50%, -50%);
+  }
+
+  @media (pointer: fine) {
+    .tap-area::after {
+      content: none;
+    }
+  }
+
+  /*
+   * iOS Safari zooms the page whenever a focused field's text is under 16px and
+   * never zooms back out, so `.input-base` sets 16px below `sm`.
+   *
+   * That rule lives in @layer components, and around a dozen fields also carry
+   * `text-sm`. Utilities outrank components whatever the media query says, so
+   * every one of those fields was 14px on a phone and the fix was silently off
+   * exactly where it was needed. Restated here, in the same layer as the
+   * utility it has to beat and after it in source order.
+   */
+  @media (max-width: 639px) {
+    .input-base,
+    .input-base::placeholder {
+      font-size: 1rem;
+    }
+  }
 }
 
 /*
@@ -561,8 +725,223 @@
      minimum; the compact `py-1.5 px-3` buttons land around 30px without this. */
   @media (pointer: coarse) {
     .btn-primary,
-    .btn-secondary {
+    .btn-secondary,
+    .hdr-btn,
+    .seg-item {
       min-height: 44px;
+    }
+  }
+
+  /*
+   * The header's utility row: profile, settings, what's new, feedback, theme,
+   * applications.
+   *
+   * One class because six hand-written ones drifted. They were rendering at
+   * three heights (33.3, 36 and 44px) and two corner radii (6 and 8px) in a
+   * single row, and on a touch tablet the gap widened rather than closed —
+   * three of them took the `pointer:coarse` bump to 44 and three had no rule to
+   * take, so the row came out 44/44/33/33/44/33. Height and corner are settled
+   * here now; a button only says what goes inside it.
+   */
+  .hdr-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    height: 2.25rem;
+    min-width: 2.25rem;
+    padding-inline: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background 150ms var(--ease-out),
+      border-color 150ms var(--ease-out),
+      color 150ms var(--ease-out);
+  }
+
+  .hdr-btn:hover:not(:disabled) {
+    background: var(--color-surface-overlay);
+    border-color: var(--color-text-muted);
+    color: var(--color-text-primary);
+  }
+
+  /* The icon-only members stay square rather than growing a wider box than
+     they need — `padding-inline` is what would otherwise make them oblong. */
+  .hdr-btn-icon {
+    width: 2.25rem;
+    padding-inline: 0;
+  }
+
+  @media (pointer: coarse) {
+    .hdr-btn {
+      min-width: 2.75rem;
+    }
+
+    .hdr-btn-icon {
+      width: 2.75rem;
+    }
+  }
+
+  /*
+   * The segmented control — "Paste text / Link / File", "Cleaned text /
+   * Original", "Editor / PDF".
+   *
+   * Three of these exist and all three were written separately: 32px tall in
+   * one place, 40px shrinking to 28px at `sm` in another, a flat 28px in the
+   * third. The one that shrank did so at 640px, which is a tablet, so the
+   * control got smaller exactly as the pointer got less precise.
+   */
+  .seg-track {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border-radius: var(--radius-control);
+    background: var(--color-surface-overlay);
+  }
+
+  /*
+   * `flex: 1 1 auto` with a content basis, not `1 1 0%`: a track that spans its
+   * container wants equal segments, and one sitting inline beside a label wants
+   * to be as wide as its words. A zero basis gave both the first behaviour, and
+   * "Cleaned text" broke across two lines inside a 60px segment.
+   *
+   * nowrap says the same thing from the other side — a segmented control that
+   * wraps has stopped being a row of buttons.
+   */
+  .seg-item {
+    display: inline-flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    min-height: 2rem;
+    padding: 0.375rem 0.75rem;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background 150ms var(--ease-out),
+      color 150ms var(--ease-out),
+      box-shadow 150ms var(--ease-out);
+  }
+
+  .seg-item:hover:not(.seg-item-active) {
+    color: var(--color-text-primary);
+  }
+
+  .seg-item-active {
+    background: var(--color-surface-raised);
+    color: var(--color-text-primary);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /*
+   * The modal shell.
+   *
+   * Eight dialogs, and most of them had no height of their own: the panel grew
+   * to whatever it contained and the *backdrop* scrolled. That reads fine on a
+   * tall window and falls apart on a short one — a phone or a tablet held
+   * sideways is 390–600px tall, and "Your details" is a thousand pixels of
+   * fields, so the title scrolled away upwards and Save sat somewhere below the
+   * bottom of the screen with no indication it was there.
+   *
+   * The panel is capped at the window now and the middle scrolls inside it, so
+   * the heading and the buttons are always where you left them.
+   */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow-y: auto;
+    padding: 0.5rem;
+    background: var(--color-scrim);
+  }
+
+  .modal-panel {
+    display: flex;
+    width: 100%;
+    max-height: calc(100dvh - 1rem);
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Header and footer hold their place; only this gives way. `min-height: 0`
+     is what lets it — a flex child's default floor is its content, so without
+     it the panel is pushed past its own cap instead of scrolling. */
+  .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .modal-head,
+  .modal-foot {
+    flex-shrink: 0;
+  }
+
+  @media (min-width: 640px) {
+    .modal-overlay {
+      padding: 1.5rem;
+    }
+
+    .modal-panel {
+      max-height: calc(100dvh - 3rem);
+    }
+  }
+
+  /*
+   * The resume step's two halves — the LaTeX source and the typeset page.
+   *
+   * A size container rather than a breakpoint, because the pane is one of the
+   * blocks the applications rail steals width from: `lg:grid-cols-2` put a text
+   * editor and a rendered A4 page side by side in 298px each on a landscape
+   * tablet, which is the width at which neither is usable.
+   */
+  .doc-split-host {
+    container-type: inline-size;
+  }
+
+  .doc-split {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+    /*
+     * Stacked, each half gets a height of its own and the page scrolls past
+     * them. The alternative — one fixed box divided in two — is what used to
+     * happen, and with a 420px floor on a 390px-tall landscape phone it gave
+     * each half about 200px, or nine visible lines of LaTeX above a page of PDF
+     * rendered at nine percent.
+     */
+    grid-auto-rows: minmax(15rem, auto);
+  }
+
+  @container (min-width: 52rem) {
+    .doc-split {
+      grid-template-columns: 1fr 1fr;
+      grid-auto-rows: auto;
+      /*
+       * Side by side the two have to agree on a height, and how much there is
+       * to agree on is the one thing here the window really does decide. The
+       * floor is low enough to survive a short laptop window; `dvh` rather than
+       * `vh` so iOS Safari's collapsing address bar doesn't count twice.
+       */
+      height: clamp(24rem, calc(100dvh - 16rem), 56rem);
     }
   }
 

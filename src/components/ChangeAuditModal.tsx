@@ -171,17 +171,17 @@ export default function ChangeAuditModal({ open, grounding, fit, resume, onClose
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--color-scrim)] p-2 sm:p-6"
+      className="modal-overlay"
       onClick={onClose}
     >
       <div
-        className="glass-panel my-2 w-full max-w-3xl overflow-hidden p-0 sm:my-8"
+        className="modal-panel glass-panel max-w-3xl p-0"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="What changed"
       >
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] px-5 py-4">
+        <div className="modal-head flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] px-5 py-4">
           <div>
             <h2 className="text-sm font-medium">What changed</h2>
             <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
@@ -193,7 +193,10 @@ export default function ChangeAuditModal({ open, grounding, fit, resume, onClose
           </button>
         </div>
 
-        <div className="max-h-[70vh] space-y-5 overflow-y-auto p-4 sm:p-5">
+        {/* The cap is `.modal-panel`'s. As a `max-h-[70vh]` inside a scrolling
+            backdrop this was two nested scrollers competing for the same
+            gesture, and `vh` is the large viewport on a phone. */}
+        <div className="modal-body space-y-5 p-4 sm:p-5">
           {/* --- The accuracy check ------------------------------------------ */}
           <section>
             <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
@@ -304,8 +307,10 @@ export default function ChangeAuditModal({ open, grounding, fit, resume, onClose
                       key={i}
                       className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-overlay)] px-3 py-2"
                     >
-                      <p className="text-[11px] text-[var(--color-text-muted)]">{cut.where}</p>
-                      <p className="mt-0.5 text-xs leading-relaxed text-[var(--color-text-secondary)] line-through decoration-[var(--color-text-muted)]">
+                      <p className="break-words text-[11px] text-[var(--color-text-muted)]">{cut.where}</p>
+                      {/* break-words: raw resume bullets, which is where the
+                          URLs are. */}
+                      <p className="mt-0.5 break-words text-xs leading-relaxed text-[var(--color-text-secondary)] line-through decoration-[var(--color-text-muted)]">
                         {cut.text}
                       </p>
                     </li>
@@ -393,14 +398,17 @@ export default function ChangeAuditModal({ open, grounding, fit, resume, onClose
                   it is here to be searched when something feels missing, not to
                   greet you. */}
               <details className="mt-2">
-                <summary className="cursor-pointer text-xs text-[var(--color-accent)]">
+                {/* `tap`, not a flex box: these two disclosures have no chevron
+                    of their own, so the marker is the affordance and
+                    `display: inline-flex` would remove it. */}
+                <summary className="tap cursor-pointer py-2 text-xs text-[var(--color-accent)]">
                   Show the {omitted.length} unused line{omitted.length === 1 ? "" : "s"}
                 </summary>
                 <ul className="mt-1.5 space-y-1 border-l-2 border-[var(--color-border)] pl-2">
                   {omitted.map((line, i) => (
                     <li
                       key={i}
-                      className="text-xs leading-relaxed text-[var(--color-text-secondary)]"
+                      className="break-words text-xs leading-relaxed text-[var(--color-text-secondary)]"
                     >
                       {line}
                     </li>
@@ -466,14 +474,14 @@ function DecisionCard({
 
       {decision.sources.length > 0 && (
         <details className="mt-1.5">
-          <summary className="cursor-pointer text-[11px] text-[var(--color-text-muted)]">
+          <summary className="tap cursor-pointer py-2 text-[11px] text-[var(--color-text-muted)]">
             {decision.sources.length === 1
               ? "The line it cited"
               : `The ${decision.sources.length} lines it cited`}
           </summary>
           <ul className="mt-1 space-y-0.5 border-l-2 border-[var(--color-border)] pl-2">
             {decision.sources.map((source, i) => (
-              <li key={i} className="text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+              <li key={i} className="break-words text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
                 {source}
               </li>
             ))}

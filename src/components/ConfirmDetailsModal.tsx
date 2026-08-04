@@ -75,24 +75,24 @@ export default function ConfirmDetailsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--color-scrim)] p-2 sm:p-6"
+      className="modal-overlay"
       onClick={onDismiss}
     >
       <div
-        className="glass-panel my-2 w-full max-w-2xl overflow-hidden p-0 sm:my-8"
+        className="modal-panel glass-panel max-w-2xl p-0"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Confirm your details"
       >
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] px-5 py-4">
+        <div className="modal-head flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] px-5 py-4">
           <h2 className="text-sm font-medium">Confirm your details</h2>
           <button onClick={onDismiss} className="btn-secondary px-3 py-1.5 text-xs">
             Not now
           </button>
         </div>
 
-        <div className="space-y-4 p-4 sm:p-5">
+        <div className="modal-body space-y-4 p-4 sm:p-5">
           <div>
             <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">
               These are the details in{" "}
@@ -131,7 +131,12 @@ export default function ConfirmDetailsModal({
                           ? `${f.value || "cleared"} — was ${f.previous}`
                           : f.value
                       }
-                      className={`max-w-full truncate rounded-full border px-2.5 py-1 text-[11px] ${
+                      // Wraps rather than truncating: on a phone a chip gets
+                      // about 25 characters, and an extracted LinkedIn URL —
+                      // exactly the field most worth checking — was ellipsised
+                      // down to "linkedin: https://www…" with no tooltip to
+                      // reveal the rest, because a touch screen has no hover.
+                      className={`max-w-full break-words rounded-[var(--radius-control)] border px-2.5 py-1 text-[11px] ${
                         f.previous
                           ? "border-[var(--color-warning)]/40 bg-[var(--color-warning-muted)] text-[var(--color-text-secondary)]"
                           : "border-[var(--color-border)] bg-[var(--color-surface-overlay)] text-[var(--color-text-secondary)]"

@@ -33,8 +33,14 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 // (Safari only learned scrollbar-gutter in 18.2. Below that both layers ignore
 // it and the drift returns; the fallback is to give both `overflow-y: scroll`
 // so each reserves a real scrollbar.)
+//
+// 16px below `sm`, 12.5 above it. iOS Safari zooms the page whenever a focused
+// field's text is under 16px and never zooms back out, and at 12.5 this was the
+// one field in the app still doing that — focusing the editor on a phone left
+// you zoomed into a corner of a LaTeX document with no way back. Both layers
+// carry the same size, or the highlight stops lining up with the text.
 const SHARED =
-  "m-0 whitespace-pre-wrap break-words p-4 font-mono text-[12.5px] leading-[1.6] [scrollbar-gutter:stable]";
+  "m-0 whitespace-pre-wrap break-words p-4 font-mono text-[16px] leading-[1.6] sm:text-[12.5px] [scrollbar-gutter:stable]";
 
 type Props = {
   value: string;

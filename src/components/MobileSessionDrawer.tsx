@@ -7,10 +7,13 @@ import SessionList from "./SessionList";
 /**
  * Phone and tablet access to the applications list.
  *
- * SessionRail is `hidden lg:flex` because a permanent 320px column doesn't fit
+ * SessionRail is `hidden xl:flex` because a permanent 320px column doesn't fit
  * on a narrow screen — which left small screens with no way to create or switch
  * applications at all. This is the same list as a slide-over, opened from the
- * header, and it hides itself at `lg` where the rail takes over.
+ * header, and it hides itself at `xl` where the rail takes over.
+ *
+ * `xl` rather than `lg`: at 1024 the rail was taking a third of a landscape
+ * tablet, so that device is served from here now too.
  */
 export default function MobileSessionDrawer() {
   const { sessions, hydrated } = useJobHuntState();
@@ -39,7 +42,12 @@ export default function MobileSessionDrawer() {
         onClick={() => setOpen(true)}
         aria-label="Applications"
         aria-expanded={open}
-        className="lg:hidden flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-md border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-overlay)] transition-colors"
+        // Keeps its label — it is how the list is reached at every width below
+        // `xl`, which now includes a landscape tablet. Everything else about
+        // the box comes from `.hdr-btn`, which is what the five controls beside
+        // it use; on its own it was the shortest thing in the row at 33px and
+        // the only one that never grew for a touch pointer.
+        className="hdr-btn xl:hidden"
       >
         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path
@@ -59,7 +67,7 @@ export default function MobileSessionDrawer() {
 
       {open && (
         <div
-          className="lg:hidden fixed inset-0 z-50 flex justify-end bg-[var(--color-scrim)]"
+          className="xl:hidden fixed inset-0 z-50 flex justify-end bg-[var(--color-scrim)]"
           onClick={close}
         >
           <div

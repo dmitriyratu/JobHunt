@@ -33,10 +33,13 @@ export default function SubjectField({ value, onChange }: Props) {
           onChange={(e) => onChange(e.target.value)}
           aria-label="Email subject"
           // text-base below sm: iOS zooms the page on focusing a sub-16px field.
-          // min-h-11 below sm: the line box alone is 24px tall, which is the bare
-          // WCAG minimum for something this important to hit. A single-line input
-          // centres its text vertically, so the extra height costs no layout.
-          className="w-full min-h-11 bg-transparent border-0 outline-none text-base sm:min-h-0 sm:text-sm text-[var(--color-text-primary)]"
+          //
+          // The 44px target is `tap`, which asks about the pointer. It used to
+          // be `min-h-11 sm:min-h-0`, and that gave the target back at 640px —
+          // on a tablet, where the pointer is still a finger and the line box on
+          // its own is 20px. A single-line input centres its text vertically, so
+          // the extra height costs no layout either way.
+          className="tap w-full border-0 bg-transparent text-base outline-none sm:text-sm text-[var(--color-text-primary)]"
         />
       </div>
     </div>
