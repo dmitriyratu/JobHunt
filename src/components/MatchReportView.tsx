@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type {
   MatchReport,
   MatchReportItem,
@@ -400,31 +400,89 @@ function AttachedNote() {
  */
 const CARD_GRID = "auto-grid auto-grid-fill [--col-min:22rem] gap-2.5";
 
-/**
- * The whole report in one line: how many of each outcome.
- *
- * The score says how you did; this says what it is made of, which is the
- * question anyone actually has next. Sits right under the summary so the
- * answer is above the fold whatever the report contains.
- */
-function OutcomeTally({ items }: { items: MatchReportItem[] }) {
-  const counts = items.reduce<Partial<Record<Outcome, number>>>((acc, item) => {
+function tally(items: MatchReportItem[]): Partial<Record<Outcome, number>> {
+  return items.reduce<Partial<Record<Outcome, number>>>((acc, item) => {
     const key = outcomeOf(item.status, item.strength);
     acc[key] = (acc[key] ?? 0) + 1;
     return acc;
   }, {});
+}
+
+/**
+ * The whole report in one line: how many of each outcome, and the control that
+ * narrows the report to them.
+ *
+ * The score says how you did; this says what it is made of, which is the
+ * question anyone actually has next. Sits right under the summary so the
+ * answer is above the fold whatever the report contains.
+ *
+ * The counts are also the only place on the page that names all four outcomes
+ * at once, which makes them the obvious place to filter from — "5 partial" is
+ * already the question "which five?". They toggle and they combine, so gap and
+ * partial together — everything with work left in it — is two clicks.
+ *
+ * Selected is a near-black ring and unselected is dimmed, the same two devices
+ * the cards use, because the four fills are spoken for by the outcome scale.
+ */
+function OutcomeTally({
+  counts,
+  active,
+  total,
+  onToggle,
+  onClear,
+}: {
+  counts: Partial<Record<Outcome, number>>;
+  active: Outcome[];
+  total: number;
+  onToggle: (outcome: Outcome) => void;
+  onClear: () => void;
+}) {
+  const filtering = active.length > 0;
 
   return (
-    <div className="mt-2.5 flex flex-wrap gap-1.5">
-      {OUTCOME_ORDER.filter((key) => counts[key]).map((key) => (
-        <span
-          key={key}
-          className={`inline-flex items-center gap-1 rounded-full py-0.5 pl-1.5 pr-2.5 text-[11px] font-semibold ${OUTCOME[key].pill}`}
+    <div
+      className="mt-2.5 flex flex-wrap items-center gap-1.5"
+      role="group"
+      aria-label="Filter requirements by outcome"
+    >
+      {OUTCOME_ORDER.filter((key) => counts[key]).map((key) => {
+        const on = active.includes(key);
+        const label = OUTCOME[key].label.toLowerCase();
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onToggle(key)}
+            aria-pressed={on}
+            aria-label={
+              on
+                ? `Stop showing only ${label} requirements`
+                : `Show only the ${counts[key]} ${label} requirements`
+            }
+            className={`inline-flex items-center gap-1 rounded-full py-0.5 pl-1.5 pr-2.5 text-[11px] font-semibold transition ${
+              OUTCOME[key].pill
+            } ${
+              on
+                ? "ring-2 ring-[var(--color-text-primary)] ring-offset-1 ring-offset-[var(--color-surface-raised)]"
+                : filtering
+                  ? "opacity-45 hover:opacity-100"
+                  : "hover:opacity-85"
+            }`}
+          >
+            <OutcomeIcon icon={OUTCOME_ICON[key]} className="h-3.5 w-3.5" />
+            {counts[key]} {label}
+          </button>
+        );
+      })}
+      {filtering && (
+        <button
+          type="button"
+          onClick={onClear}
+          className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-[var(--color-text-secondary)] underline-offset-2 transition hover:text-[var(--color-text-primary)] hover:underline"
         >
-          <OutcomeIcon icon={OUTCOME_ICON[key]} className="h-3.5 w-3.5" />
-          {counts[key]} {OUTCOME[key].label.toLowerCase()}
-        </span>
-      ))}
+          Show all {total}
+        </button>
+      )}
     </div>
   );
 }
@@ -492,6 +550,13 @@ export default function MatchReportView({
   attachedItemId,
   onAttachItem,
 }: Props) {
+  const [filter, setFilter] = useState<Outcome[]>([]);
+
+  const toggleFilter = (outcome: Outcome) =>
+    setFilter((prev) =>
+      prev.includes(outcome) ? prev.filter((o) => o !== outcome) : [...prev, outcome]
+    );
+
   if (!report) {
     // Analysis auto-runs on arrival, so the normal state here is "working".
     if (loading) {
@@ -521,7 +586,19 @@ export default function MatchReportView({
     );
   }
 
-  const groups = groupItems(report.items);
+  const counts = tally(report.items);
+  // The filter is held loosely on purpose: a re-analysis, or a chat edit that
+  // moves the last gap to a match, can retire an outcome the user had selected.
+  // Intersecting with what the report still contains means that self-heals into
+  // "show everything" rather than into an empty grid you have to click out of.
+  const active = OUTCOME_ORDER.filter((key) => counts[key] && filter.includes(key));
+  const filtering = active.length > 0;
+
+  const groups = groupItems(
+    filtering
+      ? report.items.filter((item) => active.includes(outcomeOf(item.status, item.strength)))
+      : report.items
+  );
   // Reports saved before standouts existed have no array here.
   const standouts = report.standouts ?? [];
 
@@ -541,7 +618,13 @@ export default function MatchReportView({
           <p className="break-words text-xs leading-relaxed text-[var(--color-text-secondary)]">
             {report.summary}
           </p>
-          <OutcomeTally items={report.items} />
+          <OutcomeTally
+            counts={counts}
+            active={active}
+            total={report.items.length}
+            onToggle={toggleFilter}
+            onClear={() => setFilter([])}
+          />
           {error && <p className="text-[var(--color-danger)] text-xs mt-2">{error}</p>}
         </div>
         {/* Full width on a phone, where this wraps below the summary: a small
@@ -561,7 +644,18 @@ export default function MatchReportView({
         </div>
       </div>
 
-      <p className="eyebrow mt-5 mb-2">Click any entry to ask the chat about it</p>
+      {/* The hint gives way to the filter state while one is on: what is on
+          screen is no longer the whole report, and that has to be said
+          somewhere the eye already goes. Standouts sit outside the four counts,
+          so a filter drops them — said here rather than left as a section that
+          silently vanished. */}
+      <p className="eyebrow mt-5 mb-2">
+        {filtering
+          ? `${active.reduce((n, key) => n + (counts[key] ?? 0), 0)} of ${
+              report.items.length
+            } requirements${standouts.length > 0 ? " · standouts hidden" : ""}`
+          : "Click any entry to ask the chat about it"}
+      </p>
 
       <div className="space-y-4">
         {groups.map(([importance, items]) => (
@@ -605,7 +699,7 @@ export default function MatchReportView({
         ))}
       </div>
 
-      {standouts.length > 0 && (
+      {!filtering && standouts.length > 0 && (
         <div className="mt-5 pt-4 border-t border-[var(--color-border-subtle)]">
           <div className="flex flex-wrap items-baseline gap-x-2 mb-2">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-primary)]">
