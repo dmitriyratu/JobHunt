@@ -1,0 +1,5 @@
+# Hook scripts must keep LF endings. This repo checks out with core.autocrlf
+# true, and a shebang line ending in CR makes the kernel look for an
+# interpreter literally named "/bin/sh\r" — so the hook dies with "bad
+# interpreter" on macOS and Linux, and can misbehave under Git Bash.
+.githooks/** text eol=lf
