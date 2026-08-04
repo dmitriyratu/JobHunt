@@ -1,0 +1,15 @@
+[
+  {
+    "version": "0.1.0",
+    "date": "2026-08-04",
+    "headline": "The first release notes entry",
+    "summary": "From here on, every change that reaches you shows up in What's new — written in plain language, not commit messages.",
+    "changes": [
+      {
+        "title": "See what changed, without reading a changelog",
+        "detail": "The What's new button in the header lists each release and what it means for you. A dot appears when there's something you haven't read."
+      }
+    ],
+    "commit": "82849ef176286dbfe03f9d87dd23e7c4d3490c66"
+  }
+]

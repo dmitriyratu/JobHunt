@@ -1,0 +1,60 @@
+# Writes the What's new entry for whatever just landed on main.
+#
+# This runs on GitHub's servers rather than yours, which is the whole point: a
+# git hook only fires where `git commit` runs, so committing from a phone, from
+# the GitHub web editor, or from a machine that never ran `npm run
+# hooks:install` would silently produce no notes. A push is a push from
+# anywhere, so this catches all of them.
+#
+# Auth is CLAUDE_CODE_OAUTH_TOKEN — a long-lived token from `claude setup-token`
+# that bills your Claude subscription. An ANTHROPIC_API_KEY would also work here
+# but would be charged per token, which is the thing we were avoiding.
+
+name: Release notes
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notes:
+    # The entry this workflow writes is itself a push to main. Filtering on the
+    # marker rather than the committer means a hand-written release commit is
+    # skipped too, and it costs nothing when the local hook already did the work.
+    if: ${{ !contains(github.event.head_commit.message, '[release-notes]') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # Two pushes in quick succession would otherwise race to bump the same
+    # version. Queue rather than cancel: skipping a run loses an entry.
+    concurrency:
+      group: release-notes
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The script finds its starting point from the commit recorded in the
+          # last release entry, which can be far back. A shallow clone would not
+          # contain it, so every run would fall back to "just the last commit".
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install the Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Write the release note
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node scripts/release-notes.mjs --commit
+
+      # A no-op when the run decided nothing was user-facing, which is the
+      # common case — most commits do not earn an entry.
+      - name: Push
+        run: git push
