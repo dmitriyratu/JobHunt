@@ -1,5 +1,22 @@
 [
   {
+    "version": "0.2.0",
+    "date": "2026-08-04",
+    "headline": "Add skills your resume doesn't mention, and easier reading in light mode",
+    "summary": "When you tell it about a skill or experience that isn't written on your resume, you can now have it added as a fact so your tailored resume, cover letter, and match report all reflect it. Light mode also got a contrast pass so text and panels are easier to tell apart.",
+    "changes": [
+      {
+        "title": "Record skills and experience missing from your resume",
+        "detail": "If you mention something true about yourself that your resume doesn't say, you can now propose it as a fact. Once accepted, it's used consistently everywhere your resume, cover letter, and reports are generated."
+      },
+      {
+        "title": "Clearer light theme",
+        "detail": "Text, cards, and panels have better contrast in light mode now, so the layout doesn't look flat or washed out."
+      }
+    ],
+    "commit": "f95d5b6a016e16a9de9fe61648e81aa3c2842259"
+  },
+  {
     "version": "0.1.0",
     "date": "2026-08-04",
     "headline": "The first release notes entry",
