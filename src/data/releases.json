@@ -1,5 +1,26 @@
 [
   {
+    "version": "0.3.0",
+    "date": "2026-08-04",
+    "headline": "Filter your match report by outcome",
+    "summary": "You can now click any of the counts at the top of your match report — like \"5 partial\" or \"3 gaps\" — to instantly narrow the list down to just those requirements.",
+    "changes": [
+      {
+        "title": "Click a count to filter the report",
+        "detail": "Each outcome count above your report (matches, partials, gaps, etc.) is now a button. Click one to see only the requirements with that outcome, and click again to turn it off. You can select more than one at a time, for example partial and gap together to see everything that still needs work."
+      },
+      {
+        "title": "Always know what you're looking at",
+        "detail": "While a filter is on, the report tells you how many of the total requirements are currently shown, so it's never ambiguous whether you're seeing everything or a narrowed view."
+      },
+      {
+        "title": "One-click reset",
+        "detail": "A \"Show all\" link appears whenever a filter is active, so you can get back to the full report in a single click."
+      }
+    ],
+    "commit": "9a117dd066fdf67b96c38d5a751dd3a40adf478c"
+  },
+  {
     "version": "0.2.0",
     "date": "2026-08-04",
     "headline": "Add skills your resume doesn't mention, and easier reading in light mode",
