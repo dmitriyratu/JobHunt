@@ -17,15 +17,10 @@ export default function LetterOutput({
   onBodyChange,
 }: Props) {
   return (
-    // Capped rather than filling the column: this is prose meant to be read,
-    // and a line of text 150 characters wide is hard to track back from. The
-    // cap is on the panel so the toolbar and the text share one edge.
-    //
-    // The cap the comment describes had gone missing — `w-full` inside a 1700px
-    // container meant the letter ran to about 1550px on a wide window, which is
-    // exactly the measure this is meant to prevent. 60rem holds roughly 90
-    // characters at the body size.
-    <div className="glass-panel w-full max-w-[60rem] p-5 sm:p-6">
+    // Full width, like every other step's panel. A reading-measure cap was here
+    // once, but a short right edge under a full-width recap row read as a
+    // layout bug rather than as a deliberate column.
+    <div className="glass-panel w-full p-5 sm:p-6">
       <div className="mb-4">
         <h3 className="font-medium text-sm">Outreach email</h3>
         <p className="text-xs text-[var(--color-text-muted)] mt-0.5">

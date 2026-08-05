@@ -129,7 +129,7 @@ export type StandoutProposal = ProposalBase & {
  */
 export type FactProposal = ProposalBase & {
   target: "fact";
-  /** Always null: the chat only ever adds. Removing one is done in Your details. */
+  /** Always null: the chat only ever adds. Removing one is done in Your Profile. */
   before: null;
   after: { text: string } | null;
 };
@@ -366,6 +366,111 @@ export type ResumeChatMessage = ChatMessage & {
 
 export type JobSourceType = "file" | "url" | "text" | "";
 
+// --- What the posting states about the deal ---------------------------------
+
+export type WorkplaceKind = "remote" | "hybrid" | "onsite";
+
+export type EmploymentKind =
+  | "full-time"
+  | "part-time"
+  | "contract"
+  | "internship"
+  | "temporary";
+
+/**
+ * Pay as the posting stated it, plus the numbers read out of it.
+ *
+ * `raw` is kept alongside the parsed numbers and is the authority — postings
+ * write pay in a dozen shapes ("$180,000–$220,000 + equity", "£75k DOE",
+ * "$95/hr W2"), and a range that flattens "+ equity" into two integers has
+ * quietly dropped the part the candidate cares about. The numbers exist so the
+ * panel can render a tight "$180k – $220k"; `raw` exists so nothing is lost.
+ */
+export type SalaryRange = {
+  min: number | null;
+  max: number | null;
+  /** ISO 4217 where known, e.g. "USD". Empty when the posting gave no symbol. */
+  currency: string;
+  period: "year" | "month" | "day" | "hour";
+  /** The pay sentence exactly as written. Never synthesised. */
+  raw: string;
+  /** What rides alongside base — "plus equity and annual bonus". */
+  note: string;
+};
+
+/**
+ * The ten facts, as addressable names.
+ *
+ * One list, used by the row builder, the icon set and the record of what has
+ * been hand-corrected — so a field cannot exist in one of those and not the
+ * others. Not the same as the JobFacts field names: "location" is one row over
+ * `locations`, and "salary" is one row over six.
+ */
+export type JobFactKey =
+  | "salary"
+  | "location"
+  | "workplace"
+  | "employment"
+  | "seniority"
+  | "team"
+  | "posted"
+  | "deadline"
+  | "visa"
+  | "travel";
+
+/**
+ * The handful of facts a posting states about the job itself.
+ *
+ * The description is already read in full, but everything that produced was
+ * about *fit* — requirements, evidence, a score. None of it answered the two
+ * questions people actually sort applications by: what does it pay, and where
+ * do I have to be. Those were in the text, they were read past, and they were
+ * gone.
+ *
+ * A fact here is only ever copied out of the posting. A salary the employer
+ * didn't print does not become an estimate, and a location it didn't name does
+ * not become "probably remote". `null` and `""` mean the posting was silent,
+ * which the panel prints as "Not stated" rather than hiding: a listing that
+ * won't say what it pays is a thing worth knowing before you spend an evening
+ * on it.
+ */
+export type JobFacts = {
+  salary: SalaryRange | null;
+  /** Every place named, in the posting's order. "Remote (US)" counts as one. */
+  locations: string[];
+  workplace: WorkplaceKind | null;
+  /** The condition attached to it — "3 days a week in the SF office". */
+  workplaceNote: string;
+  employment: EmploymentKind | null;
+  /** As written: "Senior", "Staff", "L5". Not inferred from the job title. */
+  seniority: string;
+  /** Team or department, when the posting names one. */
+  team: string;
+  /** As written: "Posted 3 days ago", "March 2, 2026". */
+  postedAt: string;
+  /** Application deadline, when stated. */
+  deadline: string;
+  /** True/false only when the posting says so outright; null when silent. */
+  visaSponsorship: boolean | null;
+  /** "Up to 25%", "Occasional travel to Austin". */
+  travel: string;
+  /** ISO timestamp of the extraction pass that produced this. */
+  extractedAt: string;
+  /**
+   * Which of these the reader has corrected by hand.
+   *
+   * The panel's footer says everything on it was read from the posting and
+   * nothing was estimated. That promise is the reason to trust a salary printed
+   * at display size — and the moment a field can be typed over, it stops being
+   * true unless something records which ones. So corrections are counted and
+   * named rather than blended in: the panel goes on vouching for what it read,
+   * and says separately what you told it.
+   *
+   * Empty for facts that came straight out of an extraction and were left alone.
+   */
+  editedKeys: JobFactKey[];
+};
+
 /**
  * One suspected typo in the uploaded document, offered for a decision.
  *
@@ -414,25 +519,31 @@ export type Session = {
   committed: boolean;
 
   // Source material
+  /**
+   * The resume this application was run against.
+   *
+   * A copy of the saved resume (see @/lib/baseResume) taken when the
+   * application started, not a pointer to it. Uploading a new resume changes
+   * what the next application is built from and leaves this one alone: a match
+   * report is an answer about a particular document, and quietly swapping the
+   * document out from under it would make the answer a lie.
+   *
+   * The spelling and naming findings that used to sit here moved to the saved
+   * resume with it — a typo is a property of the document, not of the
+   * application that happened to catch it.
+   */
   resumeText: string;
   resumeFilename: string;
-  /**
-   * Typos found in resumeText at upload, still awaiting a decision.
-   *
-   * Stored rather than held in the upload component so a reload does not throw
-   * the list away — it is the only chance to fix the source before every later
-   * check starts treating it as ground truth. Accepting or rejecting removes the
-   * entry, so an empty list means "nothing outstanding", not "never checked".
-   */
-  spellingSuggestions: SpellingSuggestion[];
-  /**
-   * Institutions and programmes the uploaded document spells more than one way,
-   * still awaiting a decision. Same lifecycle as spellingSuggestions.
-   */
-  nameVariants: NameVariant[];
   jobDescription: string;
   jobSource: string;
   jobSourceType: JobSourceType;
+  /**
+   * The posting's own terms, read once when it loads. Null until the extraction
+   * pass has run, and null forever for applications saved before it existed —
+   * read it through `?? null` and let the panel say so, rather than backfilling
+   * a posting whose text may since have been replaced.
+   */
+  jobFacts: JobFacts | null;
 
   // Resume
   tailoredResume: TailoredResume | null;
@@ -479,10 +590,26 @@ export type Session = {
   // Analysis
   matchReport: MatchReport | null;
   reportChatMessages: ReportChatMessage[];
-  /** Written only by analyze-match — derived, not user-editable. */
+  /**
+   * Who is hiring, and for what. Derived from the posting.
+   *
+   * Two writers, in this order: extract-job-facts seeds them the moment a
+   * posting is loaded, and analyze-match sets them again from the same text
+   * with the whole report in front of it. The later pass wins — the seed only
+   * ever fills a blank — so a card carries the employer's name and logo from
+   * the first screen instead of waiting on the analysis.
+   */
   detectedCompany: string;
   detectedJobTitle: string;
-  /** Bare domain (e.g. "netflix.com") used to fetch the company logo. */
+  /**
+   * Bare domain (e.g. "netflix.com"), a hint for the logo lookup.
+   *
+   * Written by analyze-match alone: it is recalled from the model's own
+   * knowledge of the company rather than read out of the posting, which is the
+   * one thing extract-job-facts refuses to do. Optional throughout —
+   * /api/company-logo resolves from the name via Wikidata and falls back to a
+   * guessed domain, so this only sharpens an answer it can already reach.
+   */
   detectedCompanyDomain: string;
 
   // Letter

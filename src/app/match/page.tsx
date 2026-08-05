@@ -12,35 +12,19 @@ import { addAssertedFact, mintAssertedFact, withAssertedFacts } from "@/lib/asse
 import { useChatDock, useRegisterChat } from "@/lib/chatDock";
 import { computeOverallScore } from "@/lib/matchReport";
 import { ANALYSIS_RESET } from "@/lib/session";
-import {
-  DEFAULT_SETTINGS,
-  loadSettings,
-  saveSettings,
-  type AppSettings,
-} from "@/lib/settings";
 import { useJobHuntState } from "@/lib/useAppState";
+import { useSettings } from "@/lib/useSettings";
 import { appendUsageEntry } from "@/lib/usage";
 import type { ReportChatMessage } from "@/types";
 
 export default function MatchPage() {
   const { state, setState, hydrated, commitSession } = useJobHuntState();
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const { settings, settingsLoaded, saveSettings } = useSettings();
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState("");
   const [attachedItemId, setAttachedItemId] = useState<string | null>(null);
   // Shared with the applications rail, which is where the toggle lives.
   const { open: chatOpen, setOpen: setChatOpen, toggle: toggleChat } = useChatDock();
-
-  useEffect(() => {
-    setSettings(loadSettings());
-    setSettingsLoaded(true);
-  }, []);
-
-  const handleSettingsSave = useCallback((next: AppSettings) => {
-    setSettings(next);
-    saveSettings(next);
-  }, []);
 
   // A ref, not the `analyzing` state — setState is async and the auto-analyze
   // effect can re-run before it lands.
@@ -70,9 +54,14 @@ export default function MatchPage() {
         ...prev,
         ...ANALYSIS_RESET,
         matchReport: data.report,
-        detectedCompany: data.company ?? "",
-        detectedJobTitle: data.jobTitle ?? "",
-        detectedCompanyDomain: data.companyDomain ?? "",
+        // Filled, not overwritten. These are read off the posting at step 1 too
+        // and can be corrected by hand there, so a re-analysis that assigned its
+        // own answer would undo a correction — silently, on a page that isn't
+        // showing the field. Both are cleared by JOB_CHANGE_RESET, so a genuinely
+        // different posting still gets a fresh answer from here.
+        detectedCompany: prev.detectedCompany || (data.company ?? ""),
+        detectedJobTitle: prev.detectedJobTitle || (data.jobTitle ?? ""),
+        detectedCompanyDomain: prev.detectedCompanyDomain || (data.companyDomain ?? ""),
       }));
       if (data.usage) {
         appendUsageEntry({
@@ -154,19 +143,19 @@ export default function MatchPage() {
    * reasons: it lands in settings rather than in the application, and an
    * updater must stay pure — StrictMode invokes them twice, which would record
    * every fact against a doubled log.
+   *
+   * The patch is a function because the new list is built from the stored one,
+   * and returning null when `addAssertedFact` hands back the same array is how
+   * an already-known fact writes nothing at all.
    */
   const rememberFact = useCallback(
     (text: string, sessionId: string) => {
-      setSettings((prev) => {
+      saveSettings((prev) => {
         const facts = addAssertedFact(prev.assertedFacts, mintAssertedFact(text, sessionId));
-        // Identity means it was already known — nothing to write.
-        if (facts === prev.assertedFacts) return prev;
-        const next = { ...prev, assertedFacts: facts };
-        queueMicrotask(() => saveSettings(next));
-        return next;
+        return facts === prev.assertedFacts ? null : { assertedFacts: facts };
       });
     },
-    []
+    [saveSettings]
   );
 
   const handleAcceptProposal = useCallback(
@@ -273,9 +262,9 @@ export default function MatchPage() {
   return (
     <div className="flex min-h-dvh flex-col">
       <AppHeader
-        subtitle="Match report"
+        subtitle="Match Report"
         settings={settings}
-        onSettingsSave={handleSettingsSave}
+        onSettingsSave={saveSettings}
       />
 
       {/* See the resume step: the content block grows so the sticky footer has
@@ -297,9 +286,12 @@ export default function MatchPage() {
           // column from it.
           <section>
             <div className="mb-2 flex items-start justify-between gap-3">
+                {/* 2, not 3: the source page asked for a resume and a posting
+                    and this followed both. The resume moved to Your Profile,
+                    which left a gap in the count where step 2 used to be. */}
                 <SectionHeader
-                  step={3}
-                  title="Match report"
+                  step={2}
+                  title="Match Report"
                   subtitle="Weighted by how important each requirement is"
                 />
                 {/* Below xl the applications rail is hidden, and with it the

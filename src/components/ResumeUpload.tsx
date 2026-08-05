@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deleteFile, loadFile, saveFile } from "@/lib/fileStore";
+import { loadFile, saveFile } from "@/lib/fileStore";
 import DocumentPreview from "./DocumentPreview";
 
 type Props = {
@@ -10,6 +10,8 @@ type Props = {
   fileKey: string;
   /** A word from the proofread list to mark and scroll to in the preview. */
   highlight?: string;
+  /** Passed straight to the preview — see DocumentPreview for why it exists. */
+  previewHeight?: "compact" | "full";
   /**
    * Awaited before the upload is shown as done.
    *
@@ -19,7 +21,6 @@ type Props = {
    * the card waits for them.
    */
   onParsed: (text: string, filename: string) => void | Promise<void>;
-  onClear: () => void;
 };
 
 export default function ResumeUpload({
@@ -27,8 +28,8 @@ export default function ResumeUpload({
   resumeFilename,
   fileKey: FILE_KEY,
   highlight,
+  previewHeight,
   onParsed,
-  onClear,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   // Named rather than boolean: reading a file and checking it are different
@@ -97,16 +98,6 @@ export default function ResumeUpload({
     [onParsed, FILE_KEY]
   );
 
-  const handleClear = useCallback(() => {
-    setFileUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
-    setIsPdf(false);
-    void deleteFile(FILE_KEY);
-    onClear();
-  }, [onClear, FILE_KEY]);
-
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -117,15 +108,41 @@ export default function ResumeUpload({
     [uploadFile]
   );
 
+  // Outside both branches so Replace can reach it. It used to live in the
+  // dropzone, which meant replacing had to clear the resume first to get the
+  // dropzone back — fine when a session owned its own copy, and no longer fine
+  // now that the copy it would clear is the only one there is. Picking a file
+  // straight from the card also loses nothing when the picker is cancelled.
+  const picker = (
+    <input
+      ref={inputRef}
+      type="file"
+      accept=".pdf,.docx,.doc,.txt,.md,.rtf"
+      className="hidden"
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        // Cleared so choosing the same file twice still fires a change — the
+        // usual reason to do that is a resume you just edited and re-exported.
+        e.target.value = "";
+        if (file) uploadFile(file);
+      }}
+    />
+  );
+
   if (resumeText) {
     return (
       <div className="glass-panel p-5">
+        {picker}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-success-muted)]">
-              <svg className="h-5 w-5 text-[var(--color-success)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+              {loading ? (
+                <Spinner className="h-5 w-5" />
+              ) : (
+                <svg className="h-5 w-5 text-[var(--color-success)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
             </div>
             <div className="min-w-0">
               {/* `title` because the name is truncated and a phone has about
@@ -135,21 +152,32 @@ export default function ResumeUpload({
                 {resumeFilename}
               </p>
               <p className="text-[var(--color-text-secondary)] text-xs mt-0.5">
-                {resumeText.length.toLocaleString()} characters extracted
+                {loading
+                  ? stage === "checking"
+                    ? "Checking spelling and names…"
+                    : "Reading resume…"
+                  : `${resumeText.length.toLocaleString()} characters extracted`}
               </p>
             </div>
           </div>
-          <button onClick={handleClear} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
+          <button
+            onClick={() => inputRef.current?.click()}
+            disabled={loading}
+            className="btn-secondary text-xs py-1.5 px-3 shrink-0 disabled:opacity-50"
+          >
             Replace
           </button>
         </div>
         <DocumentPreview
+          variant="resume"
           cleanedText={resumeText}
           fileUrl={fileUrl ?? undefined}
           fileName={resumeFilename}
           isPdf={isPdf}
           highlight={highlight}
+          height={previewHeight}
         />
+        {error && <p className="text-[var(--color-danger)] text-xs mt-3">{error}</p>}
       </div>
     );
   }
@@ -176,19 +204,10 @@ export default function ResumeUpload({
             : "border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent-muted)]"
         }`}
       >
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".pdf,.docx,.doc,.txt,.md,.rtf"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) uploadFile(file);
-          }}
-        />
+        {picker}
         {loading ? (
           <div className="flex flex-col items-center gap-2">
-            <Spinner />
+            <Spinner className="h-6 w-6" />
             <p className="text-sm text-[var(--color-text-secondary)]">
               {stage === "checking" ? "Checking spelling and names…" : "Reading resume…"}
             </p>
@@ -210,9 +229,9 @@ export default function ResumeUpload({
   );
 }
 
-function Spinner() {
+function Spinner({ className }: { className: string }) {
   return (
-    <svg className="animate-spin h-6 w-6 text-[var(--color-accent)]" fill="none" viewBox="0 0 24 24">
+    <svg className={`animate-spin text-[var(--color-accent)] ${className}`} fill="none" viewBox="0 0 24 24">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>

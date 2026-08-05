@@ -17,6 +17,7 @@ const BILLING_URL = "https://platform.openai.com/settings/organization/billing/o
 
 const STEP_LABEL: Record<UsageEntry["endpoint"], string> = {
   "proofread-resume": "Resume proofread",
+  "extract-job-facts": "Posting terms",
   "triage-document": "Document type",
   "analyze-match": "Match report",
   "report-chat": "Refine chat",
@@ -239,7 +240,7 @@ export default function UsagePanel({ adminApiKey }: Props) {
                 onClick={handleClear}
                 className="btn-secondary px-3 py-1.5 text-xs text-[var(--color-danger)]"
               >
-                Yes, clear
+                Yes, Clear
               </button>
               <button
                 onClick={() => setConfirmingClear(false)}
@@ -253,7 +254,7 @@ export default function UsagePanel({ adminApiKey }: Props) {
               onClick={() => setConfirmingClear(true)}
               className="btn-secondary px-3 py-1.5 text-xs"
             >
-              Clear history
+              Clear History
             </button>
           )}
         </div>

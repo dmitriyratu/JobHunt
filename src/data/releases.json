@@ -7,7 +7,12 @@
     "changes": [
       {
         "title": "Click a count to filter the report",
-        "detail": "Each outcome count above your report (matches, partials, gaps, etc.) is now a button. Click one to see only the requirements with that outcome, and click again to turn it off. You can select more than one at a time, for example partial and gap together to see everything that still needs work."
+        "detail": "Each outcome count above your report (matches, partials, gaps, etc.) is now a button. Click one to see only the requirements with that outcome, and click again to turn it off. You can select more than one at a time, for example partial and gap together to see everything that still needs work.",
+        "media": {
+          "light": "/releases/0.3.0/match-report-filtered-light.png",
+          "dark": "/releases/0.3.0/match-report-filtered-dark.png",
+          "alt": "A match report with the \"3 partial\" count selected. Only the three partially met requirements are shown, and the report reads \"3 of 8 requirements\" with a \"Show all 8\" link beside the counts."
+        }
       },
       {
         "title": "Always know what you're looking at",

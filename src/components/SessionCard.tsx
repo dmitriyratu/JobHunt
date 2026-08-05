@@ -10,6 +10,7 @@ import {
 } from "@/lib/session";
 import CompanyLogo from "./CompanyLogo";
 import SourceLink from "./SourceLink";
+import JobFactsCardLine from "./jobfacts/JobFactsCardLine";
 import type { Session } from "@/types";
 
 type Props = {
@@ -96,6 +97,12 @@ export default function SessionCard({
               )}
             </div>
           </div>
+
+          {/* Pay, setup and place, above the score rather than beside it. They
+              answer a different question from "how well do I fit this" — they
+              answer "do I want it" — and a rail you can scan for those is the
+              reason the posting's terms are recorded at all. */}
+          {session.jobFacts && <JobFactsCardLine facts={session.jobFacts} variant="chips" />}
 
           <div className="flex items-center flex-wrap gap-2 mt-2.5 text-[10px]">
             {typeof score === "number" ? (

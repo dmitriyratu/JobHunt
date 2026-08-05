@@ -91,7 +91,7 @@ export default function SessionList({ onNavigate, showNewButton = true }: Props)
       {showNewButton && (
         <div className="px-4 pt-4 pb-4 border-b border-[var(--color-border-subtle)]">
           <button onClick={handleNew} disabled={creating} className="btn-primary w-full">
-            {creating ? "Creating…" : "+ New application"}
+            {creating ? "Creating…" : "+ New Application"}
           </button>
           <p className="text-xs text-[var(--color-text-muted)] mt-2">
             Your resume carries over; the job details start fresh.
@@ -99,7 +99,7 @@ export default function SessionList({ onNavigate, showNewButton = true }: Props)
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-2">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 py-4 space-y-2">
         {hydrated && sessions.length === 0 && (
           <p className="text-xs text-[var(--color-text-muted)] text-center py-6">
             No applications yet. They appear here once you reach the match report.

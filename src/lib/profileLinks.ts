@@ -162,7 +162,7 @@ export const LINK_DEFS: LinkDef[] = [
   },
   {
     kind: "bar",
-    label: "Bar number",
+    label: "Bar Number",
     placeholder: "MA #123456",
     href: () => null,
     display: (v) => v.trim(),

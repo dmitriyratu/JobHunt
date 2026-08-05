@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 import ContextRecap from "@/components/ContextRecap";
@@ -11,30 +11,16 @@ import { withAssertedFacts } from "@/lib/assertedFacts";
 import { plainTextToHtml } from "@/lib/plainTextToHtml";
 import { resolveCompany } from "@/lib/session";
 import { resumeToPlainText } from "@/lib/tailoredResume";
-import {
-  DEFAULT_SETTINGS,
-  loadSettings,
-  saveSettings,
-  type AppSettings,
-} from "@/lib/settings";
 import { useJobHuntState } from "@/lib/useAppState";
+import { useSettings } from "@/lib/useSettings";
 import { appendUsageEntry } from "@/lib/usage";
 
 export default function LetterPage() {
   const { state, update, patch, hydrated } = useJobHuntState();
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const { settings, saveSettings } = useSettings();
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
-
-  useEffect(() => {
-    setSettings(loadSettings());
-  }, []);
-
-  const handleSettingsSave = useCallback((next: AppSettings) => {
-    setSettings(next);
-    saveSettings(next);
-  }, []);
 
   const handleGenerate = useCallback(async () => {
     setGenerateError("");
@@ -97,7 +83,7 @@ export default function LetterPage() {
       <AppHeader
         subtitle="Write your outreach letter"
         settings={settings}
-        onSettingsSave={handleSettingsSave}
+        onSettingsSave={saveSettings}
       />
 
       {/* See the resume step: the content block grows so the sticky footer has
@@ -152,9 +138,9 @@ export default function LetterPage() {
                     Generating…
                   </span>
                 ) : state.generatedBody ? (
-                  "Regenerate email"
+                  "Regenerate Email"
                 ) : (
-                  "Generate email"
+                  "Generate Email"
                 )}
               </button>
             </div>

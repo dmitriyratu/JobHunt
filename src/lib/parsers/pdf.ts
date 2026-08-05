@@ -1,4 +1,5 @@
 import pdf from "pdf-parse";
+import { restoreHeadingSpaces } from "./headingSplit";
 
 type PdfTextItem = {
   str: string;
@@ -70,7 +71,36 @@ function renderPageWithSpacing(pageData: PdfPageProxy): Promise<string> {
     });
 }
 
+/**
+ * Icon glyphs, which are text to a PDF and noise to everything downstream.
+ *
+ * Resume templates set the envelope before an email address, the phone before a
+ * number and the little octocat before a GitHub handle in an icon font, where
+ * each mark is a character in the Unicode Private Use Area. Extraction has no
+ * way to know they are decorative: they arrive as U+F0E0, U+F095, U+F09B and
+ * come out as invisible characters wedged into the contact line — reaching the
+ * model, the grounding index, and the regexes in `contactExtract` that try to
+ * read an email out of that line.
+ *
+ * Safe to delete outright. The Private Use Area has no assigned meaning by
+ * definition, so nothing that is genuinely text can land in it; whatever a
+ * document puts there is legible only to the font that shipped with it.
+ */
+const PRIVATE_USE = /[-]|[\uDB80-\uDBBF][\uDC00-\uDFFF]/g;
+
 export async function parsePdf(buffer: Buffer): Promise<string> {
   const data = await pdf(buffer, { pagerender: renderPageWithSpacing });
-  return data.text.trim();
+
+  const text = data.text
+    .replace(PRIVATE_USE, "")
+    // Deleting a glyph leaves the space that sat either side of it, so the
+    // contact row came out "dmitriy@example.com |  732-372-5473".
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .trim();
+
+  // The one class of missing space the renderer above cannot reconstruct,
+  // because the PDF carries no gap to measure — see headingSplit.
+  return restoreHeadingSpaces(text);
 }

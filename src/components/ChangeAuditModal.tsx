@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from "react";
 import type { GroundingDecision } from "@/lib/groundingPass";
 import type { TailoredResume } from "@/types";
+import { useScrollLock } from "@/lib/useScrollLock";
 
 /**
  * Everything the two automatic passes did to the document, line by line.
@@ -131,6 +132,7 @@ function cutBullets(resume: TailoredResume | null): Cut[] {
 }
 
 export default function ChangeAuditModal({ open, grounding, fit, resume, onClose }: Props) {
+  useScrollLock(open);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {

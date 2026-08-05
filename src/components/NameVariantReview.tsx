@@ -53,7 +53,7 @@ export default function NameVariantReview({
         </div>
         <div className="flex shrink-0 gap-2">
           <button onClick={onAcceptAll} className="btn-secondary px-3 py-1.5 text-xs">
-            Accept all
+            Accept All
           </button>
           <button
             onClick={onRejectAll}

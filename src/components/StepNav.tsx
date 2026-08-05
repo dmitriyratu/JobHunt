@@ -17,11 +17,18 @@ import { loadUsageLog, USAGE_CHANGED_EVENT, type UsageEndpoint } from "@/lib/usa
 const STEP_OF: Record<UsageEndpoint, StepId> = {
   "analyze-match": "match",
   "report-chat": "match",
-  // Runs on the upload page, not the resume one — it is the spelling and
-  // name-variant pass over the file you just dropped in. Filed under "resume"
-  // it was the reason the first stage never showed a figure while quietly
-  // inflating the third.
+  // The spelling and name-variant pass over a newly uploaded file. Filed under
+  // "resume" it was the reason the first stage never showed a figure while
+  // quietly inflating the third.
+  //
+  // Now that uploading happens under Your Profile rather than on a page, this
+  // isn't really a cost of any one application: it lands on whichever was open
+  // at the time, and the twenty applications that follow off the same upload
+  // pay nothing. "First step" is still the closest true thing to say about it.
   "proofread-resume": "source",
+  // Fires on the posting as it loads, which is the first step and is also the
+  // only place its output is shown at full size.
+  "extract-job-facts": "source",
   "triage-document": "resume",
   "tailor-resume": "resume",
   "verify-grounding": "resume",

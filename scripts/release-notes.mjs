@@ -10,6 +10,7 @@
  *   node scripts/release-notes.mjs            # write the files, leave them staged for you
  *   node scripts/release-notes.mjs --commit   # write and commit (what the hook does)
  *   node scripts/release-notes.mjs --dry-run  # print what it would write, touch nothing
+ *   node scripts/release-notes.mjs --dry-run --since=b4669ea   # ...for an older range
  *
  * Not every commit earns an entry. The model is asked first whether anything
  * changed that a person using the app would notice; a refactor answers no and
@@ -17,13 +18,20 @@
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const RELEASES_PATH = join(ROOT, "src", "data", "releases.json");
 const PACKAGE_PATH = join(ROOT, "package.json");
+const SCENES_PATH = join(ROOT, "src", "fixtures", "scenes.json");
+const SHOOT_SCRIPT = join(ROOT, "scripts", "shoot-scenes.mjs");
+
+/** The scenes a note can be illustrated with. Only ever grows when someone
+    ships a feature and adds one, so a brand-new feature usually has no scene
+    and gets a text-only note — which is the correct outcome, not a failure. */
+const SCENES = JSON.parse(readFileSync(SCENES_PATH, "utf8"));
 
 /** Marks the commits this script makes, so they never become input to itself. */
 const COMMIT_MARKER = "[release-notes]";
@@ -40,6 +48,17 @@ const args = new Set(process.argv.slice(2));
 const shouldCommit = args.has("--commit");
 const dryRun = args.has("--dry-run");
 const allowMajor = args.has("--allow-major") || process.env.RELEASE_NOTES_ALLOW_MAJOR === "1";
+
+/**
+ * Describe commits after this ref instead of after the last released one.
+ *
+ * Only useful with --dry-run, and that is the point: the ordinary range is
+ * empty between releases, so there is otherwise no way to see what this script
+ * makes of a change without committing it first. Pointing it at the commit
+ * before a release you have already shipped is the way to check a prompt or a
+ * scene description against a known answer.
+ */
+const since = [...args].find((arg) => arg.startsWith("--since="))?.slice("--since=".length);
 
 function git(...gitArgs) {
   return execFileSync("git", gitArgs, {
@@ -93,6 +112,12 @@ function bumpVersion(current, kind) {
 /** The commits to describe: everything after the last released commit, with
     merges and this script's own commits left out. */
 function collectCommitRange(releases) {
+  if (since) {
+    // Resolved rather than trusted, so a typo says so here instead of looking
+    // like "no new commits".
+    const base = git("rev-parse", `${since}^{commit}`);
+    return `${base}..HEAD`;
+  }
   const lastCommit = releases.find((entry) => entry.commit)?.commit;
   let base = null;
   if (lastCommit) {
@@ -164,7 +189,21 @@ Rules:
   expected answer.
 - Choose the version bump by user impact: major for a change that breaks or
   replaces how something already worked, minor for new capability, patch for a
-  fix or polish.`;
+  fix or polish.
+
+Some changes can carry a screenshot. You do not take it — you choose, from a
+fixed list, which prepared view of the app shows the change, and a screenshot
+of that view is taken for you. Set "scene" to its id, or to "" for no picture.
+
+- Only pick a scene that genuinely shows the change you are describing. A
+  picture of roughly the right screen is worse than no picture: it invites the
+  reader to hunt for a difference that isn't in the frame.
+- Prefer "" for anything you can say in a sentence — a wording fix, a speed
+  improvement, a change to what gets generated rather than to what is on
+  screen. Most changes should be "".
+- The list describes what each scene contains. If none of them contains the
+  thing that changed, the answer is "". A scene for a brand-new screen will
+  not exist yet, and that is expected.`;
 
 const OUTPUT_SCHEMA = {
   type: "object",
@@ -190,8 +229,26 @@ const OUTPUT_SCHEMA = {
         properties: {
           title: { type: "string" },
           detail: { type: "string" },
+          scene: {
+            type: "string",
+            // Constrained to what exists, so a hallucinated id cannot reach the
+            // screenshot step. "" is the ordinary answer.
+            enum: ["", ...SCENES.map((scene) => scene.id)],
+            description:
+              "Id of the prepared view that shows this change, or \"\" for no screenshot. Available:\n" +
+              SCENES.map((scene) => `- ${scene.id}: ${scene.description}`).join("\n"),
+          },
+          sceneGap: {
+            type: "string",
+            description:
+              "Fill this in ONLY when scene is \"\" because none of the listed views contains " +
+              "what changed, AND a screenshot would genuinely have helped a reader here. " +
+              "Name the view that would have shown it, in under ten words. " +
+              "Leave it \"\" when the change simply does not need a picture, which is the " +
+              "usual case.",
+          },
         },
-        required: ["title", "detail"],
+        required: ["title", "detail", "scene", "sceneGap"],
         additionalProperties: false,
       },
     },
@@ -253,6 +310,84 @@ function describeChanges(context) {
   return output;
 }
 
+/**
+ * Takes the screenshots the model asked for and hangs them off their changes.
+ *
+ * Failure here is never fatal. Playwright may not be installed on this machine,
+ * the dev server may refuse the port, a scene may have been deleted since the
+ * model last saw the manifest — in every case the change keeps its words and
+ * loses its picture, which is the version of this feature that shipped before
+ * screenshots existed and is perfectly good.
+ *
+ * Returns the changes in the shape `releases.json` stores, with `scene`
+ * stripped: the entry records what was photographed, not the instruction that
+ * produced it. Re-shooting an old release is deliberately not a thing you can
+ * do — see the note in shoot-scenes.mjs about history not rewriting itself.
+ */
+/**
+ * Says which changes wanted a picture and had no scene to take one from.
+ *
+ * This is deliberately a report and never a failure. Whether a commit needed a
+ * new scene is a judgement about what a reader would find hard to picture, and
+ * nothing that runs before the commit can make it: a hook would have to guess
+ * from file paths, and would cry wolf on every refactor that touched a
+ * component. The one thing in this pipeline that *can* judge it is the model
+ * that just read the diff and wrote the words — so it is asked, and what it
+ * says is printed for you to act on or ignore.
+ *
+ * The nudge lands one release late by construction. That is the correct trade:
+ * the alternative is blocking a commit on a screenshot, and the notes are the
+ * product here — the pictures are a bonus.
+ */
+function reportSceneGaps(changes) {
+  const gaps = changes.filter((change) => !change.scene && change.sceneGap);
+  if (gaps.length === 0) return;
+
+  note(`${gaps.length} change(s) wanted a screenshot and had no scene for it:`);
+  for (const change of gaps) {
+    note(`  · ${change.title} — would need: ${change.sceneGap}`);
+  }
+  note("  add one to src/fixtures/scenes.json + scenes.tsx to illustrate the next release");
+}
+
+function illustrate(changes, version) {
+  reportSceneGaps(changes);
+  const wanted = [...new Set(changes.map((change) => change.scene).filter(Boolean))];
+  const shot = new Set();
+
+  for (const id of wanted) {
+    // Spawned rather than imported: it drives a browser and a dev server, and
+    // a crash in either should cost this run a picture, not the whole note.
+    const result = spawnSync(
+      process.execPath,
+      [SHOOT_SCRIPT, `--version=${version}`, `--scene=${id}`],
+      { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "inherit", "inherit"] },
+    );
+    if (result.status === 0) {
+      shot.add(id);
+    } else {
+      note(`no screenshot for "${id}" — the note keeps its text`);
+    }
+  }
+
+  return changes.map(({ title, detail, scene }) => {
+    if (!scene || !shot.has(scene)) return { title, detail };
+    const spec = SCENES.find((entry) => entry.id === scene);
+    return {
+      title,
+      detail,
+      media: {
+        light: `/releases/${version}/${scene}-light.png`,
+        dark: `/releases/${version}/${scene}-dark.png`,
+        // The manifest's `alt`, not its `description`: the description is
+        // addressed to the model choosing a scene ("use this for anything
+        // about filtering") and would be nonsense read aloud.
+        alt: spec?.alt ?? title,
+      },
+    };
+  });
+}
+
 function main() {
   // The hook sets this while committing the notes, so the commit it creates
   // cannot start the whole thing over.
@@ -285,21 +420,31 @@ function main() {
   }
 
   const version = bumpVersion(pkg.version, described.bump);
+  const rawChanges = Array.isArray(described.changes) ? described.changes : [];
+
+  if (dryRun) {
+    note(`would write version ${version} (${pkg.version} -> ${version}, ${described.bump})`);
+    // Screenshots are skipped here: a dry run should not spend 30 seconds
+    // booting a browser, and the interesting part is which scene was chosen.
+    for (const change of rawChanges) {
+      if (change.scene) note(`would illustrate "${change.title}" with scene ${change.scene}`);
+    }
+    reportSceneGaps(rawChanges);
+    process.stdout.write(
+      `${JSON.stringify({ version, headline: described.headline, summary: described.summary, changes: rawChanges }, null, 2)}\n`,
+    );
+    return;
+  }
+
   const entry = {
     version,
     // Local date, not UTC: the release is dated the day you shipped it.
     date: new Date().toLocaleDateString("en-CA"),
     headline: described.headline,
     summary: described.summary,
-    changes: Array.isArray(described.changes) ? described.changes : [],
+    changes: illustrate(rawChanges, version),
     commit: head,
   };
-
-  if (dryRun) {
-    note(`would write version ${version} (${pkg.version} -> ${version}, ${described.bump})`);
-    process.stdout.write(`${JSON.stringify(entry, null, 2)}\n`);
-    return;
-  }
 
   pkg.version = version;
   writeFileSync(PACKAGE_PATH, `${JSON.stringify(pkg, null, 2)}\n`);
@@ -311,7 +456,13 @@ function main() {
     return;
   }
 
-  git("add", "--", RELEASES_PATH, PACKAGE_PATH);
+  // The screenshots are part of the release: without them committed, the note
+  // ships pointing at files that only exist on the machine that wrote it. The
+  // directory is absent until something is first illustrated, and naming a
+  // pathspec that matches nothing is an error rather than a no-op.
+  const shotsDir = join(ROOT, "public", "releases");
+  const toStage = [RELEASES_PATH, PACKAGE_PATH, ...(existsSync(shotsDir) ? [shotsDir] : [])];
+  git("add", "--", ...toStage);
   execFileSync("git", ["commit", "-m", `${COMMIT_MARKER} v${version} — ${entry.headline}`], {
     cwd: ROOT,
     encoding: "utf8",

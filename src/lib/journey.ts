@@ -30,7 +30,7 @@ export function getJourneySteps(session: Session): JourneyStep[] {
     {
       id: "source",
       href: "/",
-      label: "Resume & job",
+      label: "Job Description",
       index: 1,
       complete: hasSource,
       enabled: true,
@@ -38,7 +38,7 @@ export function getJourneySteps(session: Session): JourneyStep[] {
     {
       id: "match",
       href: "/match",
-      label: "Match report",
+      label: "Match Report",
       index: 2,
       complete: hasReport,
       enabled: hasSource,
@@ -46,7 +46,7 @@ export function getJourneySteps(session: Session): JourneyStep[] {
     {
       id: "resume",
       href: "/resume",
-      label: "Tailor resume",
+      label: "Tailor Resume",
       index: 3,
       complete: hasResume,
       enabled: hasSource,
@@ -54,7 +54,7 @@ export function getJourneySteps(session: Session): JourneyStep[] {
     {
       id: "letter",
       href: "/letter",
-      label: "Write letter",
+      label: "Write Letter",
       index: 4,
       complete: hasLetter,
       enabled: hasSource,

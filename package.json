@@ -12,6 +12,8 @@
     "hooks:install": "git config core.hooksPath .githooks",
     "release:notes": "node scripts/release-notes.mjs",
     "release:preview": "node scripts/release-notes.mjs --dry-run",
+    "shots": "node scripts/shoot-scenes.mjs",
+    "shots:list": "node scripts/shoot-scenes.mjs --list",
     "check:templates": "tsx scripts/check-templates.mjs",
     "check:latex": "tsx scripts/probe-latex.ts",
     "check:linkedin": "tsx scripts/linkedin-url.ts --test",
@@ -51,6 +53,7 @@
     "@types/react-dom": "^19.1.5",
     "eslint": "^9.27.0",
     "eslint-config-next": "^15.3.3",
+    "playwright": "^1.62.1",
     "tailwindcss": "^4.1.8",
     "tsx": "^4.23.1",
     "typescript": "^5.8.3"

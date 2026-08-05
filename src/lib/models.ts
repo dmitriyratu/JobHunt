@@ -9,6 +9,7 @@
 export type TaskId =
   | "proofread-resume"
   | "triage-document"
+  | "extract-job-facts"
   | "analyze-match"
   | "report-chat"
   | "tailor-resume"
@@ -119,6 +120,21 @@ export const TASK_MODELS = {
     ...CATALOG.fast,
     task: "Document triage",
     why: "Decides whether the posting wants a resume or a CV. One question read off explicit signals in the posting, so it runs on the cheapest model.",
+  },
+
+  // Copies ten stated facts out of the posting — pay, location, setup, dates.
+  // Transcription, not judgement: every field is either sitting in the text or
+  // is left empty, and the one call worth making is the refusal to guess, which
+  // is a prompt instruction rather than something a bigger model does better.
+  //
+  // The cheapest tier for the further reason that this runs on every posting
+  // that loads, including the ones abandoned thirty seconds later, and it is the
+  // first spend an application incurs. A step that fires before the user has
+  // decided they care should cost about a tenth of a cent.
+  "extract-job-facts": {
+    ...CATALOG.fast,
+    task: "Posting terms",
+    why: "Reads the pay, location, setup and dates out of the posting so they sit beside it and on the application card. It only ever copies what the posting states — anything it doesn't say is shown as not stated — so it runs on the cheapest model.",
   },
 
   // The analytical core: reads the full resume and job description, decides

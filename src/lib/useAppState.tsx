@@ -11,8 +11,10 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { loadBaseResume } from "./baseResume";
 import { toShapeOrNull } from "./documentShape";
-import { copyFile, deleteFilesForSession, fileKey, pruneOrphanFiles } from "./fileStore";
+import { deleteFilesForSession, pruneOrphanFiles } from "./fileStore";
+import { normalizeJobFacts } from "./jobFacts";
 import { createSession, EMPTY_SESSION } from "./session";
 import { normalizeTailoredResume } from "./tailoredResume";
 import {
@@ -71,11 +73,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // the first keystroke.
         resumeTex: s.resumeTex ?? "",
         resumeSkipped: s.resumeSkipped ?? false,
-        // Absent on anything uploaded before the proofread existed. An empty
-        // list is the same as never checked as far as the UI is concerned:
-        // there is nothing outstanding either way.
-        spellingSuggestions: s.spellingSuggestions ?? [],
-        nameVariants: s.nameVariants ?? [],
         // Anything saved before the picker existed carried a shape chosen from
         // the old two-button control, with no recommendation behind it. The
         // absent reason is the marker: null both, and the posting is re-read
@@ -87,6 +84,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         recommendedShape: s.recommendedShapeReason ? toShapeOrNull(s.recommendedShape) : null,
         recommendedShapeReason: s.recommendedShapeReason ?? "",
         recommendedShapeConfident: s.recommendedShapeConfident ?? true,
+        // Absent on anything saved before the posting's terms were read. Null
+        // rather than undefined so the panel's three states stay three: an
+        // application that predates the step is in the same position as one
+        // whose extraction hasn't run, and step 1 reads it once on next visit.
+        //
+        // The inner repair is for the shorter window between the terms shipping
+        // and their becoming editable: those records have every fact and no
+        // record of corrections, and the panel reads that list on every render.
+        jobFacts: normalizeJobFacts(s.jobFacts),
       })),
     });
     setHydrated(true);
@@ -154,15 +160,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const newSession = useCallback(async () => {
     const cur = currentRef.current;
-    const next = createSession({
-      resumeText: cur.resumeText,
-      resumeFilename: cur.resumeFilename,
-    });
-    // Await before the state flip so the new session's resume preview can't
-    // race ahead of its blob.
-    if (cur.id && cur.resumeFilename) {
-      await copyFile(fileKey(cur.id, "resume"), fileKey(next.id, "resume"));
-    }
+    // The saved resume, not the outgoing application's copy of it: those are
+    // the same document in the ordinary case, and when they aren't — you
+    // reopened an application from March and started a new one from there — the
+    // saved one is the one you'd have picked. Falling back to the outgoing
+    // session covers a resume uploaded before there was anywhere to save it.
+    //
+    // No blob to copy any more: the original file lives once, under the profile
+    // namespace, and the only thing that reads it is the dialog that owns it.
+    const base = loadBaseResume();
+    const next = createSession(
+      base
+        ? { resumeText: base.text, resumeFilename: base.filename }
+        : { resumeText: cur.resumeText, resumeFilename: cur.resumeFilename }
+    );
     setStore((prev) => {
       // Abandoned drafts are invisible, so they'd otherwise pile up forever.
       const withoutDrafts = prev.sessions.filter((s) => s.committed);

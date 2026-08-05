@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { blockText } from "@/lib/parsers/blockText";
 import { canonicalizeLinkedInUrl, isLinkedInHostname } from "@/lib/linkedinUrl";
 
 const USER_AGENT =
@@ -99,18 +100,30 @@ function networkErrorMessage(error: unknown, url: string): string {
 // login chrome and buries the real content. Target the posting elements
 // directly instead, and assemble a clean title/company/criteria/body block.
 function extractLinkedInJob($: cheerio.CheerioAPI): string | null {
-  const body = $(".show-more-less-html__markup, .description__text--rich, .description__text")
-    .first()
-    .text()
-    .replace(/[ \t]+/g, " ")
-    .trim();
+  // `blockText`, not `.text()` — the posting body is the one part of the page
+  // that is genuinely structured (headings, paragraphs, bulleted requirements),
+  // and `.text()` is exactly the pass that discards all of it.
+  const body = blockText(
+    $(".show-more-less-html__markup, .description__text--rich, .description__text")
+      .first()
+      .toArray()
+  );
 
   if (body.length < 200) return null;
 
   const title = $("h1").first().text().trim();
   const company = $("a.topcard__org-name-link, .topcard__flavor").first().text().replace(/\s+/g, " ").trim();
+  // Each criteria item is a label above a value ("Seniority level" /
+  // "Mid-Senior level"). Flattened together they read as one nonsense phrase —
+  // "Seniority level Mid-Senior level" — so the pair is rejoined with a colon,
+  // which is how the page itself presents it visually.
   const criteria = $(".description__job-criteria-item")
-    .map((_, el) => $(el).text().replace(/\s+/g, " ").trim())
+    .map((_, el) => {
+      const label = $(el).find(".description__job-criteria-subheader").text().replace(/\s+/g, " ").trim();
+      const value = $(el).find(".description__job-criteria-text").text().replace(/\s+/g, " ").trim();
+      if (label && value) return `${label}: ${value}`;
+      return $(el).text().replace(/\s+/g, " ").trim();
+    })
     .get()
     .filter(Boolean);
 
@@ -230,14 +243,12 @@ export async function fetchAndExtractText(rawUrl: string): Promise<FetchedJobDes
 
   $("script, style, nav, footer, header, noscript, iframe").remove();
 
-  const main =
-    $("main").text() ||
-    $('[role="main"]').text() ||
-    $("article").text() ||
-    $(".job-description, .description, #job-description").text() ||
-    $("body").text();
-
-  const cleaned = main.replace(/\s+/g, " ").trim();
+  // Selected as elements rather than as text, so the winner can be serialized
+  // with its block structure intact. The old chain collapsed every page to a
+  // single unbroken line — whatever structure the site had, the app threw away.
+  const candidates = ["main", '[role="main"]', "article", ".job-description, .description, #job-description", "body"];
+  const selector = candidates.find((s) => $(s).first().text().trim().length > 0);
+  const cleaned = selector ? blockText($(selector).first().toArray()) : "";
   if (cleaned.length < 50 || looksLikeLoginWall(cleaned)) {
     throw new Error(
       "Could not extract the posting from this page — it likely requires signing in to view. Try pasting the job description manually."

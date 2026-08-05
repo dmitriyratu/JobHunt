@@ -17,12 +17,7 @@ import { buildResumeBlob } from "@/lib/resumeDocx";
 import { useChatDock, useRegisterChat } from "@/lib/chatDock";
 import { applyTexProposal, renderResumeLatex } from "@/lib/resumeLatex";
 import { resolveCompany } from "@/lib/session";
-import {
-  DEFAULT_SETTINGS,
-  loadSettings,
-  saveSettings,
-  type AppSettings,
-} from "@/lib/settings";
+import { useSettings } from "@/lib/useSettings";
 import { draftToResume } from "@/lib/tailoredResume";
 import { useJobHuntState } from "@/lib/useAppState";
 import { useLatexCompile } from "@/lib/useLatexCompile";
@@ -33,7 +28,7 @@ import type { DocumentShape, ResumeChatMessage } from "@/types";
 
 export default function ResumePage() {
   const { state, update, patch, setState, hydrated } = useJobHuntState();
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const { settings, saveSettings } = useSettings();
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
   const [downloading, setDownloading] = useState(false);
@@ -66,10 +61,6 @@ export default function ResumePage() {
   const { resumeTex } = state;
   const compile = useLatexCompile(resumeTex, Boolean(resumeTex) && !engineHint);
 
-  useEffect(() => {
-    setSettings(loadSettings());
-  }, []);
-
   // Asked once on mount so a machine with no TeX engine says so up front,
   // rather than letting the first keystroke fail with what reads like a
   // problem in the document.
@@ -84,11 +75,6 @@ export default function ResumePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  const handleSettingsSave = useCallback((next: AppSettings) => {
-    setSettings(next);
-    saveSettings(next);
   }, []);
 
   /**
@@ -427,7 +413,7 @@ export default function ResumePage() {
       <AppHeader
         subtitle="Tailor your resume"
         settings={settings}
-        onSettingsSave={handleSettingsSave}
+        onSettingsSave={saveSettings}
       />
 
       {/* A column, with the content block below set to grow.
@@ -509,9 +495,9 @@ export default function ResumePage() {
                       Tailoring…
                     </span>
                   ) : hasResume ? (
-                    "Regenerate resume"
+                    "Regenerate Resume"
                   ) : (
-                    "Generate resume"
+                    "Generate Resume"
                   )}
                 </button>
               </div>
@@ -625,7 +611,7 @@ export default function ResumePage() {
         onRetryRecommendation={handleRetryTriage}
         // Saved as you type, so a correction made here survives whether or not
         // you go on to generate.
-        onProfileChange={(profile) => handleSettingsSave({ ...settings, profile })}
+        onProfileChange={(profile) => saveSettings({ profile })}
         onEmphasisChange={(v) => update("resumeEmphasis", v)}
         onPageTargetChange={(v) => update("resumePageTarget", v)}
         onGenerate={handlePickShape}

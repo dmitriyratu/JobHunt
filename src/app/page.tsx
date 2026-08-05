@@ -1,217 +1,93 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AppHeader from "@/components/AppHeader";
-import ConfirmDetailsModal from "@/components/ConfirmDetailsModal";
 import JobDescriptionInput from "@/components/JobDescriptionInput";
-import NameVariantReview from "@/components/NameVariantReview";
-import ResumeUpload from "@/components/ResumeUpload";
 import SectionHeader from "@/components/SectionHeader";
-import SpellingReview from "@/components/SpellingReview";
 import StepNav from "@/components/StepNav";
-import { applyVariant, applyVariants } from "@/lib/consistency";
-import { seedProfile, type SeededField } from "@/lib/contactExtract";
+import JobFactsPanel from "@/components/jobfacts/JobFactsPanel";
+import { BASE_RESUME_EVENT, loadBaseResume, type BaseResume } from "@/lib/baseResume";
 import { fileKey } from "@/lib/fileStore";
-import { applySuggestion, applySuggestions } from "@/lib/proofread";
-import { JOB_CHANGE_RESET, RESUME_CHANGE_RESET } from "@/lib/session";
-import {
-  DEFAULT_SETTINGS,
-  loadSettings,
-  saveSettings,
-  type AppSettings,
-  type ResumeProfile,
-} from "@/lib/settings";
-import { appendUsageEntry } from "@/lib/usage";
+import { JOB_CHANGE_RESET } from "@/lib/session";
 import { useJobHuntState } from "@/lib/useAppState";
-import type { NameVariant, Session, SpellingSuggestion } from "@/types";
+import { useSettings } from "@/lib/useSettings";
+import { appendUsageEntry } from "@/lib/usage";
 
+/**
+ * Identifies one attempt to read one posting.
+ *
+ * The text itself, not its length. Length was standing in for the text and is
+ * wrong in exactly the case that matters most: replacing a posting with a
+ * corrected copy of itself — a re-paste with a fixed typo, the same listing
+ * fetched from a different URL — usually lands on the same character count, and
+ * the new posting was then treated as already attempted and never read. The
+ * company and the salary stayed those of the outgoing job.
+ *
+ * Held only for the life of the page, and only for postings actually tried, so
+ * keeping whole descriptions here costs a few kilobytes and removes an entire
+ * class of collision.
+ */
+function factsKey(sessionId: string, jobDescription: string): string {
+  return `${sessionId}:${jobDescription}`;
+}
+
+/**
+ * Where an application starts: the posting, and nothing else.
+ *
+ * This used to ask for a resume too, as step 1 of 4. It was the same question
+ * every time — a resume changes a few times a year, a posting changes every
+ * time — and the app already knew the answer, because each new application
+ * copied the last one's text forward. The resume lives under Your Profile now
+ * (see @/lib/baseResume), which is where the contact block read out of it
+ * already lived.
+ *
+ * What remains here is the seeding: an application takes a copy of the saved
+ * resume when it starts, so the analysis it produces stays an answer about the
+ * document it was actually run against.
+ */
 export default function HomePage() {
   const { state, setState, hydrated } = useJobHuntState();
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  // Which proofread row is being looked at, so the preview can mark it. Not in
-  // the session: it is where the eye is, not part of the application.
-  const [highlight, setHighlight] = useState("");
-  // What the last upload read out of the resume, waiting to be confirmed. Null
-  // whenever there is nothing to ask about, which is the usual case on a
-  // re-upload — the profile is already filled in by then.
-  const [pendingDetails, setPendingDetails] = useState<{
-    profile: ResumeProfile;
-    found: SeededField[];
-    filename: string;
-  } | null>(null);
+  // The facts extraction below waits on settingsLoaded: fired before the stored
+  // key is read it would send none and fail for everyone using their own.
+  const { settings, settingsLoaded, saveSettings } = useSettings();
+  // The resume on file, and whether it has been read yet — null means "nothing
+  // saved" only once the second is true, and seeding depends on telling those
+  // apart.
+  const [baseResume, setBaseResume] = useState<BaseResume | null>(null);
+  const [baseLoaded, setBaseLoaded] = useState(false);
 
   useEffect(() => {
-    setSettings(loadSettings());
-  }, []);
-
-  const handleSettingsSave = useCallback((next: AppSettings) => {
-    setSettings(next);
-    saveSettings(next);
-  }, []);
-
-  // Submitting new source material is what invalidates downstream work —
-  // navigation never does. Identical content is a no-op so re-uploading the
-  // same file doesn't throw away an analysis.
-  const handleResumeParsed = useCallback(
-    async (text: string, filename: string) => {
-      // Read before the text is committed, so the document and everything found
-      // in it arrive together. This is also the only moment the checks CAN run:
-      // from here on the text is ground truth, and every later check is asking
-      // whether the tailored document matches it rather than whether it is
-      // right. Silent on failure — an upload must never fail because a
-      // proofread did — and awaited either way, so the upload card does not
-      // claim to be finished while this is still going.
-      let findings: { suggestions?: unknown[]; nameVariants?: unknown[] } = {};
-      try {
-        const res = await fetch("/api/proofread-resume", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, apiKey: settings.apiKey || undefined }),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          findings = data;
-          if (data.usage) {
-            appendUsageEntry({
-              endpoint: "proofread-resume",
-              model: data.usage.model,
-              sessionId: state.id,
-              usage: data.usage,
-            });
-          }
-        }
-      } catch {
-        /* an upload that works beats a proofread that does */
-      }
-
-      setState((prev) => ({
-        ...prev,
-        resumeText: text,
-        resumeFilename: filename,
-        spellingSuggestions: (findings.suggestions ?? []) as Session["spellingSuggestions"],
-        nameVariants: (findings.nameVariants ?? []) as Session["nameVariants"],
-        ...(text !== prev.resumeText ? RESUME_CHANGE_RESET : {}),
-      }));
-
-      // Fills only blanks, so this is safe to run on every upload — a value
-      // you corrected by hand always outranks the regex. Nothing is saved yet:
-      // the contact block is the one part of a generated resume the model never
-      // writes, and it is read from the part of a PDF that extraction mangles
-      // most, so it goes past the user first. Asked on every upload that had a
-      // contact block to read, not only one that filled a blank — a new resume
-      // is exactly when a details change comes in, and the second upload of the
-      // day fills nothing precisely because the first one already did.
-      const seeded = seedProfile(settings.profile, text);
-      if (seeded.detected) {
-        setPendingDetails({ profile: seeded.profile, found: seeded.filled, filename });
-      }
-    },
-    [setState, settings.apiKey, settings.profile, state.id],
-  );
-
-  const handleConfirmDetails = useCallback((profile: ResumeProfile) => {
-    setPendingDetails(null);
-    setSettings((prev) => {
-      const next = { ...prev, profile };
-      saveSettings(next);
-      return next;
-    });
+    setBaseResume(loadBaseResume());
+    setBaseLoaded(true);
+    // The dialog that owns the resume lives in the header, so a first upload
+    // has to reach this page some other way. It seeds the open application
+    // itself; this is for the draft that was already sitting here empty.
+    const reload = () => setBaseResume(loadBaseResume());
+    window.addEventListener(BASE_RESUME_EVENT, reload);
+    return () => window.removeEventListener(BASE_RESUME_EVENT, reload);
   }, []);
 
   /**
-   * A typo fix, applied to the extracted text.
+   * Gives a new application its copy of the resume on file, once.
    *
-   * Editing resumeText is editing the source of truth, so this carries the same
-   * consequence a re-upload does: anything already built from the old wording
-   * was built from a document that no longer exists. In the normal flow that
-   * costs nothing — the list appears at upload, before there is an analysis to
-   * lose.
+   * newSession already seeds from it, so this covers the applications nothing
+   * seeded: the first one in a fresh store, the replacement made when you
+   * delete the last one, and the draft that was open when a first resume was
+   * uploaded. Once per application, because an empty resume is also what
+   * removing one leaves behind — re-seeding there would make removal impossible.
    */
-  const handleAcceptSpelling = useCallback(
-    (suggestion: SpellingSuggestion) => {
-      // The word is about to stop existing; a mark pointing at it would have
-      // nothing to point at.
-      setHighlight((prev) => (prev === suggestion.wrong ? "" : prev));
-      setState((prev) => ({
-        ...prev,
-        resumeText: applySuggestion(prev.resumeText, suggestion),
-        spellingSuggestions: prev.spellingSuggestions.filter(
-          (s) => s.wrong !== suggestion.wrong
-        ),
-        ...RESUME_CHANGE_RESET,
-      }));
-    },
-    [setState]
-  );
-
-  const handleAcceptAllSpelling = useCallback(() => {
-    setHighlight("");
+  const seededRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!hydrated || !baseLoaded || !state.id) return;
+    if (!baseResume || state.resumeText) return;
+    if (seededRef.current.has(state.id + baseResume.savedAt)) return;
+    seededRef.current.add(state.id + baseResume.savedAt);
     setState((prev) => ({
       ...prev,
-      resumeText: applySuggestions(prev.resumeText, prev.spellingSuggestions),
-      spellingSuggestions: [],
-      ...RESUME_CHANGE_RESET,
+      resumeText: baseResume.text,
+      resumeFilename: baseResume.filename,
     }));
-  }, [setState]);
-
-  // Rejecting touches nothing but the list. The word was already what the
-  // candidate wrote.
-  const handleRejectSpelling = useCallback(
-    (suggestion: SpellingSuggestion) => {
-      setState((prev) => ({
-        ...prev,
-        spellingSuggestions: prev.spellingSuggestions.filter(
-          (s) => s.wrong !== suggestion.wrong
-        ),
-      }));
-    },
-    [setState]
-  );
-
-  const handleRejectAllSpelling = useCallback(() => {
-    setHighlight("");
-    setState((prev) => ({ ...prev, spellingSuggestions: [] }));
-  }, [setState]);
-
-  // Same shape as the typo handlers, and the same consequence: unifying a name
-  // rewrites the extracted text, which is the document every later check reads.
-  const handleAcceptVariant = useCallback(
-    (issue: NameVariant) => {
-      setHighlight("");
-      setState((prev) => ({
-        ...prev,
-        resumeText: applyVariant(prev.resumeText, issue),
-        nameVariants: prev.nameVariants.filter((v) => v.preferred !== issue.preferred),
-        ...RESUME_CHANGE_RESET,
-      }));
-    },
-    [setState]
-  );
-
-  const handleAcceptAllVariants = useCallback(() => {
-    setHighlight("");
-    setState((prev) => ({
-      ...prev,
-      resumeText: applyVariants(prev.resumeText, prev.nameVariants),
-      nameVariants: [],
-      ...RESUME_CHANGE_RESET,
-    }));
-  }, [setState]);
-
-  const handleRejectVariant = useCallback(
-    (issue: NameVariant) => {
-      setState((prev) => ({
-        ...prev,
-        nameVariants: prev.nameVariants.filter((v) => v.preferred !== issue.preferred),
-      }));
-    },
-    [setState]
-  );
-
-  const handleRejectAllVariants = useCallback(() => {
-    setHighlight("");
-    setState((prev) => ({ ...prev, nameVariants: [] }));
-  }, [setState]);
+  }, [hydrated, baseLoaded, baseResume, state.id, state.resumeText, setState]);
 
   const handleJobParsed = useCallback(
     (text: string, source: string, sourceType: "file" | "url" | "text") => {
@@ -226,6 +102,101 @@ export default function HomePage() {
     [setState],
   );
 
+  /**
+   * Reading the posting's terms, once per posting.
+   *
+   * Deliberately not part of loading the posting. Parsing a URL is already the
+   * slowest thing on this page, and the button that says "Load Job Description"
+   * should finish when the job description is loaded — not hold for a model call
+   * whose entire output is optional decoration on a document you can already
+   * read. So the text lands first and the panel fills in beside it.
+   *
+   * Failure is silent in the same spirit: the panel offers a retry and nothing
+   * else changes. Nothing downstream reads these facts, so an extraction that
+   * never succeeds costs the application nothing but the panel.
+   */
+  const [factsLoading, setFactsLoading] = useState(false);
+  const [factsError, setFactsError] = useState("");
+  const attemptedRef = useRef<Set<string>>(new Set());
+
+  const extractFacts = useCallback(
+    async (sessionId: string, jobDescription: string, key: string) => {
+      setFactsLoading(true);
+      setFactsError("");
+      try {
+        const res = await fetch("/api/extract-job-facts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobDescription, apiKey: settings.apiKey || undefined }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Could not read the posting's details");
+        // Guarded on the posting rather than fired blind: switching applications
+        // mid-call would otherwise write one posting's salary onto another's.
+        setState((prev) =>
+          prev.id === sessionId && prev.jobDescription === jobDescription
+            ? {
+                ...prev,
+                jobFacts: data.facts,
+                // Seeded, never overwritten. Both fields are also written by the
+                // match analysis and are editable by hand on this page, and of
+                // the three writers this is the only one with nothing behind it
+                // — it runs first, so anything already there came from a later
+                // pass or from the reader, and both outrank it.
+                detectedJobTitle: prev.detectedJobTitle || (data.jobTitle ?? ""),
+                detectedCompany: prev.detectedCompany || (data.company ?? ""),
+              }
+            : prev,
+        );
+        if (data.usage) {
+          appendUsageEntry({
+            endpoint: "extract-job-facts",
+            model: data.usage.model,
+            sessionId,
+            usage: data.usage,
+          });
+        }
+      } catch (err) {
+        // Cleared from the attempted set so the retry button can run again.
+        attemptedRef.current.delete(key);
+        setFactsError(err instanceof Error ? err.message : "Could not read the posting's details");
+      } finally {
+        setFactsLoading(false);
+      }
+    },
+    [settings.apiKey, setState],
+  );
+
+  // Runs for a posting that has just been loaded and for one saved before this
+  // step existed, and exactly once for each: the key is the application plus the
+  // text, so replacing the posting re-reads it and re-opening one does not.
+  useEffect(() => {
+    if (!hydrated || !settingsLoaded || !state.id) return;
+    if (!state.jobDescription || state.jobFacts) return;
+    const key = factsKey(state.id, state.jobDescription);
+    if (attemptedRef.current.has(key)) return;
+    attemptedRef.current.add(key);
+    void extractFacts(state.id, state.jobDescription, key);
+  }, [
+    hydrated,
+    settingsLoaded,
+    state.id,
+    state.jobDescription,
+    state.jobFacts,
+    extractFacts,
+  ]);
+
+  const retryFacts = useCallback(() => {
+    if (!state.id || !state.jobDescription) return;
+    const key = factsKey(state.id, state.jobDescription);
+    attemptedRef.current.add(key);
+    void extractFacts(state.id, state.jobDescription, key);
+  }, [state.id, state.jobDescription, extractFacts]);
+
+  // Drives the layout switch below, and gates the panel that only makes sense
+  // once there is a posting for it to be about.
+  const hasPosting = Boolean(state.jobDescription);
+
   if (!hydrated) {
     return (
       <div className="min-h-dvh flex items-center justify-center">
@@ -237,104 +208,96 @@ export default function HomePage() {
   return (
     <div className="flex min-h-dvh flex-col">
       <AppHeader
-        subtitle="Resume & job description"
+        subtitle="Job Description"
         settings={settings}
-        onSettingsSave={handleSettingsSave}
+        onSettingsSave={saveSettings}
       />
 
       {/* See the resume step: the content block grows so the sticky footer has
           a bottom to sit at on a page shorter than the window. */}
       <main className="app-container py-8 flex flex-1 flex-col">
-        {/* Two columns when there is room for two, one when there isn't —
-            decided by the width this block actually has rather than by the
-            width of the window. `lg:grid-cols-2` was reading the viewport, and
-            on a landscape tablet the applications rail took 320px out of that
-            viewport after the fact: the columns came out 316px each, narrower
-            than the single column the same tablet gets held upright. */}
-        <div className="auto-grid [--col-min:26rem] flex-1 gap-6 items-start content-start">
-          <section>
-            <SectionHeader
-              step={1}
-              title="Your resume"
-              subtitle="Upload any format — we'll read and save the full text"
-            />
-            <ResumeUpload
-              key={state.id}
-              resumeText={state.resumeText}
-              resumeFilename={state.resumeFilename}
-              fileKey={fileKey(state.id, "resume")}
-              highlight={highlight}
-              onParsed={handleResumeParsed}
-              onClear={() =>
-                setState((prev) => ({
-                  ...prev,
-                  resumeText: "",
-                  resumeFilename: "",
-                  spellingSuggestions: [],
-                  nameVariants: [],
-                  ...RESUME_CHANGE_RESET,
-                }))
-              }
-            />
-            <SpellingReview
-              suggestions={state.spellingSuggestions}
-              resumeText={state.resumeText}
-              selected={highlight}
-              onSelect={(s) => setHighlight(s.wrong)}
-              onAccept={handleAcceptSpelling}
-              onReject={handleRejectSpelling}
-              onAcceptAll={handleAcceptAllSpelling}
-              onRejectAll={handleRejectAllSpelling}
-            />
-            <NameVariantReview
-              issues={state.nameVariants}
-              selected={highlight}
-              onSelect={setHighlight}
-              onAccept={handleAcceptVariant}
-              onReject={handleRejectVariant}
-              onAcceptAll={handleAcceptAllVariants}
-              onRejectAll={handleRejectAllVariants}
-            />
-          </section>
+        {/* One column while this is still a text box to fill in, two once it
+            holds a posting.
 
-          <section>
-            <SectionHeader
-              step={2}
-              title="Job description"
-              subtitle="Paste text, drop a link, or upload a file"
-            />
-            <JobDescriptionInput
-              key={state.id}
-              jobDescription={state.jobDescription}
-              jobSource={state.jobSource}
-              jobSourceType={state.jobSourceType}
-              fileKey={fileKey(state.id, "jobDescription")}
-              onParsed={handleJobParsed}
-              onClear={() =>
-                setState((prev) => ({
-                  ...prev,
-                  jobDescription: "",
-                  jobSource: "",
-                  jobSourceType: "",
-                  ...JOB_CHANGE_RESET,
-                }))
-              }
-            />
-          </section>
-        </div>
+            The empty state stays narrow for the reason it always did: a lone
+            input stretched across a desktop is a long way for the eye to travel.
+            But once the posting is loaded the page is no longer an input — it is
+            a document with terms attached, and the terms only earn a column of
+            their own when there is something to put in it. Switching on content
+            rather than on a breakpoint is what keeps both true. */}
+        <section className={`flex-1 mx-auto w-full ${hasPosting ? "max-w-5xl" : "max-w-3xl"}`}>
+          {/* Above the columns, not inside the left one. Kept in the left column
+              the header pushed the posting card down and the panel beside it
+              started level with the *header* — so the two cards the eye reads as
+              a pair had tops 80px apart. The step number belongs to the step,
+              not to one of its two columns. */}
+          <SectionHeader
+            step={1}
+            title="Job Description"
+            subtitle="Paste text, drop a link, or upload a file"
+          />
+
+          <div
+            className={
+              hasPosting
+                ? "lg:grid lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-5 lg:items-start"
+                : ""
+            }
+          >
+            <div className="min-w-0">
+              <JobDescriptionInput
+                key={state.id}
+                jobDescription={state.jobDescription}
+                jobSource={state.jobSource}
+                jobSourceType={state.jobSourceType}
+                fileKey={fileKey(state.id, "jobDescription")}
+                onParsed={handleJobParsed}
+                onClear={() =>
+                  setState((prev) => ({
+                    ...prev,
+                    jobDescription: "",
+                    jobSource: "",
+                    jobSourceType: "",
+                    ...JOB_CHANGE_RESET,
+                  }))
+                }
+                jobTitle={state.detectedJobTitle}
+                onJobTitleChange={(value) =>
+                  setState((prev) => ({ ...prev, detectedJobTitle: value }))
+                }
+                // Hand-corrected text is a different posting as far as anything
+                // downstream is concerned, so it goes through the same door the
+                // loader does — reset matrix included.
+                onTextEdit={(text) =>
+                  setState((prev) => ({
+                    ...prev,
+                    jobDescription: text,
+                    ...JOB_CHANGE_RESET,
+                  }))
+                }
+              />
+            </div>
+
+            {/* Below the posting on a phone, beside it from `lg`. Beneath is the
+                right order there: the panel is about the posting, and a phone
+                that led with the terms would put the summary above the thing it
+                summarises. */}
+            {hasPosting && (
+              <div className="mt-4 min-w-0 lg:mt-0">
+                <JobFactsPanel
+                  facts={state.jobFacts}
+                  loading={factsLoading}
+                  error={factsError}
+                  onRetry={retryFacts}
+                  onChange={(next) => setState((prev) => ({ ...prev, jobFacts: next }))}
+                />
+              </div>
+            )}
+          </div>
+        </section>
 
         <StepNav />
       </main>
-
-      <ConfirmDetailsModal
-        open={pendingDetails !== null}
-        filename={pendingDetails?.filename ?? ""}
-        found={pendingDetails?.found ?? []}
-        profile={pendingDetails?.profile ?? settings.profile}
-        shape={state.documentShape ?? state.recommendedShape}
-        onConfirm={handleConfirmDetails}
-        onDismiss={() => setPendingDetails(null)}
-      />
     </div>
   );
 }

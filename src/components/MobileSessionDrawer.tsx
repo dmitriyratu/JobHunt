@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useJobHuntState } from "@/lib/useAppState";
 import SessionList from "./SessionList";
+import { useScrollLock } from "@/lib/useScrollLock";
 
 /**
  * Phone and tablet access to the applications list.
@@ -18,6 +19,7 @@ import SessionList from "./SessionList";
 export default function MobileSessionDrawer() {
   const { sessions, hydrated } = useJobHuntState();
   const [open, setOpen] = useState(false);
+  useScrollLock(open);
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -67,7 +69,9 @@ export default function MobileSessionDrawer() {
 
       {open && (
         <div
-          className="xl:hidden fixed inset-0 z-50 flex justify-end bg-[var(--color-scrim)]"
+          // overscroll-contain so running out of list doesn't start moving the
+          // page underneath — see .modal-overlay in globals.css.
+          className="xl:hidden fixed inset-0 z-50 flex justify-end overflow-hidden overscroll-contain bg-[var(--color-scrim)]"
           onClick={close}
         >
           <div

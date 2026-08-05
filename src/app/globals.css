@@ -601,34 +601,6 @@
   }
 
   /*
-   * The same 44px, given to the touch alone rather than to the box.
-   *
-   * `tap` grows the control, which is right wherever there is room. This is for
-   * the ones tucked into a corner that has none — the delete affordance on an
-   * application card sits 6px from the edge and would cover the job title if it
-   * actually became 44px wide. The mark stays small; what you can hit doesn't.
-   */
-  .tap-area {
-    position: relative;
-  }
-
-  .tap-area::after {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 2.75rem;
-    height: 2.75rem;
-    transform: translate(-50%, -50%);
-  }
-
-  @media (pointer: fine) {
-    .tap-area::after {
-      content: none;
-    }
-  }
-
-  /*
    * iOS Safari zooms the page whenever a focused field's text is under 16px and
    * never zooms back out, so `.input-base` sets 16px below `sm`.
    *
@@ -661,6 +633,42 @@
  * already assumed.
  */
 @layer components {
+  /*
+   * The same 44px as `.tap`, given to the touch alone rather than to the box.
+   *
+   * `tap` grows the control, which is right wherever there is room. This is for
+   * the ones tucked into a corner that has none — the delete affordance on an
+   * application card sits 6px from the edge and would cover the job title if it
+   * actually became 44px wide. The mark stays small; what you can hit doesn't.
+   *
+   * Down here rather than in @layer utilities for the reason above: `position:
+   * relative` sat in the same layer as Tailwind's own `absolute` and, being
+   * later in source order, won. Both call sites that combined the two — the
+   * card's delete button and the account dialog's show-key toggle — computed to
+   * `relative` and dropped out of the corner they were pinned to. An explicit
+   * position utility now wins, and where there is none this still applies,
+   * which is all the ::after needs to hang off.
+   */
+  .tap-area {
+    position: relative;
+  }
+
+  .tap-area::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 2.75rem;
+    height: 2.75rem;
+    transform: translate(-50%, -50%);
+  }
+
+  @media (pointer: fine) {
+    .tap-area::after {
+      content: none;
+    }
+  }
+
   /*
    * The card. Its edge is mostly shadow — the hairline is there to keep the
    * corner from dissolving where the shadow is weakest, not to draw a box.
@@ -861,6 +869,24 @@
    * The panel is capped at the window now and the middle scrolls inside it, so
    * the heading and the buttons are always where you left them.
    */
+  /*
+   * `overscroll-behavior: contain` on both scrollers here, and it is the whole
+   * fix for a dialog that quietly moves the page behind it.
+   *
+   * A wheel that reaches the end of a scroll container hands what is left of
+   * itself to the container's ancestors — "scroll chaining". So reading to the
+   * bottom of a long resume and carrying on scrolling started moving the page
+   * under the scrim, which is jarring in a way that is hard to name and
+   * impossible to undo: closing the dialog leaves you somewhere you never
+   * chose to be. Wheeling over the scrim itself did the same thing.
+   *
+   * `contain` stops the chain at this element while leaving it scrollable
+   * inside. Both layers need it — the body is where the wheel runs out first,
+   * the overlay is what the scrim area belongs to. Preferred over locking the
+   * document: a scroll lock has to hide the page's scrollbar, and taking that
+   * width away shifts everything underneath a translucent scrim by 15px at the
+   * moment the dialog opens.
+   */
   .modal-overlay {
     position: fixed;
     inset: 0;
@@ -869,6 +895,7 @@
     align-items: center;
     justify-content: center;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 0.5rem;
     background: var(--color-scrim);
   }
@@ -888,6 +915,7 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .modal-head,

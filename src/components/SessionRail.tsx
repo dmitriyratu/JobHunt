@@ -209,8 +209,8 @@ export default function SessionRail() {
             <button
               onClick={handleNewCollapsed}
               disabled={creating}
-              title="New application"
-              aria-label="New application"
+              title="New Application"
+              aria-label="New Application"
               // Matches the collapse button above it exactly — same 36px box,
               // same corner. These two sit stacked in a 68px rail, and any
               // difference between them reads as a mistake rather than a
@@ -308,7 +308,7 @@ export default function SessionRail() {
               title="Your resume carries over; the job details start fresh."
               className="btn-primary w-full py-2 text-sm"
             >
-              {creating ? "Creating…" : "+ New application"}
+              {creating ? "Creating…" : "+ New Application"}
             </button>
           </div>
           <SessionList showNewButton={false} />

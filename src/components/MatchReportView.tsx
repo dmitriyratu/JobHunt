@@ -480,7 +480,7 @@ function OutcomeTally({
           onClick={onClear}
           className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-[var(--color-text-secondary)] underline-offset-2 transition hover:text-[var(--color-text-primary)] hover:underline"
         >
-          Show all {total}
+          Show All {total}
         </button>
       )}
     </div>
@@ -580,7 +580,7 @@ export default function MatchReportView({
         </p>
         {error && <p className="text-[var(--color-danger)] text-xs mb-3">{error}</p>}
         <button onClick={onAnalyze} disabled={!canAnalyze} className="btn-primary w-full">
-          {error ? "Try again" : "Analyze match"}
+          {error ? "Try Again" : "Analyze Match"}
         </button>
       </div>
     );
@@ -636,7 +636,7 @@ export default function MatchReportView({
             disabled={loading}
             className="btn-secondary w-full text-xs sm:w-auto"
           >
-            {loading ? "Re-analyzing…" : "Re-analyze match"}
+            {loading ? "Re-analyzing…" : "Re-analyze Match"}
           </button>
           <p className="text-[10px] text-[var(--color-text-muted)] mt-1.5">
             Replaces this report, including any accepted chat edits.

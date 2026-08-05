@@ -206,8 +206,7 @@ export default function ProfileFields({
         )}
 
         <p className="mt-2 text-[11px] text-[var(--color-text-muted)]">
-          Everything you fill in here prints, on every document type. Leave a field blank to
-          keep it off the page.
+          Blank fields stay off the page.
         </p>
       </div>
     </div>

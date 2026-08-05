@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
-import { formatReleaseDate, latestRelease, releases } from "@/lib/releases";
+import { formatReleaseDate, latestRelease, releases, type ReleaseMedia } from "@/lib/releases";
+import { useScrollLock } from "@/lib/useScrollLock";
+import { useTheme } from "@/lib/useTheme";
 
 /**
  * What changed, in the language of someone using the app rather than someone
@@ -13,11 +15,39 @@ type Props = {
 };
 
 /**
+ * The screenshot for one change, in the theme you are reading in.
+ *
+ * Both files are always on disk; only one is ever requested, so the wrong-theme
+ * shot costs nothing. `useTheme` reports light until it has read localStorage,
+ * which is fine here — the modal is opened by a click, long after that.
+ */
+function ChangeShot({ media }: { media: ReleaseMedia }) {
+  const { theme } = useTheme();
+
+  return (
+    // Plain <img>: a scene is as tall as its content, so these have no
+    // intrinsic size known at build time, and next/image wants one.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={theme === "dark" ? media.dark : media.light}
+      alt={media.alt}
+      loading="lazy"
+      className="mt-2.5 w-full rounded-[var(--radius-control)] border border-[var(--color-border-subtle)]"
+    />
+  );
+}
+
+/**
  * Opened from the header's overflow menu. The unread dot is resolved there too,
  * beside the menu item and aggregated onto the menu's own trigger — see
  * `hasUnreadRelease` in lib/releases.
  */
 export default function WhatsNewModal({ open, onClose }: Props) {
+  // Holds the page still. Was a local `body.style.overflow = "hidden"` here,
+  // which the shared hook supersedes: it also compensates for the scrollbar
+  // width it removes, and reference-counts so overlapping dialogs don't hand
+  // the page back early.
+  useScrollLock(open);
   const close = useCallback(() => onClose(), [onClose]);
 
   useEffect(() => {
@@ -26,12 +56,7 @@ export default function WhatsNewModal({ open, onClose }: Props) {
       if (e.key === "Escape") close();
     };
     window.addEventListener("keydown", onKey);
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previous;
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, [open, close]);
 
   // Nothing has shipped yet. Rather than an empty panel, there's nothing here —
@@ -46,7 +71,10 @@ export default function WhatsNewModal({ open, onClose }: Props) {
           onClick={close}
         >
           <div
-            className="modal-panel glass-panel max-w-lg p-0"
+            // Wider than the other modals because this one carries
+            // screenshots, and a shrunk screenshot of an interface is a
+            // picture of something you cannot read.
+            className="modal-panel glass-panel max-w-2xl p-0"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -100,6 +128,7 @@ export default function WhatsNewModal({ open, onClose }: Props) {
                             <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-secondary)]">
                               {change.detail}
                             </p>
+                            {change.media && <ChangeShot media={change.media} />}
                           </li>
                         ))}
                       </ul>

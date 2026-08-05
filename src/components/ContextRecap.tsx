@@ -222,7 +222,7 @@ export default function ContextRecap({
               ))}
             </ul>
             <span className="block text-[var(--color-text-muted)]">
-              Treated as part of your resume. Edit under Your details.
+              Treated as part of your resume. Edit under Your Profile.
             </span>
           </Row>
         )}

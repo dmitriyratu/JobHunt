@@ -6,12 +6,12 @@ import { hasUnreadRelease, latestRelease } from "@/lib/releases";
 /**
  * The header's overflow menu.
  *
- * Five utility buttons sat in the header row: your details, settings, what's
- * new, feedback and the theme. Only two of them are things you reach for while
- * working — the details you re-check per application, and the theme, which is
- * one tap. The other three are set-up and housekeeping, and having them all out
- * on the bar made the row wrap to a second line on a 768px tablet and read as
- * busier than the page under it.
+ * Five utility buttons sat in the header row: your details, your account,
+ * what's new, feedback and the theme. Only two of them are things you reach for
+ * while working — the details you re-check per application, and the theme,
+ * which is one tap. The other three are set-up and housekeeping, and having
+ * them all out on the bar made the row wrap to a second line on a 768px tablet
+ * and read as busier than the page under it.
  *
  * The dot is aggregated rather than repeated: whatever inside needs attention —
  * no API key, an unread release — surfaces on the trigger, so nothing hidden in
@@ -19,9 +19,9 @@ import { hasUnreadRelease, latestRelease } from "@/lib/releases";
  */
 
 type Props = {
-  /** Drawn as a dot on Settings, and on the trigger. */
+  /** Drawn as a dot on Account, and on the trigger. */
   needsApiKey: boolean;
-  onOpenSettings: () => void;
+  onOpenAccount: () => void;
   onOpenWhatsNew: () => void;
   onOpenFeedback: () => void;
 };
@@ -89,7 +89,7 @@ function Dot({ title }: { title: string }) {
 
 export default function HeaderMenu({
   needsApiKey,
-  onOpenSettings,
+  onOpenAccount,
   onOpenWhatsNew,
   onOpenFeedback,
 }: Props) {
@@ -185,11 +185,11 @@ export default function HeaderMenu({
           <button
             ref={firstItemRef}
             role="menuitem"
-            onClick={pick(onOpenSettings)}
+            onClick={pick(onOpenAccount)}
             className={itemClass}
           >
             <GearIcon />
-            Settings
+            Account
             {needsApiKey && <Dot title="No API key set" />}
           </button>
 
@@ -206,7 +206,7 @@ export default function HeaderMenu({
               className={itemClass}
             >
               <MegaphoneIcon />
-              What&rsquo;s new
+              What&rsquo;s New
               {unread && (
                 <span
                   className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent)]"
@@ -218,7 +218,7 @@ export default function HeaderMenu({
 
           <button role="menuitem" onClick={pick(onOpenFeedback)} className={itemClass}>
             <ChatIcon />
-            Send feedback
+            Send Feedback
           </button>
         </div>
       )}

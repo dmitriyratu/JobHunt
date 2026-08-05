@@ -181,7 +181,7 @@ export default function ReportChat({
                         }
                         className="btn-primary text-xs py-1.5 px-3"
                       >
-                        Accept all
+                        Accept All
                       </button>
                       <button
                         onClick={() =>
@@ -189,7 +189,7 @@ export default function ReportChat({
                         }
                         className="btn-secondary text-xs py-1.5 px-3"
                       >
-                        Reject all
+                        Reject All
                       </button>
                     </div>
                   )}

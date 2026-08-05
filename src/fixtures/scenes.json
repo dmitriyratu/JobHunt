@@ -1,0 +1,51 @@
+[
+  {
+    "id": "match-report",
+    "description": "The whole match report: an overall score, a plain-language summary, a count of each outcome, and one card per requirement showing what the resume says and how it was judged.",
+    "alt": "A match report showing a fit score of 72, a short summary, counts of each outcome, and cards for each requirement giving the assessment and the line from the resume it was judged against.",
+    "width": 720,
+    "click": []
+  },
+  {
+    "id": "match-report-filtered",
+    "description": "The match report narrowed to a single outcome by clicking one of the counts above it. Use this for anything about filtering, narrowing, or the outcome counts being clickable.",
+    "alt": "A match report with the \"3 partial\" count selected. Only the three partially met requirements are shown, and the report reads \"3 of 8 requirements\" with a \"Show all 8\" link beside the counts.",
+    "width": 720,
+    "click": ["Show only the 3 partial requirements"]
+  },
+  {
+    "id": "job-description-input",
+    "description": "The first step, empty and waiting for input: the panel where a job posting is added, by pasting the text, giving a link, or uploading a file. Use this for anything about how a posting gets into the app.",
+    "alt": "A panel with three tabs — Paste Text, Link and File — on the Link tab, showing an empty address field above a \"Load Job Description\" button.",
+    "width": 720,
+    "click": []
+  },
+  {
+    "id": "job-description-loaded",
+    "description": "The confirmation strip shown once a posting has been loaded: what happened, the role it is for, and the way to replace it. Use this for anything about the loaded posting, the role heading, or editing either.",
+    "alt": "A strip reading \"Job description loaded\" above its source and character count, with the role title beside it on two lines and a Replace button at the right.",
+    "width": 720,
+    "click": []
+  },
+  {
+    "id": "resume-upload",
+    "description": "The empty resume upload panel, before any document has been chosen. Use this for anything about uploading, choosing, or replacing the resume file itself.",
+    "alt": "An empty upload panel with a dashed drop zone reading \"Drop your resume here or click to browse\", noting that PDF, DOCX and TXT are supported.",
+    "width": 720,
+    "click": []
+  },
+  {
+    "id": "letter-output",
+    "description": "A finished outreach email in its editor: a subject line above an editable body. Use this for anything about the generated letter, its wording, or editing it.",
+    "alt": "An outreach email editor showing a generated subject line and a four-paragraph body addressed to a hiring manager, with formatting controls above the text.",
+    "width": 720,
+    "click": []
+  },
+  {
+    "id": "fact-proposal",
+    "description": "A single claim the chat is proposing to record about the candidate, with Accept and Reject buttons and the reasoning behind it. Use this for anything about proposals, accepting or rejecting a suggested change, or recording a skill the resume does not mention.",
+    "alt": "A proposal card offering to record that the candidate has worked with PostgreSQL, with the reason it was suggested and Accept and Reject buttons.",
+    "width": 620,
+    "click": []
+  }
+]

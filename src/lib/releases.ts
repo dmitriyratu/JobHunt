@@ -8,9 +8,29 @@ import releasesData from "@/data/releases.json";
  * Newest entry first; the generator prepends.
  */
 
+/**
+ * A screenshot of the change, taken from a fixture rather than a real session.
+ *
+ * Two files, because the app has two themes and a light screenshot in a dark
+ * modal reads as a bug. Paths are under `public/releases/<version>/` and are
+ * written per release, so an old note keeps showing the UI it described.
+ *
+ * Absent on most changes. A picture is only worth its space when the change is
+ * visual and hard to picture from a sentence — see the rules in
+ * `scripts/release-notes.mjs`.
+ */
+export type ReleaseMedia = {
+  light: string;
+  dark: string;
+  /** Describes the screenshot for anyone who can't see it. Not a caption —
+      nothing renders it visibly. */
+  alt: string;
+};
+
 export type ReleaseChange = {
   title: string;
   detail: string;
+  media?: ReleaseMedia;
 };
 
 export type Release = {

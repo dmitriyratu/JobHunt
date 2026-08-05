@@ -52,6 +52,17 @@ export function fileKey(sessionId: string, slot: FileSlot): string {
 }
 
 /**
+ * Key namespace for blobs that belong to the person, not to an application.
+ *
+ * Session ids are UUIDs, so this can never collide with one. pruneOrphanFiles
+ * treats it as permanently live — see there.
+ */
+export const PROFILE_NAMESPACE = "profile";
+
+/** The original file behind the saved resume — see @/lib/baseResume. */
+export const PROFILE_RESUME_KEY = `${PROFILE_NAMESPACE}:resume`;
+
+/**
  * Duplicates the blob rather than reference-counting a shared one. Costs a few
  * hundred KB per session (IndexedDB is quota'd in hundreds of MB, so fine at
  * this scale); the zero-duplication alternative is content-addressed storage
@@ -76,7 +87,9 @@ export async function deleteFilesForSession(sessionId: string): Promise<void> {
  * interrupted would otherwise leak forever.
  */
 export async function pruneOrphanFiles(validSessionIds: string[]): Promise<void> {
-  const valid = new Set(validSessionIds);
+  // The profile namespace is always live: the saved resume outlives every
+  // application by design, and deleting all of them must not take it with them.
+  const valid = new Set([...validSessionIds, PROFILE_NAMESPACE]);
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");

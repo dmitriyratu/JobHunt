@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { loadBaseResume } from "@/lib/baseResume";
+import { RESUME_CHANGE_RESET } from "@/lib/session";
 import { isProfileUsable, type AppSettings } from "@/lib/settings";
 import { useJobHuntState } from "@/lib/useAppState";
+import AccountModal from "./AccountModal";
 import FeedbackModal from "./FeedbackModal";
 import HeaderMenu from "./HeaderMenu";
 import MobileSessionDrawer from "./MobileSessionDrawer";
 import ProfileModal from "./ProfileModal";
-import SettingsModal from "./SettingsModal";
 import StageNav from "./StageNav";
 import ThemeToggle from "./ThemeToggle";
 import WhatsNewModal from "./WhatsNewModal";
@@ -16,18 +18,22 @@ import WhatsNewModal from "./WhatsNewModal";
 type Props = {
   subtitle: string;
   settings: AppSettings;
-  onSettingsSave: (settings: AppSettings) => void;
+  /** Takes only the fields being changed. See @/lib/useSettings. */
+  onSettingsSave: (patch: Partial<AppSettings>) => void;
 };
 
 export default function AppHeader({ subtitle, settings, onSettingsSave }: Props) {
   // The header owns all four panels now. Two of them used to own their own
   // trigger button; those triggers moved into the overflow menu, and a
   // component cannot be both an item in a menu and the panel that item opens.
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const { state, newSession } = useJobHuntState();
+  // Which tab the dialog opens on. Only ever "resume" for the first-run case
+  // below — pressing the button itself lands on the details, as it always has.
+  const [profileTab, setProfileTab] = useState<"resume" | "details">("details");
+  const { state, setState, newSession } = useJobHuntState();
   const router = useRouter();
   const profileReady = isProfileUsable(settings.profile);
 
@@ -37,6 +43,45 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
     if (state.committed) await newSession();
     router.push("/");
   }, [state.committed, newSession, router]);
+
+  /**
+   * With no resume on file there is nothing the app can do, so it asks for one.
+   *
+   * Once per page load, and dismissible: the whole dialog is reachable from the
+   * button beside it, the Match report button stays disabled until a resume and
+   * a posting both exist, and a first screen you cannot close is a worse
+   * introduction than an empty one. In the header rather than on the source
+   * page because it is a fact about you, not about the page you happen to be
+   * looking at.
+   */
+  const askedRef = useRef(false);
+  useEffect(() => {
+    if (askedRef.current) return;
+    askedRef.current = true;
+    if (loadBaseResume()) return;
+    setProfileTab("resume");
+    setProfileOpen(true);
+  }, []);
+
+  /**
+   * A changed resume, pushed into the application on screen.
+   *
+   * Only this one: every other application keeps the copy it was analysed
+   * against. Anything already built from the outgoing text is stale, which is
+   * the same consequence replacing the resume at step 1 always carried — and
+   * the identical-text guard means re-uploading the same file costs nothing.
+   */
+  const handleResumeChange = useCallback(
+    (text: string, filename: string) => {
+      setState((prev) => ({
+        ...prev,
+        resumeText: text,
+        resumeFilename: filename,
+        ...(text !== prev.resumeText ? RESUME_CHANGE_RESET : {}),
+      }));
+    },
+    [setState]
+  );
 
   return (
     <>
@@ -98,14 +143,20 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
                 three different heights and two different radii, and the drift
                 got worse rather than better on a touch screen. */}
             <button
-              onClick={() => setProfileOpen(true)}
-              title={profileReady ? "The details at the top of your resumes" : "Add your details"}
+              onClick={() => {
+                // Your resume first when there isn't one: a contact form is not
+                // the thing to hand someone who hasn't uploaded anything yet,
+                // and the fields on it get filled by the upload anyway.
+                setProfileTab(loadBaseResume() ? "details" : "resume");
+                setProfileOpen(true);
+              }}
+              title={profileReady ? "Your resume and the details at the top of it" : "Add your details"}
               className="hdr-btn"
             >
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
-              <span className="hidden sm:inline">Your details</span>
+              <span className="hidden sm:inline">Your Profile</span>
               {!profileReady && (
                 <span
                   className="h-1.5 w-1.5 rounded-full bg-[var(--color-warning)]"
@@ -116,14 +167,14 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
 
             <ThemeToggle />
 
-            {/* Settings, What's new and Feedback live in here. All three are
+            {/* Account, What's new and Feedback live in here. All three are
                 set-up and housekeeping rather than things you reach for while
                 working, and out on the bar the five of them wrapped the row to
                 two lines on a 768px tablet. Whatever inside needs attention
                 surfaces as a dot on the trigger. */}
             <HeaderMenu
               needsApiKey={!settings.apiKey}
-              onOpenSettings={() => setSettingsOpen(true)}
+              onOpenAccount={() => setAccountOpen(true)}
               onOpenWhatsNew={() => setWhatsNewOpen(true)}
               onOpenFeedback={() => setFeedbackOpen(true)}
             />
@@ -144,9 +195,9 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
         </div>
       </header>
 
-      <SettingsModal
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+      <AccountModal
+        open={accountOpen}
+        onClose={() => setAccountOpen(false)}
         settings={settings}
         onSave={onSettingsSave}
         onOpenProfile={() => setProfileOpen(true)}
@@ -160,6 +211,10 @@ export default function AppHeader({ subtitle, settings, onSettingsSave }: Props)
         // A chosen shape outranks the recommendation, matching how the picker
         // itself resolves them.
         shape={state.documentShape ?? state.recommendedShape}
+        initialTab={profileTab}
+        onResumeChange={handleResumeChange}
+        onResumeRemoved={() => handleResumeChange("", "")}
+        sessionId={state.id}
       />
 
       <WhatsNewModal open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />

@@ -9,11 +9,10 @@ export function createSession(carryOver?: Partial<Session>): Session {
     committed: false,
     resumeText: "",
     resumeFilename: "",
-    spellingSuggestions: [],
-  nameVariants: [],
     jobDescription: "",
     jobSource: "",
     jobSourceType: "",
+    jobFacts: null,
     tailoredResume: null,
     resumeTex: "",
     resumeChatMessages: [],
@@ -47,11 +46,10 @@ export const EMPTY_SESSION: Session = Object.freeze({
   committed: false,
   resumeText: "",
   resumeFilename: "",
-  spellingSuggestions: [],
-  nameVariants: [],
   jobDescription: "",
   jobSource: "",
   jobSourceType: "" as const,
+  jobFacts: null,
   tailoredResume: null,
   resumeTex: "",
   resumeChatMessages: [],
@@ -109,6 +107,10 @@ export const JOB_CHANGE_RESET = {
   recipientName: "",
   letterContext: "",
   resumeEmphasis: "",
+  // Read off the outgoing posting, so they say nothing about the new one. Left
+  // standing they would be the most confident-looking thing on the page and the
+  // only stale one: a salary from a job you are no longer looking at.
+  jobFacts: null,
 } satisfies Partial<Session>;
 
 /**

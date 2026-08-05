@@ -514,8 +514,8 @@ export default function ResumeDocumentPane({
                     className="tap inline-flex items-center justify-center rounded-[var(--radius-sm)] px-2 py-1 font-medium text-[var(--color-accent)] transition-colors hover:bg-[var(--color-surface-overlay)]"
                   >
                     {showFullSource
-                      ? "Hide preamble"
-                      : `Show preamble and layout (${split.hiddenLines} lines)`}
+                      ? "Hide Preamble"
+                      : `Show Preamble and Layout (${split.hiddenLines} lines)`}
                   </button>
                 )}
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useScrollLock } from "@/lib/useScrollLock";
 
 /**
  * The letter's two optional inputs, asked when you press Generate.
@@ -36,6 +37,8 @@ export default function GenerateEmailModal({
   onGenerate,
   onClose,
 }: Props) {
+  useScrollLock(open);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {

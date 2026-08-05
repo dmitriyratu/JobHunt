@@ -134,7 +134,7 @@ export default function ResumeChat({
         )}
 
         {messages.map((msg, i) => {
-          // "Accept all" must only offer what would actually apply.
+          // "Accept All" must only offer what would actually apply.
           const pending =
             msg.proposals?.filter(
               (p) => p.resolution === "pending" && tex.includes(p.find)
@@ -164,13 +164,13 @@ export default function ResumeChat({
                         onClick={() => pending.forEach((p) => onAcceptProposal(i, p.id))}
                         className="btn-primary px-3 py-1.5 text-xs"
                       >
-                        Accept all
+                        Accept All
                       </button>
                       <button
                         onClick={() => pending.forEach((p) => onRejectProposal(i, p.id))}
                         className="btn-secondary px-3 py-1.5 text-xs"
                       >
-                        Reject all
+                        Reject All
                       </button>
                     </div>
                   )}

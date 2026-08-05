@@ -6,6 +6,7 @@ import { isProfileUsable, type ResumeProfile } from "@/lib/settings";
 import ProfileFields from "./ProfileFields";
 import TemplatePreview from "./TemplatePreview";
 import type { DocumentShape, ResumePageTarget } from "@/types";
+import { useScrollLock } from "@/lib/useScrollLock";
 
 /**
  * Everything that used to be a permanent sidebar panel, asked at the moment you
@@ -23,7 +24,7 @@ import type { DocumentShape, ResumePageTarget } from "@/types";
  * where the two can answer each other.
  */
 
-const STEPS = ["Your details", "What to emphasise", "Format"] as const;
+const STEPS = ["Your Details", "What to Emphasise", "Format"] as const;
 
 type Props = {
   open: boolean;
@@ -66,6 +67,8 @@ export default function GenerateResumeModal({
   onGenerate,
   onClose,
 }: Props) {
+  useScrollLock(open);
+
   const [step, setStep] = useState(0);
   const [selected, setSelected] = useState<DocumentShape | null>(current ?? recommended);
 
@@ -171,7 +174,7 @@ export default function GenerateResumeModal({
         {step === 0 && (
           <div className="space-y-4">
             <div>
-              <h2 className="text-base font-semibold">Your details</h2>
+              <h2 className="text-base font-semibold">Your Details</h2>
               <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-secondary)]">
                 These head every resume JobHunt generates, and they&rsquo;re the one part the
                 model never writes. Filled in from your upload — worth a check, since PDF
@@ -250,7 +253,7 @@ export default function GenerateResumeModal({
                           : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-text-muted)]"
                       }`}
                     >
-                      {n === 1 ? "One page" : "Two pages"}
+                      {n === 1 ? "One Page" : "Two Pages"}
                     </button>
                   ))}
                 </div>

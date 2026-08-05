@@ -129,7 +129,7 @@ function FactPreview({ text }: { text: string }) {
       <p className="text-sm font-medium">{text}</p>
       <p className="mt-1.5 text-xs text-[var(--color-text-muted)]">
         Added to what your resume says about you, for this application and every one after
-        it. Remove it any time under Your details.
+        it. Remove it any time under Your Profile.
       </p>
     </div>
   );

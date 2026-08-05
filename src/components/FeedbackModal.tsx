@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useJobHuntState } from "@/lib/useAppState";
+import { useScrollLock } from "@/lib/useScrollLock";
 
 const PAGE_LABEL: Record<string, string> = {
-  "/": "Resume & job",
-  "/match": "Match report",
-  "/letter": "Write letter",
+  "/": "Job Description",
+  "/match": "Match Report",
+  "/letter": "Write Letter",
 };
 
 type Status = "idle" | "sending" | "sent" | "undelivered";
@@ -24,6 +25,7 @@ type Props = {
 };
 
 export default function FeedbackModal({ open, onClose }: Props) {
+  useScrollLock(open);
   const pathname = usePathname();
   const { state } = useJobHuntState();
   const [message, setMessage] = useState("");
@@ -130,11 +132,11 @@ export default function FeedbackModal({ open, onClose }: Props) {
             }}
             role="dialog"
             aria-modal="true"
-            aria-label="Send feedback"
+            aria-label="Send Feedback"
           >
             <div className="modal-head flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] px-5 py-4">
               <div className="min-w-0">
-                <h2 className="text-sm font-medium">Send feedback</h2>
+                <h2 className="text-sm font-medium">Send Feedback</h2>
                 <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
                   Tell me what&rsquo;s working or what isn&rsquo;t
                 </p>
@@ -165,7 +167,7 @@ export default function FeedbackModal({ open, onClose }: Props) {
                     </p>
                   </div>
                   <button onClick={copyForSending} className="btn-primary w-full">
-                    {copied ? "Copied!" : "Copy my feedback"}
+                    {copied ? "Copied!" : "Copy My Feedback"}
                   </button>
                   {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
                   <button onClick={close} className="btn-secondary w-full text-xs">
@@ -211,7 +213,7 @@ export default function FeedbackModal({ open, onClose }: Props) {
                         onClick={() => fileRef.current?.click()}
                         className="btn-secondary w-full text-xs"
                       >
-                        Add a screenshot
+                        Add a Screenshot
                       </button>
                     )}
                     <input
@@ -238,7 +240,7 @@ export default function FeedbackModal({ open, onClose }: Props) {
                     disabled={!message.trim() || status === "sending"}
                     className="btn-primary mt-3 w-full"
                   >
-                    {status === "sending" ? "Sending…" : "Send feedback"}
+                    {status === "sending" ? "Sending…" : "Send Feedback"}
                   </button>
                 </>
               )}
