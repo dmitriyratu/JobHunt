@@ -1,5 +1,35 @@
 [
   {
+    "version": "0.4.0",
+    "date": "2026-08-05",
+    "headline": "See a job's pay, location, and other key facts without hunting through the text",
+    "summary": "JobHunt now pulls the concrete terms out of a posting — pay, location, remote policy, and more — into a panel you can scan and correct. You can also fix the job title or the extracted posting text right where they're shown, and your saved resume now lives alongside your contact details in one place.",
+    "changes": [
+      {
+        "title": "See a job's pay, location, and other stated facts at a glance",
+        "detail": "Load a posting and JobHunt now pulls its concrete terms — pay range, location, remote policy, and more — into a panel right beside it, so you're not hunting through paragraphs for them. Anything it reads wrong, you can correct on the spot."
+      },
+      {
+        "title": "Fix the job title or posting text when it's pulled in wrong",
+        "detail": "The role you're applying for now appears as an editable heading above the posting, and you can correct the extracted posting text itself in place — no more living with a stray line or a mis-read title.",
+        "media": {
+          "light": "/releases/0.4.0/job-description-loaded-light.png",
+          "dark": "/releases/0.4.0/job-description-loaded-dark.png",
+          "alt": "A strip reading \"Job description loaded\" above its source and character count, with the role title beside it on two lines and a Replace button at the right."
+        }
+      },
+      {
+        "title": "Your resume and your details, in one place",
+        "detail": "Your Profile now has a Resume tab alongside Details, so you can update your saved resume or your contact info without leaving the same screen — and swapping in a new resume no longer means clearing the old one first."
+      },
+      {
+        "title": "What's New can now show you a picture",
+        "detail": "Some entries here come with a small screenshot of the change, shown to match whether you're using light or dark mode."
+      }
+    ],
+    "commit": "515b11c267e7135e65efce8e70677440fa4ac9da"
+  },
+  {
     "version": "0.3.0",
     "date": "2026-08-04",
     "headline": "Filter your match report by outcome",
