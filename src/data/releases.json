@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.4.1",
+    "date": "2026-08-05",
+    "headline": "Screenshots in the What's New panel now look right",
+    "summary": "When you check what's new in JobHunt, the pictures next to each update now show at their proper size instead of being stretched to fill the panel, so they stay sharp and in proportion.",
+    "changes": [
+      {
+        "title": "Correctly sized screenshots in release notes",
+        "detail": "Some screenshots in the What's New panel were being stretched wider than they were meant to be, making them look oversized or blurry. They now display at their intended size."
+      }
+    ],
+    "commit": "705e4d997996a7c77c414417def7cec1da934493"
+  },
+  {
     "version": "0.4.0",
     "date": "2026-08-05",
     "headline": "See a job's pay, location, and other key facts without hunting through the text",
