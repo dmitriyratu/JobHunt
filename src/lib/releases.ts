@@ -25,6 +25,19 @@ export type ReleaseMedia = {
   /** Describes the screenshot for anyone who can't see it. Not a caption —
       nothing renders it visibly. */
   alt: string;
+  /**
+   * The CSS width the scene was composed at, copied from its manifest entry.
+   *
+   * The modal used to stretch every shot to the panel, which is harmless for a
+   * scene wider than the panel and wrong for one narrower: a 300px panel blown
+   * up to 630 is a picture of the app at twice life size, and the reader's first
+   * thought is that the type got bigger. Rendering at the composed width lets
+   * a narrow scene sit at its own size and a wide one still shrink to fit.
+   *
+   * Optional: notes written before this existed have no width and keep the old
+   * full-width behaviour, which is what they were composed against.
+   */
+  width?: number;
 };
 
 export type ReleaseChange = {

@@ -7,7 +7,13 @@
     "changes": [
       {
         "title": "See a job's pay, location, and other stated facts at a glance",
-        "detail": "Load a posting and JobHunt now pulls its concrete terms — pay range, location, remote policy, and more — into a panel right beside it, so you're not hunting through paragraphs for them. Anything it reads wrong, you can correct on the spot."
+        "detail": "Load a posting and JobHunt now pulls its concrete terms — pay range, location, remote policy, and more — into a panel right beside it, so you're not hunting through paragraphs for them. Anything it reads wrong, you can correct on the spot.",
+        "media": {
+          "light": "/releases/0.4.0/job-facts-panel-light.png",
+          "dark": "/releases/0.4.0/job-facts-panel-dark.png",
+          "alt": "A panel headed \"At a glance\" showing a pay range of $185k – $235k/yr with \"plus equity + bonus\" beneath it, then labelled rows for setup, location, type, level, team, sponsorship, travel, posted and apply-by, and a footnote saying the details were read from the posting.",
+          "width": 300
+        }
       },
       {
         "title": "Fix the job title or posting text when it's pulled in wrong",
@@ -15,7 +21,8 @@
         "media": {
           "light": "/releases/0.4.0/job-description-loaded-light.png",
           "dark": "/releases/0.4.0/job-description-loaded-dark.png",
-          "alt": "A strip reading \"Job description loaded\" above its source and character count, with the role title beside it on two lines and a Replace button at the right."
+          "alt": "A strip reading \"Job description loaded\" above its source and character count, with the role title beside it on two lines and a Replace button at the right.",
+          "width": 720
         }
       },
       {
@@ -41,7 +48,8 @@
         "media": {
           "light": "/releases/0.3.0/match-report-filtered-light.png",
           "dark": "/releases/0.3.0/match-report-filtered-dark.png",
-          "alt": "A match report with the \"3 partial\" count selected. Only the three partially met requirements are shown, and the report reads \"3 of 8 requirements\" with a \"Show all 8\" link beside the counts."
+          "alt": "A match report with the \"3 partial\" count selected. Only the three partially met requirements are shown, and the report reads \"3 of 8 requirements\" with a \"Show all 8\" link beside the counts.",
+          "width": 720
         }
       },
       {

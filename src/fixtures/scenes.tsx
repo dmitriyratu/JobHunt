@@ -6,6 +6,10 @@ import LetterOutput from "@/components/LetterOutput";
 import MatchReportView from "@/components/MatchReportView";
 import ProposalDiffCard from "@/components/ProposalDiffCard";
 import ResumeUpload from "@/components/ResumeUpload";
+import SessionCard from "@/components/SessionCard";
+import JobFactsAside from "@/components/jobfacts/JobFactsAside";
+import { EMPTY_SESSION } from "@/lib/session";
+import { FACTS_RICH } from "./jobFacts";
 import { LETTER_BODY, LETTER_SUBJECT } from "./letter";
 import { MATCH_REPORT } from "./matchReport";
 import { POSTING_SOURCE, POSTING_TEXT, POSTING_TITLE } from "./posting";
@@ -131,6 +135,54 @@ const RENDERERS: Record<string, () => ReactNode> = {
       jobTitle={POSTING_TITLE}
       onJobTitleChange={noop}
       onTextEdit={noop}
+    />
+  ),
+
+  /**
+   * The terms panel, twice: as it reads and as it corrects.
+   *
+   * `onChange` is what decides which. Without it the panel draws no edit
+   * affordance at all, so the first scene is the honest read-only picture; with
+   * it, the manifest's click opens the pay editor and the second scene shows the
+   * thing that cannot be photographed any other way — the pencils themselves are
+   * hover-only, and a screenshot has no pointer.
+   */
+  "job-facts-panel": () => <JobFactsAside facts={FACTS_RICH} sticky={false} />,
+
+  "job-facts-panel-editing": () => (
+    <JobFactsAside facts={FACTS_RICH} sticky={false} onChange={noop} />
+  ),
+
+  /**
+   * One card out of the applications rail, at the rail's real width.
+   *
+   * Built from EMPTY_SESSION rather than a fixture of its own: the card reads a
+   * handful of fields out of a Session and ignores the rest, and spreading the
+   * blank one means a field added to Session later can't leave this failing to
+   * compile for want of a value nothing here renders.
+   *
+   * `updatedAt` is deliberately months old. Anything inside thirty days renders
+   * as "3d ago", which counts up between the day a release is photographed and
+   * the day someone reads its note — a picture that ages is a picture that
+   * disagrees with the one beside it.
+   */
+  "application-card": () => (
+    <SessionCard
+      session={{
+        ...EMPTY_SESSION,
+        id: "fixture-session",
+        committed: true,
+        updatedAt: "2026-06-12T10:00:00.000Z",
+        createdAt: "2026-06-12T09:00:00.000Z",
+        detectedJobTitle: "Staff Software Engineer, Payments Infrastructure",
+        detectedCompany: "Northwind",
+        jobFacts: FACTS_RICH,
+        matchReport: MATCH_REPORT,
+      }}
+      active={false}
+      expanded={false}
+      onSelect={noop}
+      onDelete={noop}
     />
   ),
 

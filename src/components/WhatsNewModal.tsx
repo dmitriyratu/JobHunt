@@ -32,7 +32,12 @@ function ChangeShot({ media }: { media: ReleaseMedia }) {
       src={theme === "dark" ? media.dark : media.light}
       alt={media.alt}
       loading="lazy"
-      className="mt-2.5 w-full rounded-[var(--radius-control)] border border-[var(--color-border-subtle)]"
+      // Its own width, never more than the panel. `w-full` for the older notes
+      // that carry no width — see ReleaseMedia.width.
+      style={media.width ? { width: media.width } : undefined}
+      className={`mt-2.5 max-w-full rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] ${
+        media.width ? "" : "w-full"
+      }`}
     />
   );
 }

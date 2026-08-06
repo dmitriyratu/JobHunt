@@ -11,6 +11,8 @@
  *   node scripts/release-notes.mjs --commit   # write and commit (what the hook does)
  *   node scripts/release-notes.mjs --dry-run  # print what it would write, touch nothing
  *   node scripts/release-notes.mjs --dry-run --since=b4669ea   # ...for an older range
+ *   node scripts/release-notes.mjs --require-scenes            # stop if a change wanted
+ *                                                              # a picture and had no scene
  *
  * Not every commit earns an entry. The model is asked first whether anything
  * changed that a person using the app would notice; a refactor answers no and
@@ -27,6 +29,9 @@ const RELEASES_PATH = join(ROOT, "src", "data", "releases.json");
 const PACKAGE_PATH = join(ROOT, "package.json");
 const SCENES_PATH = join(ROOT, "src", "fixtures", "scenes.json");
 const SHOOT_SCRIPT = join(ROOT, "scripts", "shoot-scenes.mjs");
+/** Scenes a release wanted and didn't have. Tracked, so they outlive the run
+    that noticed them — see reportSceneGaps. */
+const SCENE_GAPS_PATH = join(ROOT, "src", "data", "scene-gaps.json");
 
 /** The scenes a note can be illustrated with. Only ever grows when someone
     ships a feature and adds one, so a brand-new feature usually has no scene
@@ -48,6 +53,9 @@ const args = new Set(process.argv.slice(2));
 const shouldCommit = args.has("--commit");
 const dryRun = args.has("--dry-run");
 const allowMajor = args.has("--allow-major") || process.env.RELEASE_NOTES_ALLOW_MAJOR === "1";
+/** Stop rather than ship a note that wanted a picture and had no scene. */
+const requireScenes =
+  args.has("--require-scenes") || process.env.RELEASE_NOTES_REQUIRE_SCENES === "1";
 
 /**
  * Describe commits after this ref instead of after the last released one.
@@ -70,6 +78,11 @@ function git(...gitArgs) {
 
 function note(message) {
   process.stdout.write(`release-notes: ${message}\n`);
+}
+
+function fail(message) {
+  process.stderr.write(`release-notes: ${message}\n`);
+  process.exit(1);
 }
 
 /**
@@ -327,31 +340,71 @@ function describeChanges(context) {
 /**
  * Says which changes wanted a picture and had no scene to take one from.
  *
- * This is deliberately a report and never a failure. Whether a commit needed a
- * new scene is a judgement about what a reader would find hard to picture, and
- * nothing that runs before the commit can make it: a hook would have to guess
- * from file paths, and would cry wolf on every refactor that touched a
- * component. The one thing in this pipeline that *can* judge it is the model
- * that just read the diff and wrote the words — so it is asked, and what it
- * says is printed for you to act on or ignore.
+ * Still never a failure by default. Whether a commit needed a new scene is a
+ * judgement about what a reader would find hard to picture, and nothing that
+ * runs before the commit can make it: a hook would have to guess from file
+ * paths, and would cry wolf on every refactor that touched a component. The one
+ * thing in this pipeline that *can* judge it is the model that just read the
+ * diff and wrote the words — so it is asked.
  *
- * The nudge lands one release late by construction. That is the correct trade:
- * the alternative is blocking a commit on a screenshot, and the notes are the
- * product here — the pictures are a bonus.
+ * What changed is where the answer goes. It used to be printed and nothing
+ * else, which meant it scrolled past in a push hook nobody watches, and the
+ * gaps were invisible by the time anyone could act on them — so v0.4.0 shipped
+ * with its headline feature unillustrated and a lesser change carrying the only
+ * picture, purely because that scene happened to exist. The gaps are written to
+ * a tracked file now: they survive the run, they show up in a diff, and
+ * clearing one is deleting a line.
+ *
+ * `--require-scenes` turns the report into an exit code, for anyone who would
+ * rather the release stopped than shipped a note they meant to illustrate. Off
+ * by default, because the notes are the product and the pictures are a bonus.
  */
-function reportSceneGaps(changes) {
-  const gaps = changes.filter((change) => !change.scene && change.sceneGap);
+function reportSceneGaps(changes, version) {
+  const gaps = changes
+    .filter((change) => !change.scene && change.sceneGap)
+    .map((change) => ({ version, change: change.title, needs: change.sceneGap }));
+
+  if (!dryRun) recordSceneGaps(gaps, version);
   if (gaps.length === 0) return;
 
   note(`${gaps.length} change(s) wanted a screenshot and had no scene for it:`);
-  for (const change of gaps) {
-    note(`  · ${change.title} — would need: ${change.sceneGap}`);
+  for (const gap of gaps) {
+    note(`  · ${gap.change} — would need: ${gap.needs}`);
   }
-  note("  add one to src/fixtures/scenes.json + scenes.tsx to illustrate the next release");
+  note("  add one to src/fixtures/scenes.json + scenes.tsx, then re-run release:notes");
+  if (!dryRun) note(`  recorded in ${SCENE_GAPS_PATH.slice(ROOT.length + 1).replace(/\\/g, "/")}`);
+
+  if (requireScenes) {
+    fail(
+      "every change that wanted a picture must have a scene (--require-scenes). " +
+        "Author the scenes above, or drop the flag to ship the notes without them.",
+    );
+  }
+}
+
+/**
+ * The outstanding scene backlog, as a file rather than as scrollback.
+ *
+ * A hand-cleared list, deliberately. Nothing here can tell whether a scene
+ * someone just authored is the one a past release wanted — a gap is a sentence
+ * of English ("the profile dialog with both tabs"), not an id, so matching it
+ * against the manifest would be guesswork that either clears a line nobody
+ * addressed or leaves one that was. Deleting the line when you author the scene
+ * is the whole ceremony, and it happens in the same commit as the scene.
+ *
+ * Entries for the version being written are replaced rather than added to, so
+ * re-running notes for a release doesn't accumulate duplicates of its own gaps.
+ */
+function recordSceneGaps(gaps, version) {
+  const previous = existsSync(SCENE_GAPS_PATH)
+    ? JSON.parse(readFileSync(SCENE_GAPS_PATH, "utf8"))
+    : [];
+  const carried = previous.filter((gap) => gap.version !== version);
+  writeFileSync(SCENE_GAPS_PATH, `${JSON.stringify([...carried, ...gaps], null, 2)}\n`);
 }
 
 function illustrate(changes, version) {
-  reportSceneGaps(changes);
+  reportSceneGaps(changes, version);
   const wanted = [...new Set(changes.map((change) => change.scene).filter(Boolean))];
   const shot = new Set();
 
@@ -383,6 +436,9 @@ function illustrate(changes, version) {
         // addressed to the model choosing a scene ("use this for anything
         // about filtering") and would be nonsense read aloud.
         alt: spec?.alt ?? title,
+        // Carried so the modal can render the shot at the size it was composed
+        // at rather than stretching it to the panel — see ReleaseMedia.width.
+        ...(spec?.width ? { width: spec.width } : {}),
       },
     };
   });
@@ -429,7 +485,7 @@ function main() {
     for (const change of rawChanges) {
       if (change.scene) note(`would illustrate "${change.title}" with scene ${change.scene}`);
     }
-    reportSceneGaps(rawChanges);
+    reportSceneGaps(rawChanges, version);
     process.stdout.write(
       `${JSON.stringify({ version, headline: described.headline, summary: described.summary, changes: rawChanges }, null, 2)}\n`,
     );

@@ -28,6 +28,27 @@
     "click": []
   },
   {
+    "id": "job-facts-panel",
+    "description": "The panel beside a loaded posting listing what the posting itself states: the pay range at display size, then setup, location, type, level, team, sponsorship, travel and dates, with anything the posting never said shown as \"Not stated\". Use this for anything about pay, salary, location, remote or hybrid policy, or reading a posting's terms without hunting through its paragraphs.",
+    "alt": "A panel headed \"At a glance\" showing a pay range of $185k – $235k/yr with \"plus equity + bonus\" beneath it, then labelled rows for setup, location, type, level, team, sponsorship, travel, posted and apply-by, and a footnote saying the details were read from the posting.",
+    "width": 300,
+    "click": []
+  },
+  {
+    "id": "job-facts-panel-editing",
+    "description": "The same panel with its pay row opened for correction: amount boxes, a currency and period picker, and a note field. Use this for anything about fixing, overriding or correcting a detail the app read off the posting wrongly.",
+    "alt": "The \"At a glance\" panel with its pay row open for editing, showing two amount boxes reading 185000 and 235000, selectors for currency and period, a note field reading \"plus equity + bonus\", and Save and Cancel buttons.",
+    "width": 300,
+    "click": ["Edit pay"]
+  },
+  {
+    "id": "application-card",
+    "description": "One saved application as the applications rail draws it: company mark, role, the job's pay, setup and location as small chips, then its fit score and how far along it is. Use this for anything about the rail, switching between applications, or what a saved application shows at a glance.",
+    "alt": "An application card showing a company initial tile beside the role \"Staff Software Engineer, Payments Infrastructure\" at Northwind, chips reading $185k – $235k/yr, Hybrid and San Francisco CA +1, and a 72/100 score beside the word Analyzed.",
+    "width": 320,
+    "click": []
+  },
+  {
     "id": "resume-upload",
     "description": "The empty resume upload panel, before any document has been chosen. Use this for anything about uploading, choosing, or replacing the resume file itself.",
     "alt": "An empty upload panel with a dashed drop zone reading \"Drop your resume here or click to browse\", noting that PDF, DOCX and TXT are supported.",

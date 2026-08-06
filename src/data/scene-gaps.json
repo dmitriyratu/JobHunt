@@ -1,0 +1,8 @@
+[
+  {
+    "version": "0.4.0",
+    "change": "Your resume and your details, in one place",
+    "needs": "the profile dialog showing its Resume and Details tabs",
+    "blocker": "ProfileModal renders as a fixed overlay, which escapes the #scene box the screenshot crops to. Photographing it needs the stage to capture the viewport instead, or the modal to accept an inline variant."
+  }
+]
