@@ -4,5 +4,10 @@
     "change": "Your resume and your details, in one place",
     "needs": "the profile dialog showing its Resume and Details tabs",
     "blocker": "ProfileModal renders as a fixed overlay, which escapes the #scene box the screenshot crops to. Photographing it needs the stage to capture the viewport instead, or the modal to accept an inline variant."
+  },
+  {
+    "version": "0.5.0",
+    "change": "Pick a folder for your saved documents",
+    "needs": "Account settings' new save-folder section"
   }
 ]
