@@ -1,5 +1,38 @@
 [
   {
+    "version": "0.5.0",
+    "date": "2026-08-07",
+    "headline": "Choose where your resumes and letters get saved",
+    "summary": "In Chrome or Edge, you can now pick a real folder for JobHunt to file your generated resumes and letters into by company and role, and change that choice any time from Account settings. This release also smooths out several rough edges in how your documents get generated and displayed.",
+    "changes": [
+      {
+        "title": "Pick a folder for your saved documents",
+        "detail": "The first time you download a resume or letter, JobHunt asks you to choose a folder and files every document after that under the company and role automatically. You can change the folder, or switch back to ordinary browser downloads, any time from Account settings."
+      },
+      {
+        "title": "Generating a new document now shows it right away",
+        "detail": "Making a second document for the same application — a CV right after a resume, say — used to leave the old one on screen until you clicked rebuild yourself. The one you just generated now appears automatically."
+      },
+      {
+        "title": "Your resume-vs-CV pick can't get swapped out from under you",
+        "detail": "If JobHunt's own recommendation came back after you'd already chosen resume or CV yourself, it used to quietly overwrite your choice. It no longer can."
+      },
+      {
+        "title": "Long work histories make better use of the page",
+        "detail": "When your experience is too long for one page, JobHunt used to shrink every job to a single bullet. It now keeps your current role and the one before it properly explained, and trims your least relevant older jobs to a single dated line instead — and it reclaimed the wide, often-empty date column down the left side of every resume, freeing that space for your actual content."
+      },
+      {
+        "title": "Bulleted lines starting with a bracket no longer break",
+        "detail": "A bullet point that opened with a bracketed word, like \"[Python] built...\", used to come out mangled in the typeset document. It now prints correctly."
+      },
+      {
+        "title": "More deliberate, more honest summaries",
+        "detail": "Generated summaries now follow much more specific guidance on what makes a strong opening pitch, and are checked against blending facts from different jobs into one impressive-sounding but misleading line. Standout credentials the posting never asked for, like a patent or an award, are now kept rather than risking being trimmed as irrelevant."
+      }
+    ],
+    "commit": "13ef26b743289a66dc84cddd8fac0cd7533c6718"
+  },
+  {
     "version": "0.4.1",
     "date": "2026-08-05",
     "headline": "Screenshots in the What's New panel now look right",
