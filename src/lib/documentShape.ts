@@ -99,7 +99,7 @@ const CATALOGUE: SectionDef[] = [
     key: "summary",
     title: "Summary",
     layout: "prose",
-    hint: "Two to three lines, no first person. Lead with what this posting cares about most.",
+    hint: "Two to three lines, 40 to 80 words, no first person. Its job is to be impressive and relevant enough that the reader carries on into the entries. Roughly in order: the posting's own job title where the source supports it; years of relevant experience with the domains they were spent in, never the years alone; the two or three capabilities this posting asks for most, in its vocabulary; and ONE quantified result, the strongest they have, landing by the second sentence.",
     shapes: {
       resume: { band: 0, core: true },
       federal: {
@@ -110,13 +110,15 @@ const CATALOGUE: SectionDef[] = [
       },
       legal: {
         band: 0,
+        core: true,
         title: "Summary",
-        hint: "Two to three lines, no first person. Optional and frequently omitted: an experienced lawyer's document leads with admissions and practice. Include only when the candidate is changing practice area and the shift needs explaining.",
+        hint: "Two to three lines, no first person. A lawyer's document argues through admissions, practice area and matters, all of which are printed below, so this section earns its place only by saying what those cannot: the practice the candidate is moving toward, the kind of matters they want, or the thread running through a varied record. Name practice areas and matter types. Never adjectives about advocacy.",
       },
       creative: {
         band: 0,
+        core: true,
         title: "Profile",
-        hint: "Two to three lines, no first person, naming discipline and the kind of work sought. Optional — a credits list usually speaks for itself.",
+        hint: "Two to three lines, no first person, naming discipline and the kind of work sought. The credits below carry the record, so this says what a list cannot: the work the candidate wants next, and the through-line in what they have already done.",
       },
     },
   },
@@ -124,15 +126,15 @@ const CATALOGUE: SectionDef[] = [
     key: "profile",
     title: "Professional Profile",
     layout: "prose",
-    hint: "Three or four lines at most, no first person, naming subspecialty focus and the kind of practice sought. Include only when the posting is a specific job rather than a general academic application. A CV earns its keep in the sections below, so keep this short or omit it.",
-    shapes: { cv: { band: 0 } },
+    hint: "Three or four lines at most, no first person, naming subspecialty focus and the kind of practice sought. A CV argues through the sections below and runs long, so keep this tight: it exists to state in three lines the focus a reader would otherwise have to infer from thirty pages.",
+    shapes: { cv: { band: 0, core: true } },
   },
   {
     key: "interests",
     title: "Research Interests",
     layout: "prose",
     hint: "Two or three lines naming the research programme: the questions, the methods, the field. No first person. Only interests the source document already evidences through published or funded work — this is a summary of a research record, not a statement of aspiration.",
-    shapes: { academic: { band: 0 } },
+    shapes: { academic: { band: 0, core: true } },
   },
   {
     key: "eligibility",

@@ -32,6 +32,13 @@ const TEX_NAME = "resume.tex";
 export type CompileSuccess = {
   ok: true;
   pdf: Buffer;
+  /**
+   * Pages in the PDF, or 0 when the document built but could not be counted.
+   *
+   * Never invented. Everything downstream — the caption in the document pane,
+   * the page-fitting search — treats 0 as "unknown" and says or does nothing,
+   * which is the only honest thing to do with a length nobody measured.
+   */
   pages: number;
   /**
    * The SyncTeX log, uncompressed, or "" if the engine didn't write one.
@@ -248,7 +255,8 @@ function firstLine(log: string): string {
 // --- Page counting ----------------------------------------------------------
 
 /**
- * How many pages the PDF has, so the UI can say "2 pages, target 1".
+ * How many pages the PDF has, so the UI can say "2 pages, target 1", and 0 when
+ * it could not be established.
  *
  * Parsed properly rather than pattern-matched on the raw bytes. An earlier
  * version scanned for the page tree's `/Type /Pages … /Count n`, which never
@@ -257,18 +265,47 @@ function firstLine(log: string): string {
  * returned 1 for every document, and a two-page resume against a one-page
  * target reported no problem at all.
  *
- * pdf-parse is already a dependency of the upload path and already declared in
- * serverExternalPackages. `max: 1` stops it rendering text for pages we're not
- * going to read — the page count comes from the document, not the render.
+ * WHY NOT pdf-parse, WHICH THE UPLOAD PATH USES
+ * It reads Tectonic's output unreliably. pdf-parse pins pdf.js 1.10.100, from
+ * 2018, and on a PDF this engine wrote it throws "Invalid PDF structure" —
+ * reproducibly for a given document, and only as the first parse a process
+ * does, which is what made it look intermittent. It is not intermittent from
+ * where the applicant sits: a dev server that reloaded, or a serverless
+ * instance answering its first request, gets a fresh process every time.
+ *
+ * pdfjs-dist is the same library, current, and already a dependency — the
+ * preview renders the document with it. It reads everything Tectonic produces.
+ *
+ * WHY A FAILURE IS 0 AND NOT 1
+ * Because 1 is a lie the rest of the app believes. It satisfies the commonest
+ * target, so the page-fitting search concludes on its first measurement that
+ * the document already fits and cuts nothing, and the pane captions a two-page
+ * resume "1 page · target 1". 0 means "not measured": the caption hides and
+ * fitToPages leaves the document alone rather than trimming it blind.
+ *
+ * The bytes are copied because pdf.js takes ownership of the array it is
+ * given, and this one is also the PDF being returned to the caller.
  */
 async function countPages(bytes: Buffer): Promise<number> {
   try {
-    const pdfParse = (await import("pdf-parse")).default;
-    const parsed = await pdfParse(bytes, { max: 1 });
-    return parsed.numpages > 0 ? parsed.numpages : 1;
-  } catch {
-    // A page count is a nicety; never fail a good compile over it.
-    return 1;
+    const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const doc = await getDocument({
+      data: new Uint8Array(bytes),
+      // Nothing here is rendered, so none of what these enable is wanted: they
+      // only cost time and, in the case of eval, reach for something a server
+      // has no business running for a page count.
+      isEvalSupported: false,
+      useSystemFonts: false,
+    }).promise;
+    const pages = doc.numPages;
+    await doc.destroy();
+    return pages > 0 ? pages : 0;
+  } catch (err) {
+    // A page count is a nicety; never fail a good compile over it. But it is
+    // also the input to the page-fitting search, so a count that could not be
+    // taken says so rather than passing for one.
+    console.error("[latex] could not count pages:", err);
+    return 0;
   }
 }
 

@@ -12,7 +12,12 @@ import type { FitSummary, GroundingSummary } from "@/components/ChangeAuditModal
 import StepNav from "@/components/StepNav";
 import { withAssertedFacts } from "@/lib/assertedFacts";
 import { resumeFilename } from "@/lib/filePaths";
-import { saveToDownloads } from "@/lib/saveDownload";
+import {
+  resolveDestination,
+  saveToDownloads,
+  type Destination,
+  type SaveResult,
+} from "@/lib/saveDownload";
 import { buildResumeBlob } from "@/lib/resumeDocx";
 import { useChatDock, useRegisterChat } from "@/lib/chatDock";
 import { applyTexProposal, renderResumeLatex } from "@/lib/resumeLatex";
@@ -28,13 +33,13 @@ import type { DocumentShape, ResumeChatMessage } from "@/types";
 
 export default function ResumePage() {
   const { state, update, patch, setState, hydrated } = useJobHuntState();
-  const { settings, saveSettings } = useSettings();
+  const { settings, settingsLoaded, saveSettings } = useSettings();
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
   const [downloading, setDownloading] = useState(false);
-  // The last file written, with whether it went to a real folder — the pane
-  // offers to open it, and there is nothing to open behind a browser download.
-  const [saved, setSaved] = useState<{ path: string; usedFolders: boolean } | null>(null);
+  // The last file written, with where it went — the pane names the folder, or
+  // the file, when there was no folder to write into.
+  const [saved, setSaved] = useState<SaveResult | null>(null);
   // Shared with the applications rail, which is where the toggle lives.
   const { open: chatOpen, setOpen: setChatOpen, toggle: toggleChat } = useChatDock();
   const [engineHint, setEngineHint] = useState("");
@@ -59,7 +64,14 @@ export default function ResumePage() {
   >([]);
 
   const { resumeTex } = state;
-  const compile = useLatexCompile(resumeTex, Boolean(resumeTex) && !engineHint);
+  // `generatedAt` is stamped fresh by draftToResume on every generation and is
+  // untouched by editing, so it is exactly the line between "a new document,
+  // build it" and "an edit, wait to be asked".
+  const compile = useLatexCompile(
+    resumeTex,
+    Boolean(resumeTex) && !engineHint,
+    state.tailoredResume?.generatedAt ?? ""
+  );
 
   // Asked once on mount so a machine with no TeX engine says so up front,
   // rather than letting the first keystroke fail with what reads like a
@@ -94,13 +106,17 @@ export default function ResumePage() {
   // --- Document triage ------------------------------------------------------
 
   /**
-   * Reads the posting to decide resume vs CV, once per application.
+   * The fallback read, for an application that reaches the picker without a
+   * recommendation.
    *
-   * Runs on arrival rather than at generation because the answer is needed
-   * before then: the tailoring route builds its section schema from the shape,
-   * and the Length control only applies to one of the two. Gated on a null
-   * shape, so switching between saved applications doesn't re-spend on one
-   * that has already been read.
+   * The question is normally settled at the posting step, which is where the
+   * answer comes from — see the triage effect on the home page. Two ways an
+   * application still arrives here without one: a posting saved before that
+   * step existed, and a read that failed there, which is silent because that
+   * page has nowhere to show it.
+   *
+   * Gated on a null shape, so it is a no-op on everything already decided and
+   * switching between saved applications doesn't re-spend on one already read.
    */
   const { id: sessionId, resumeText, jobDescription, recommendedShape } = state;
   const needsTriage =
@@ -116,7 +132,13 @@ export default function ResumePage() {
   }, [sessionId]);
 
   useEffect(() => {
-    if (!hydrated || !needsTriage) return;
+    // settingsLoaded, not just hydrated: the two hydrate independently. The
+    // session store lives in a provider above this page, so arriving here by
+    // in-app navigation finds it already hydrated while this page's own
+    // useSettings is one effect away from reading localStorage — and effects
+    // in a flush see the render that queued them, so this one would read
+    // DEFAULT_SETTINGS and post no key. See useSettings for the same warning.
+    if (!hydrated || !settingsLoaded || !needsTriage) return;
 
     let cancelled = false;
     setTriageError("");
@@ -160,10 +182,20 @@ export default function ResumePage() {
     return () => {
       cancelled = true;
     };
-    // settings.apiKey is read, not depended on: it is already loaded by the
-    // time this can run, and re-firing on a settings save would re-spend.
+    // settings.apiKey is read but deliberately not depended on: the gate above
+    // guarantees it has loaded, and re-firing when the key is later edited
+    // would re-spend on an application already read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, needsTriage, resumeText, jobDescription, sessionId, patch, triageNonce]);
+  }, [
+    hydrated,
+    settingsLoaded,
+    needsTriage,
+    resumeText,
+    jobDescription,
+    sessionId,
+    patch,
+    triageNonce,
+  ]);
 
   const handleRetryTriage = useCallback(() => {
     setTriageError("");
@@ -345,7 +377,7 @@ export default function ResumePage() {
 
   /** Shared spine for both formats. */
   const saveAs = useCallback(
-    async (build: () => Promise<Blob>, extension: string) => {
+    async (destination: Destination, build: () => Promise<Blob>, extension: string) => {
       setDownloading(true);
       setSaved(null);
       try {
@@ -354,7 +386,8 @@ export default function ResumePage() {
           blob,
           resolveCompany(state),
           state.detectedJobTitle,
-          resumeFilename(settings.profile.fullName, extension)
+          resumeFilename(settings.profile.fullName, extension),
+          destination
         );
         setSaved(result);
       } catch (err) {
@@ -366,17 +399,28 @@ export default function ResumePage() {
     [state, settings.profile]
   );
 
-  const handleDownloadPdf = useCallback(() => {
+  /*
+   * Both handlers ask where the file goes *first*, before a byte is fetched or
+   * built.
+   *
+   * The first time, that question opens a folder picker, and a picker only
+   * opens while the click that asked for it is still recent. Fetching the PDF
+   * or running the .docx builder first would put a network round trip or a
+   * second of work in front of the dialog, and Chrome would refuse to show it.
+   */
+  const handleDownloadPdf = useCallback(async () => {
     if (!compile.pdfUrl) return;
+    const destination = await resolveDestination();
     // The bytes already on screen, not a fresh compile — you send what you
     // reviewed.
-    return saveAs(() => fetch(compile.pdfUrl).then((r) => r.blob()), "pdf");
+    return saveAs(destination, () => fetch(compile.pdfUrl).then((r) => r.blob()), "pdf");
   }, [compile.pdfUrl, saveAs]);
 
-  const handleDownloadDocx = useCallback(() => {
+  const handleDownloadDocx = useCallback(async () => {
     if (!state.tailoredResume) return;
     const resume = state.tailoredResume;
-    return saveAs(() => buildResumeBlob(resume, settings.profile), "docx");
+    const destination = await resolveDestination();
+    return saveAs(destination, () => buildResumeBlob(resume, settings.profile), "docx");
   }, [state.tailoredResume, settings.profile, saveAs]);
 
   // --- Skipping -------------------------------------------------------------

@@ -139,6 +139,12 @@ export default function TemplatePreview({ shape, muted = false }: Props) {
   // guaranteed to contain. The catalogue is deliberately larger than any single
   // document uses, so previewing it in catalogue order would promise optional
   // sections that this posting may well not produce.
+  //
+  // This leads with each shape's band-0 opening only because every one of them
+  // is core. A band-0 section that was not would sort to the back and the
+  // preview would open on the shape's second section, which is what these
+  // previews did while the legal, creative, cv and academic openings were
+  // optional.
   const shown = [...specs].sort((a, b) => Number(b.core) - Number(a.core)).slice(0, 5);
   const overflows = specs.length > shown.length;
 

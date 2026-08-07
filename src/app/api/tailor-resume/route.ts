@@ -42,6 +42,10 @@ THE MATCH REPORT IS YOUR BRIEF. It is a requirement-by-requirement analysis of t
 - Bullets that evidence nothing in the report are the first candidates to drop.
 - Never mention the report, the posting, or the tailoring itself in the output.
 
+STANDOUTS are credentials this posting never asked for but a hiring team would prize anyway. They are already in the source document — the report is pointing at them, not asking you to write them in:
+- Keep every one of them. The rule above about dropping what evidences nothing is about requirements; a standout evidences no requirement by definition, and cutting it is the one mistake this list exists to prevent.
+- Leave each one under the section it already belongs to, worded close to the source. A patent or a founded company argues by being what it is. Adjectives, a promotion into the summary, or a second mention elsewhere all make it read as padding.
+
 THE SECTION LIST IS FIXED. This document has exactly these sections, in this order. You fill them in; you do not choose them.
 
 {{SECTIONS}}
@@ -114,8 +118,31 @@ THE GROUNDING RULE. Every bullet and every prose section carries "sources": the 
 - If you cannot ground a rewrite, return the original unchanged. Unchanged is always better than embellished.
 - RETURN ONLY WHAT YOU KEEP. A bullet you decided against is simply absent. Do not return it marked as cut, do not return it emptied, do not leave a placeholder. The app tracks what you left behind by comparing your citations against the source, so nothing is lost by omitting it and a long document costs a fraction as much to write.
 - A prose section is written from several lines at once. Cite the IDs it rests on. Never return an empty "sources" — if you cannot point at what a sentence is built from, do not write that sentence.
+- A prose section draws on more lines than a bullet does, which makes it the easiest place in the document to mislead without stating a single false fact. Its figures have to keep their attachments: see A CLAIM CARRIES ITS ATTACHMENTS below, which governs prose everywhere in this document.
 
 {{LENGTH}}
+
+HOW A PROSE SECTION READS. It opens the document, and it is the one section written rather than listed. Everything here serves the job it is doing for the person reading.
+
+Before writing one, ask what a colleague would say if they had twenty seconds to describe this candidate to somebody reading this document. That sentence is the section. It is never "a results-driven professional with strong communication skills"; it is always something specific this person built, ran, fixed, found or is known for.
+
+THREE PRINCIPLES. Every rule below is one of these applied to a case. A case not listed is decided by going back to them.
+
+1. DO THE JOB THE ENTRIES CANNOT, FOR THE PERSON ACTUALLY READING. Who that is differs by document, and the section's own description above says which of these applies:
+- A resume, a legal resume or a creative profile is read by somebody deciding within seconds whether to continue. The job is to earn that decision: lead with the most impressive thing the candidate has done that this posting cares about. Impressive AND relevant — the largest number in the document is worth nothing here if the posting has no use for it, and the most on-topic line is worth nothing if it is unremarkable.
+- A federal resume is read by somebody rating it against a published qualifications standard, not deciding whether to keep reading. The job is to make the specialised experience they are scoring impossible to miss, in the announcement's own words.
+- A CV or an academic document is read by somebody who will read all of it. The job is orientation: state in a few lines the focus they would otherwise have to infer from thirty pages, and claim no interest the record does not already evidence.
+In all of them, restating something an entry below also says is NOT a fault: the strongest material belongs in both places, and a reader who never reaches that entry is precisely who this section exists for. The fault is spending the space on what the page gives away free. A run of employers, dates or job titles is navigation rather than a claim, and the entries print it in bold a centimetre lower.
+
+2. DIFFERENTIATION, NOT ACCURACY. Of every clause ask: could another candidate with a similar background have written this exact sentence? "Detail-oriented project manager with a track record of success" could be written by ten thousand people, which is precisely why it argues for none of them. "Delivered 23 consecutive projects under budget" could be written by one. Accuracy is not the bar; plenty of true sentences differentiate nobody. Where the source supports nothing specific, write short — this section always prints, and one specific line beats three general ones.
+
+3. A CLAIM CARRIES ITS ATTACHMENTS. A fact is not only its content, it is what that content was attached to: whose work, which system, which population, which category, which period. A rewrite preserves the content and quietly breaks the attachment, which is how a summary assembled entirely from true statements comes out false. Three ways it happens, and this principle decides any fourth:
+- POOLED. "Built payments platforms delivering $2B in annual volume, $3M in new revenue, across 14 markets and 400K users" takes four figures from two different jobs and gives them one subject. Every number is the candidate's; the join is yours, and the join is the part that is false.
+- RE-RELATED. A platform that monitors 400K users has 400K subjects, not 400K users of the candidate's work. "Deployed across 400K users" claims the second.
+- RE-CATEGORISED. "Reduced detection latency from 15 minutes to 2 seconds" is not "low-latency inference", which is a different discipline. Name only capabilities the document evidences, in a bullet or in the skills it lists.
+Attribute a figure by naming the work that produced it — "a reconciliation engine now clearing $2B a year" — which is complete without an employer's name in it.
+
+WHAT GOES IN ONE. Where it summarises a working career, roughly this order: the posting's own job title, where the candidate's document supports it and their real title otherwise; years of relevant experience with the domains they were spent in, never the bare years; the two or three capabilities this posting asks for most, in its vocabulary rather than the candidate's synonyms; and ONE quantified result, the strongest rather than all of them. The result is not a footer — in two or three sentences it should have landed by the second. Where the section is about a research record rather than a career, the description above governs instead and this order does not apply: there it is the questions, the methods and the field, and a quantified result is usually not what the reader wants.
 
 HOW BULLETS READ. This is a different register from prose:
 - Start with a past-tense verb. "Rebuilt", "Led", "Cut", "Shipped", "Owned".

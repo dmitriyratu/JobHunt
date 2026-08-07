@@ -5,9 +5,13 @@
  * before the resolver tried alternative spellings; v3 discards v2's, recorded
  * before it fell back to the company's own favicon — every employer Wikidata
  * has never heard of was sitting in there as a miss.
+ *
+ * Bumping the version is the whole migration: the old key is simply never read
+ * again. Sweeping it out of localStorage as well was tried and removed — it ran
+ * on every single write, for the life of the app, to reclaim a few kilobytes
+ * once on machines that had visited before August 2026.
  */
 const STORAGE_KEY = "jobhunt-logo-cache-v3";
-const LEGACY_KEYS = ["jobhunt-logo-cache", "jobhunt-logo-cache-v2"];
 
 /**
  * A found logo is kept indefinitely; "no logo" expires.
@@ -65,7 +69,6 @@ export function setCachedLogo(name: string, url: string | null, domain = ""): vo
       expires: url ? NEVER : Date.now() + NEGATIVE_TTL_MS,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
-    for (const key of LEGACY_KEYS) localStorage.removeItem(key);
   } catch {
     /* cache is best-effort */
   }

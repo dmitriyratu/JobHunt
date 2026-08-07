@@ -22,10 +22,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * A superseded compile is aborted, not awaited. Pressing the button twice
  * should show the second document, not work through the first.
  *
- * The first build is automatic. Source arrives already generated, so requiring
- * a press to see anything at all would make the pane look broken on arrival.
- * Everything after that is `dirty` — source that differs from what is on
- * screen — and waits to be asked.
+ * A generated document builds automatically. Source arrives already generated,
+ * so requiring a press to see anything at all would make the pane look broken
+ * on arrival. Edits after that are `dirty` — source that differs from what is
+ * on screen — and wait to be asked.
+ *
+ * "A generated document", not "the first one". This was a per-mount boolean,
+ * and the pane is keyed on the application rather than on the document, so
+ * generating a second document in the same application auto-built nothing: the
+ * new source was stored, the previous PDF stayed on screen, and the only hint
+ * was the rebuild button changing colour. Generate a CV and then a resume and
+ * you were shown the CV; do it in the other order and you were shown the
+ * resume. It read as the picker ignoring the choice, because what you always
+ * got back was whichever document you had generated first.
  */
 
 export type CompileState = {
@@ -58,7 +67,16 @@ export type CompileState = {
   compile: () => void;
 };
 
-export function useLatexCompile(tex: string, enabled: boolean): CompileState {
+/**
+ * @param documentId Identifies the document `tex` belongs to, so a newly
+ *   generated one can build itself while an edited one still waits to be asked.
+ *   Editing never changes it; generating always does.
+ */
+export function useLatexCompile(
+  tex: string,
+  enabled: boolean,
+  documentId: string
+): CompileState {
   const [pdfUrl, setPdfUrl] = useState("");
   const [pages, setPages] = useState(0);
   const [compiling, setCompiling] = useState(false);
@@ -140,15 +158,19 @@ export function useLatexCompile(tex: string, enabled: boolean): CompileState {
     }
   }, []);
 
-  // The one build nobody asks for. Guarded by a ref rather than by builtTex so
-  // a first compile that fails doesn't leave the condition true and retry
-  // forever.
-  const autoRanRef = useRef(false);
+  // The one build nobody asks for, once per document.
+  //
+  // Records the id BEFORE compiling, and in a ref rather than in state, for the
+  // same reason the boolean did: a build that fails must not leave the
+  // condition true and retry forever. Null is not a document id, so the first
+  // one always qualifies.
+  const autoBuiltRef = useRef<string | null>(null);
   useEffect(() => {
-    if (autoRanRef.current || !enabled || !tex.trim()) return;
-    autoRanRef.current = true;
+    if (!enabled || !tex.trim()) return;
+    if (autoBuiltRef.current === documentId) return;
+    autoBuiltRef.current = documentId;
     void compile();
-  }, [enabled, tex, compile]);
+  }, [enabled, tex, compile, documentId]);
 
   // Only on unmount: the last object URL would otherwise outlive the page.
   useEffect(() => {

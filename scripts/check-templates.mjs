@@ -168,11 +168,15 @@ function fixtureSections(shape) {
     case "cv":
       return [
         education,
+        // Dated entries, matching the spec in documentShape. This carried
+        // `items` long after licensure stopped being a plain list, and the
+        // renderer had a fallback that printed them — so the check was
+        // exercising a shape the generator no longer produces, and passing.
         section("licensure", {
-          items: [
-            "Massachusetts Medical License #123456, active through 2027",
-            "American Board of Pediatrics, certified 2022",
-            "APHON Pediatric Chemotherapy & Biotherapy Provider, current through 2026",
+          entries: [
+            entry("l1", "Massachusetts Medical License #123456", "Board of Registration in Medicine", "", "2021", "2027", []),
+            entry("l2", "American Board of Pediatrics", "ABP", "", "2022", "", []),
+            entry("l3", "APHON Pediatric Chemotherapy & Biotherapy Provider", "APHON", "", "2023", "2026", []),
           ],
         }),
         experience,
@@ -386,8 +390,11 @@ function checkText(label, text, expected, corpus, failures) {
   // on it would only pressure the fixture into avoiding the letter f.
   const norm = (s) => s.replace(/\s+/g, " ").replace(/\s+([)\]}])/g, "$1").toLowerCase();
   const flat = norm(text);
+  // An array of alternatives passes if any one of them is present. Used for
+  // rows whose halves may legitimately extract in either order — see gridRows.
   for (const needle of expected) {
-    if (!flat.includes(norm(needle))) {
+    const alternatives = Array.isArray(needle) ? needle : [needle];
+    if (!alternatives.some((a) => flat.includes(norm(a)))) {
       failures.push(`${label}: missing ${JSON.stringify(needle)}`);
     }
   }
@@ -473,19 +480,47 @@ async function main() {
       try {
         const { texts, pages: n } = await extractAll(pdfPath);
         pages = n;
-        // The two-column rows are asserted as "<left> <right>" on purpose. The
-        // columns are separate positioned runs in the PDF and an extractor has
-        // to infer the space between them; pdf-parse infers nothing, so without
-        // this the document extracts as "2015 - 2019Doctor of Medicine" and
-        // still passes every other check here.
+        // Rows whose two halves are separate positioned runs in the PDF, with
+        // only glue between them. An extractor has to infer the space, and
+        // pdf-parse infers nothing, so without this the document extracts as
+        // "2015 - 2019Doctor of Medicine" and still passes every other check.
+        //
+        // A date and its heading are asserted in EITHER order. They share a
+        // line, with the date ranged right (resumeLatex note 3), and which one
+        // an extractor emits first is its own business: pdf-parse, pdfjs-dist
+        // and pypdf all currently read heading-then-date. Pinning one order
+        // would fail a document that is perfectly readable — what matters is
+        // that the two are adjacent at all, and that there is a space between
+        // them. A label and its values are still asserted left-to-right,
+        // because those genuinely are two columns.
         const gridRows = [];
         for (const s of sections) {
           for (const e of s.entries) {
             const dates = [e.startDate, e.endDate].map((d) => d.trim()).filter(Boolean).join(" – ");
-            if (dates) gridRows.push(`${dates} ${e.heading}`);
+            if (dates) gridRows.push([`${dates} ${e.heading}`, `${e.heading} ${dates}`]);
           }
           for (const g of s.keywords.value) {
             if (g.label.trim() && g.items.length) gridRows.push(`${g.label} ${g.items.join(" · ")}`);
+          }
+        }
+
+        // A bullet that opens with a bracket must still open with one. \item
+        // takes an optional [label], so "[Immunophenotyping] of leukemia..."
+        // renders as an item *labelled* "Immunophenotyping" unless the renderer
+        // shields it — the brackets are eaten and the words move into the
+        // marker's position. Nothing here noticed for as long as bullets
+        // indented an inch and a third, because a label that far in still
+        // landed on the page; the fixture has carried a bracketed bullet the
+        // whole time. Assert the opening bracket survives, per shape.
+        const bracketed = [];
+        for (const s of sections) {
+          for (const e of s.entries) {
+            for (const b of e.bullets ?? []) {
+              const v = (b.value ?? "").trim();
+              if (v.startsWith("[") && v.includes("]")) {
+                bracketed.push(v.slice(0, v.indexOf("]") + 1));
+              }
+            }
           }
         }
 
@@ -499,6 +534,7 @@ async function main() {
           "NPI 1234567890",
           ...sections.map((s) => specFor(shape, s.key)?.title).filter(Boolean),
           ...gridRows,
+          ...bracketed,
         ];
         const corpus = JSON.stringify({ PROFILE, sections }).toLowerCase();
         for (const [label, text] of Object.entries(texts)) {

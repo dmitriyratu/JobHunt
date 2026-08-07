@@ -177,18 +177,6 @@ export function draftToResume(
 
 // --- Legacy migration -------------------------------------------------------
 
-type LegacyResume = {
-  summary?: LegacyGrounded;
-  skills?: LegacyField<unknown>;
-  roles?: {
-    id: string; title: string; company: string; location: string;
-    startDate: string; endDate: string; bullets: LegacyBullet[];
-  }[];
-  education?: { id: string; credential: string; institution: string; location: string; year: string }[];
-  certifications?: string[];
-  pageTarget?: ResumePageTarget;
-};
-
 /** The pre-simplification value shape: `change` and `resolution` alongside the pair. */
 type LegacyField<T> = {
   value: T;
@@ -250,81 +238,56 @@ function asBullet(b: LegacyBullet): ResumeBullet {
 /**
  * Brings a stored resume onto the current shape.
  *
- * Two generations back it had fixed `summary`/`skills`/`roles`/`education`
- * fields instead of sections, and before that skills were a bare string[]. One
- * generation back every value carried `change` and `resolution`. Any of those
- * would reach a renderer that no longer expects them. Bumping STORE_VERSION
- * would fix it too, but that discards every saved application to solve a shape
- * problem.
+ * One generation back every value carried `change` and `resolution`, and skills
+ * were a bare string[]; those still arrive and are still repaired below, because
+ * the repair is written back — useAppState normalises on load and the store is
+ * persisted on the next save, so a document is only ever one visit away from
+ * being current.
+ *
+ * Two generations back a resume had fixed `summary`/`skills`/`roles`/`education`
+ * fields instead of a `sections` array. That converter has been removed: it was
+ * reachable only by a store last written between the 26th and 31st of July that
+ * has not been opened since, and rebuilding a whole document shape to serve it
+ * cost more than the case was worth. Such a resume now reads as null — the
+ * application shows as not yet generated and regenerating it produces a current
+ * one, which is a clean failure rather than a renderer meeting fields it does
+ * not know.
+ *
+ * Bumping STORE_VERSION would also have retired it, and is still the wrong tool:
+ * loadStore discards the entire store on a version mismatch, so it would take
+ * every saved application with it.
  */
 export function normalizeTailoredResume(
   resume: TailoredResume | null
 ): TailoredResume | null {
   if (!resume) return null;
-
-  if (Array.isArray(resume.sections)) {
-    return {
-      ...resume,
-      shape: resume.shape ?? "resume",
-      sections: resume.sections.map((s) => {
-        const legacy = s as ResumeSection & {
-          prose?: LegacyGrounded;
-          keywords?: LegacyField<unknown>;
-          entries?: (ResumeEntry & { bullets?: LegacyBullet[] })[];
-        };
-        return {
-          key: s.key,
-          prose: legacy.prose ? asGrounded(legacy.prose) : undefined,
-          keywords: legacy.keywords
-            ? {
-                value: asGroups(legacy.keywords.value),
-                source: asGroups(legacy.keywords.source),
-              }
-            : undefined,
-          entries: legacy.entries?.map((e) => ({
-            ...e,
-            bullets: (e.bullets ?? []).map(asBullet),
-          })),
-          items: s.items,
-        };
-      }),
-    };
-  }
-
-  const legacy = resume as unknown as LegacyResume;
-
-  const sections: ResumeSection[] = [
-    { key: "summary", prose: asGrounded(legacy.summary) },
-    {
-      key: "skills",
-      keywords: {
-        value: asGroups(legacy.skills?.value),
-        source: asGroups(legacy.skills?.source),
-      },
-    },
-    {
-      key: "experience",
-      entries: (legacy.roles ?? []).map((r) => ({
-        id: r.id, heading: r.title, organization: r.company, location: r.location,
-        startDate: r.startDate, endDate: r.endDate,
-        bullets: (r.bullets ?? []).map(asBullet),
-      })),
-    },
-    {
-      key: "education",
-      entries: (legacy.education ?? []).map((e) => ({
-        id: e.id, heading: e.credential, organization: e.institution, location: e.location,
-        startDate: "", endDate: e.year, bullets: [],
-      })),
-    },
-    { key: "certifications", items: legacy.certifications ?? [] },
-  ].filter(sectionHasContent);
+  if (!Array.isArray(resume.sections)) return null;
 
   return {
-    shape: "resume",
-    sections,
-    pageTarget: legacy.pageTarget ?? 1,
-    generatedAt: resume.generatedAt ?? new Date().toISOString(),
+    ...resume,
+    shape: resume.shape ?? "resume",
+    sections: resume.sections.map((s) => {
+      const legacy = s as ResumeSection & {
+        prose?: LegacyGrounded;
+        keywords?: LegacyField<unknown>;
+        entries?: (ResumeEntry & { bullets?: LegacyBullet[] })[];
+      };
+      return {
+        key: s.key,
+        prose: legacy.prose ? asGrounded(legacy.prose) : undefined,
+        keywords: legacy.keywords
+          ? {
+              value: asGroups(legacy.keywords.value),
+              source: asGroups(legacy.keywords.source),
+            }
+          : undefined,
+        entries: legacy.entries?.map((e) => ({
+          ...e,
+          bullets: (e.bullets ?? []).map(asBullet),
+        })),
+        items: s.items,
+      };
+    }),
   };
 }
 

@@ -34,9 +34,20 @@ import type {
  * It never edits a line, so nothing it produces needs re-checking. It never
  * takes a surviving entry below one bullet — a role trimmed until it says
  * nothing should be collapsed to a line of history instead, which is what
- * collapseWeakest is for. And it never leaves the page emptier than it has to:
- * the search below looks for the MOST content that fits, not the first amount
- * that happens to.
+ * collapseWeakest is for. It never takes the newest two roles that far at all,
+ * whatever they argue: see RECENT_FLOORS. And it never leaves the page emptier
+ * than it has to: the search below looks for the MOST content that fits, not
+ * the first amount that happens to.
+ *
+ * THE TWO QUESTIONS IT ANSWERS, IN ORDER
+ * How the page is shared out, and who is on it. Almost everything here is the
+ * first — bullets, keyword tails, a sentence of summary, given up in the order
+ * a person would give them up. That alone produced a characteristic bad
+ * document: asked for one page it would leave five jobs standing with a single
+ * bullet each, because sharing the page out is the only move it had. So the
+ * last step asks the second question, demoting the role that argues least to a
+ * dated line and handing what that frees to the roles that argue most — and
+ * only when the trade measurably pays. See the demotion step in fitToPages.
  */
 
 /**
@@ -64,6 +75,38 @@ import type {
 const MAX_ROUNDS = 8;
 /** No surviving entry drops below this. A role with nothing to say is collapsed. */
 const FLOOR = 1;
+
+/**
+ * How many demotions the fitter will pay for. Each one re-runs the bullet
+ * search, which is five to seven compiles, so this is a latency budget as much
+ * as a policy. Three is past where they stop paying off on real documents.
+ */
+const MAX_DEMOTIONS = 3;
+
+/**
+ * Bullets the newest roles keep whatever they argue, newest first.
+ *
+ * RECENCY IS NOT RELEVANCE, BUT IT IS NOT NOTHING EITHER
+ * Everything else here ranks by what an entry argues for this posting, which is
+ * right, and which has one blind spot: the job the candidate is doing right now.
+ * Scored on relevance alone a current role can rank last — that is the whole
+ * shape of a career change — and the fitter would take it to one bullet, or
+ * reduce it to a line of history, while a 2015 role carried the page. Nobody
+ * reads that as focus. A current position nobody explains is the first thing a
+ * reader stops on.
+ *
+ * So recency buys a floor, not bullets. The newest role keeps three, the one
+ * before it keeps one, and neither is ever collapsed. Beyond those two,
+ * relevance decides everything, as before.
+ *
+ * A FLOOR ONLY EVER PRESERVES; IT NEVER INVENTS
+ * Clamped to what the entry arrived with. A current role the writer gave two
+ * bullets has a floor of two — this pass removes and never adds, and if the
+ * uploaded document supports two facts about that job then two is the honest
+ * number. An entry that arrived with none is left as the dated heading it
+ * already was.
+ */
+const RECENT_FLOORS = [3, 1];
 
 /**
  * How far the keyword grid is thinned, a step at a time.
@@ -286,6 +329,85 @@ function entriesInOrder(resume: TailoredResume): { entry: ResumeEntry; section: 
   return out;
 }
 
+/**
+ * The two newest jobs and the bullets they keep. See RECENT_FLOORS.
+ *
+ * "Job" is read off the shape rather than hardcoded, because the section
+ * holding employment is called Experience on a resume, Clinical Experience on a
+ * CV and Professional Experience on a federal one. What they share is being
+ * core, dated and entry-shaped: Selected Projects is entry-shaped too but not
+ * core, and a side project is not what a reader means by the job you have now.
+ * Education is excluded by the same NEVER_COLLAPSE rule that already protects
+ * it, so a degree ending next year cannot take a slot from a job.
+ *
+ * Keyed by the entry object, not by its id: ids come from the model and are
+ * unique only because the prompt asks for it. Recomputed per call rather than
+ * cached, which keeps it correct across the clones the search works on.
+ *
+ * The clamp reads `bullets.length`, which counts dropped ones too. That is
+ * deliberate — it is the number the entry was written with, and it does not
+ * move as the search trims and restores, so the floor cannot ratchet downwards
+ * over rounds.
+ */
+function protectionFloors(resume: TailoredResume): Map<ResumeEntry, number> {
+  const jobs = entriesInOrder(resume)
+    .filter(({ section }) => {
+      const key = resume.sections[section].key;
+      if (NEVER_COLLAPSE.has(key)) return false;
+      const spec = specFor(resume.shape, key);
+      return Boolean(spec?.core && spec.layout === "entries");
+    })
+    .map(({ entry }) => ({
+      entry,
+      date: dateOrder(entry.endDate) ?? dateOrder(entry.startDate) ?? -Infinity,
+    }))
+    // Newest first. An open-ended role reads as MAX_SAFE_INTEGER, so "Present"
+    // outranks every finished job without this needing to know what present is.
+    .sort((a, b) => b.date - a.date);
+
+  const floors = new Map<ResumeEntry, number>();
+  RECENT_FLOORS.forEach((want, rank) => {
+    const job = jobs[rank];
+    if (job) floors.set(job.entry, Math.min(want, job.entry.bullets.length));
+  });
+  return floors;
+}
+
+/**
+ * What the bullets on the page are worth: each one scored by the entry carrying
+ * it, so a bullet under the role the posting describes counts for ten and one
+ * under a role it has no use for counts for nothing.
+ *
+ * The objective the demotion step maximises. It is not "most bullets" — five
+ * jobs holding one bullet each beats three jobs holding four on that measure,
+ * and is a worse document. Weighting by relevance is what makes trading a weak
+ * role's last bullet for three under a strong one come out ahead, which is the
+ * trade a person makes without thinking about it.
+ */
+function bulletValue(resume: TailoredResume, wanted: Set<string>): number {
+  return entriesInOrder(resume).reduce(
+    (total, { entry }) => total + relevance(entry, wanted) * visibleBullets(entry.bullets).length,
+    0
+  );
+}
+
+/**
+ * Whether the page is being shared out rather than filled: some unprotected
+ * entry is down to its last bullet while bullets elsewhere are going unprinted.
+ *
+ * The gate on attempting a demotion at all. A document that fits with room to
+ * spare has nothing to gain from one, and finding that out costs compiles.
+ */
+function starving(resume: TailoredResume): boolean {
+  const floors = protectionFloors(resume);
+  const entries = entriesInOrder(resume);
+  const atFloor = entries.some(
+    ({ entry }) => !floors.has(entry) && visibleBullets(entry.bullets).length <= FLOOR
+  );
+  const cut = entries.some(({ entry }) => entry.bullets.some((b) => b.dropped));
+  return atFloor && cut;
+}
+
 /** Words too common to say anything about what an entry argues for. */
 const COMMON = new Set([
   "the", "and", "for", "with", "that", "this", "from", "was", "were", "has",
@@ -355,10 +477,14 @@ function relevance(entry: ResumeEntry, wanted: Set<string>): number {
  * Which entry gives up a bullet next: the one arguing least for this posting,
  * oldest first among equals, and only if it is still above the floor.
  */
-function nextToTrim(resume: TailoredResume, wanted: Set<string>): ResumeEntry | null {
+function nextToTrim(
+  resume: TailoredResume,
+  wanted: Set<string>,
+  floors: Map<ResumeEntry, number>
+): ResumeEntry | null {
   const candidates = entriesInOrder(resume)
     .map(({ entry }) => entry)
-    .filter((entry) => visibleBullets(entry.bullets).length > FLOOR)
+    .filter((entry) => visibleBullets(entry.bullets).length > (floors.get(entry) ?? FLOOR))
     .sort((a, b) => {
       const byRelevance = relevance(a, wanted) - relevance(b, wanted);
       if (byRelevance !== 0) return byRelevance;
@@ -377,9 +503,10 @@ function nextToTrim(resume: TailoredResume, wanted: Set<string>): ResumeEntry | 
 function trimOneBullet(
   resume: TailoredResume,
   wanted: Set<string>,
-  cutOrder: ResumeBullet[]
+  cutOrder: ResumeBullet[],
+  floors: Map<ResumeEntry, number>
 ): boolean {
-  const target = nextToTrim(resume, wanted);
+  const target = nextToTrim(resume, wanted, floors);
   if (!target) return false;
 
   const visible = visibleBullets(target.bullets);
@@ -405,8 +532,19 @@ function trimOneBullet(
  * of history, not as a dated block with a bullet under it.
  */
 function collapseWeakest(resume: TailoredResume, wanted: Set<string>): boolean {
-  const ranked = entriesInOrder(resume)
-    .filter(({ section }) => !NEVER_COLLAPSE.has(resume.sections[section].key))
+  const floors = protectionFloors(resume);
+  const collapsible = entriesInOrder(resume).filter(
+    ({ section }) => !NEVER_COLLAPSE.has(resume.sections[section].key)
+  );
+
+  // Never the last two entries standing: a resume is not a list of dates. The
+  // count includes the protected ones — they are still entries on the page.
+  if (collapsible.length <= 2) return false;
+
+  const ranked = collapsible
+    // The two newest jobs are never reduced to a line of history, however little
+    // they argue. See RECENT_FLOORS.
+    .filter(({ entry }) => !floors.has(entry))
     .map(({ entry, section }) => ({
       entry,
       section,
@@ -415,10 +553,8 @@ function collapseWeakest(resume: TailoredResume, wanted: Set<string>): boolean {
     }))
     .sort((a, b) => a.score - b.score || a.date - b.date);
 
-  // Never the last two entries standing: a resume is not a list of dates.
-  if (ranked.length <= 2) return false;
-
   const weakest = ranked[0];
+  if (!weakest) return false;
   const section = resume.sections[weakest.section];
   section.entries = (section.entries ?? []).filter((e) => e !== weakest.entry);
 
@@ -489,7 +625,9 @@ export async function fitToPages(
   };
 
   try {
-    const working = clone(resume);
+    // Reassignable because a demotion is tried on a copy and only adopted if it
+    // pays for itself. See the demotion step below.
+    let working = clone(resume);
     let pages = await measure(working);
     if (pages === 0) return idle;
     if (pages <= target) {
@@ -530,19 +668,24 @@ export async function fitToPages(
      * time, and the answer is the fullest page rather than the first one that
      * happened to fit.
      */
-    const searchWithin = async (): Promise<number> => {
+    const searchWithin = async (doc: TailoredResume): Promise<number> => {
       // Start from the whole document every time. Without this the second
       // search — the one after a collapse — would build its order from a
       // document already cut to the floors, find nothing left to trim, and so
       // have nothing it could put back: collapsing an entry would free a block
       // of the page that no bullet was ever allowed to occupy.
-      for (const { entry } of entriesInOrder(working)) {
+      for (const { entry } of entriesInOrder(doc)) {
         for (const bullet of entry.bullets) bullet.dropped = false;
       }
 
+      // Read once per search rather than per bullet: the floors are derived
+      // from dates and from bullet counts, and neither moves while the search
+      // is trimming and restoring.
+      const floors = protectionFloors(doc);
+
       // Cut everything down to the floors, recording the order it went in.
       const order: ResumeBullet[] = [];
-      while (trimOneBullet(working, wanted, order)) {
+      while (trimOneBullet(doc, wanted, order, floors)) {
         /* nothing: the loop is the work */
       }
 
@@ -559,7 +702,7 @@ export async function fitToPages(
       let bestFit = -1;
 
       keep(high);
-      if ((await measure(working)) <= target) {
+      if ((await measure(doc)) <= target) {
         // Everything fits once the collapses are in; nothing needs cutting.
         return order.length;
       }
@@ -569,12 +712,12 @@ export async function fitToPages(
       // in between is a foregone conclusion, and the answer is to collapse an
       // entry rather than to keep measuring bullets that were never the problem.
       keep(0);
-      if ((await measure(working)) > target) return -1;
+      if ((await measure(doc)) > target) return -1;
 
       while (low <= high) {
         const mid = Math.floor((low + high) / 2);
         keep(mid);
-        const got = await measure(working);
+        const got = await measure(doc);
         if (process.env.FIT_DEBUG) console.error(`[fit] keep ${mid}/${order.length} -> ${got}p`);
         // Two failed compiles in a row is the engine, not the document. Stop
         // rather than treat an unmeasurable page as an overflowing one.
@@ -600,11 +743,18 @@ export async function fitToPages(
     // of the two the reader is actually there for. A role with a relevance of
     // zero is not competing for the page, so it becomes a line of history
     // first, and everything it was occupying goes to the roles that are.
+    //
+    // The newest two roles are exempt even at zero, which is the one case where
+    // that rule bites: a career change is exactly a current job that argues for
+    // nothing, and answering it with a line of history at the top of the page
+    // is not an abbreviation, it is a question mark.
     while (
       collapsed < MAX_ROUNDS &&
       entriesInOrder(working).some(
         ({ entry, section }) =>
-          relevance(entry, wanted) === 0 && !NEVER_COLLAPSE.has(working.sections[section].key)
+          relevance(entry, wanted) === 0 &&
+          !NEVER_COLLAPSE.has(working.sections[section].key) &&
+          !protectionFloors(working).has(entry)
       ) &&
       collapseWeakest(working, wanted)
     ) {
@@ -649,7 +799,7 @@ export async function fitToPages(
     // in the order a person would: the summary's tail sentence, then a keyword
     // row, then a whole role reduced to a line of history. Each step re-runs the
     // search, because freeing space changes how many bullets fit.
-    let best = await searchWithin();
+    let best = await searchWithin(working);
     let rounds = 0;
     while (best < 0 && rounds < MAX_ROUNDS) {
       rounds++;
@@ -665,7 +815,65 @@ export async function fitToPages(
           break;
         }
       }
-      best = await searchWithin();
+      best = await searchWithin(working);
+    }
+
+    /**
+     * DEMOTE RATHER THAN STARVE
+     *
+     * Everything above shares the page out; this decides who is on it. Without
+     * it the search has exactly one way to answer a page that will not close,
+     * which is to take a bullet from whoever can spare one — and repeated to
+     * its conclusion that produces the failure this step exists for: five jobs
+     * each holding a single bullet, a document that lists a career instead of
+     * arguing one. The bisection cannot see the problem, because by its own
+     * measure five stubs is a full page.
+     *
+     * The arithmetic it is missing is that a stub is mostly overhead. A job
+     * printed with a heading, an employer, a date column and one bullet spends
+     * about four lines to make one point; the same job as "Earlier: Title,
+     * Company, 2019-2021" spends one and still shows the reader the dates. So
+     * demoting the weakest role buys three lines, and three lines is three
+     * bullets under the role the posting is actually about.
+     *
+     * IT ONLY KEEPS A DEMOTION THAT PAYS FOR ITSELF
+     * Each one is tried on a copy: collapse the weakest unprotected role,
+     * re-run the search, and compare bulletValue — bullets weighted by what
+     * their entry argues. Better, and the copy is adopted; not better, and it
+     * is discarded and the loop stops. So the step cannot quietly trade away a
+     * role to gain nothing, which is the way a rule like this normally goes
+     * wrong.
+     *
+     * Nothing is deleted here either. A demoted role keeps its title, employer
+     * and dates on the page, so the history stays complete and unbroken — what
+     * it loses is the argument, which is what it was making least well.
+     *
+     * WHY IT RUNS LAST
+     * Because the cheap steps have to have failed first. A document two lines
+     * over should lose a keyword row, not a job. By the time this runs, the
+     * sections, the skills tail and the bullets have all been through it, and
+     * `starving` gates it besides: no stub on the page, or nothing cut anywhere,
+     * and it never spends the compiles.
+     */
+    for (let demoted = 0; best >= 0 && demoted < MAX_DEMOTIONS; demoted++) {
+      if (!starving(working)) break;
+
+      const candidate = clone(working);
+      if (!collapseWeakest(candidate, wanted)) break;
+
+      const got = await searchWithin(candidate);
+      if (got < 0) break;
+
+      const before = bulletValue(working, wanted);
+      const after = bulletValue(candidate, wanted);
+      if (process.env.FIT_DEBUG) {
+        console.error(`[fit] demotion ${demoted + 1}: value ${before} -> ${after}`);
+      }
+      if (after <= before) break;
+
+      working = candidate;
+      best = got;
+      collapsed++;
     }
 
     pages = await measure(working);

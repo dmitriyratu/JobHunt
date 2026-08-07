@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSaveFolder } from "@/lib/saveFolder";
 import { isProfileUsable, maskApiKey, type AppSettings } from "@/lib/settings";
 import { useScrollLock } from "@/lib/useScrollLock";
 import { AdminKeyGuide, ApiKeyGuide } from "./KeyGuide";
@@ -51,6 +52,77 @@ function SectionHeading({ title, hint }: { title: string; hint?: string }) {
       <h3 className="text-sm font-medium">{title}</h3>
       {hint && <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{hint}</p>}
     </div>
+  );
+}
+
+/**
+ * The folder generated documents are written into.
+ *
+ * The picker itself is offered at the first download rather than here, because
+ * that is the moment the answer is needed and the only one where everybody is
+ * present. This is where you change it afterwards — a folder chosen in a hurry,
+ * or a machine where you would rather have ordinary downloads back.
+ */
+function SaveFolderSection() {
+  const { loaded, name, supported, choose, forget } = useSaveFolder();
+
+  // Nothing until the stored folder has been read back, so this cannot render
+  // "no folder chosen" for a second at someone who chose one months ago.
+  if (!loaded) return null;
+
+  return (
+    <>
+      <div className="border-t border-[var(--color-border-subtle)]" />
+      <section>
+        <SectionHeading
+          title="Where files are saved"
+          hint="Resumes and letters are filed under the company and the role they were written for."
+        />
+
+        {!supported ? (
+          <p className="text-xs text-[var(--color-text-muted)]">
+            Files go to your browser&rsquo;s download folder, one file per application, with the
+            company and role in the name. Chrome and Edge on a computer can file them into folders
+            instead.
+          </p>
+        ) : name ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="input-base flex w-full min-w-0 flex-1 items-center gap-2 overflow-hidden text-sm text-[var(--color-text-secondary)] sm:w-auto">
+              <span className="truncate">
+                {name}
+                <span className="text-[var(--color-text-muted)]"> / Company / Role</span>
+              </span>
+            </span>
+            <button onClick={() => void choose()} className="btn-secondary shrink-0 px-3 py-2 text-xs">
+              Change
+            </button>
+            <button
+              onClick={() => void forget()}
+              className="btn-secondary shrink-0 px-3 py-2 text-xs"
+              title="Go back to ordinary browser downloads"
+            >
+              Use downloads
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Says which folder to pick, because the obvious answer is the one
+                that fails: Chrome refuses Downloads itself, along with your
+                home folder, the desktop and Documents. A folder inside any of
+                them is fine, and the picker can make one. */}
+            <p className="min-w-0 flex-1 text-xs text-[var(--color-text-muted)]">
+              Files go to your browser&rsquo;s download folder, with the company and role in the
+              name. Choose a folder — one <em>inside</em> Downloads, which Chrome allows, rather
+              than Downloads itself, which it doesn&rsquo;t — and they will be filed into it
+              instead.
+            </p>
+            <button onClick={() => void choose()} className="btn-secondary shrink-0 px-3 py-2 text-xs">
+              Choose a folder…
+            </button>
+          </div>
+        )}
+      </section>
+    </>
   );
 }
 
@@ -288,6 +360,8 @@ export default function AccountModal({
 
             <UsagePanel adminApiKey={settings.adminApiKey} />
           </section>
+
+          <SaveFolderSection />
 
           <div className="border-t border-[var(--color-border-subtle)]" />
 

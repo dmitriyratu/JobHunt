@@ -70,7 +70,18 @@ export default function GenerateResumeModal({
   useScrollLock(open);
 
   const [step, setStep] = useState(0);
-  const [selected, setSelected] = useState<DocumentShape | null>(current ?? recommended);
+  /**
+   * The shape the user picked on this visit, and nothing else.
+   *
+   * Null until they touch a card, which is what lets `choice` below fall back
+   * through the stored choice to the recommendation. Seeding it from those two
+   * instead — and re-seeding whenever either changed — meant a recommendation
+   * arriving after the cards were on screen silently replaced a pick already
+   * made, with the modal still open and the card visibly moving under the
+   * cursor. A value that only ever holds a deliberate choice cannot be
+   * overwritten by one that turns up late.
+   */
+  const [selected, setSelected] = useState<DocumentShape | null>(null);
 
   // Reopening starts over. Resuming mid-flow would land you on the format step
   // with no memory of why, and these three answers take seconds to restate.
@@ -78,12 +89,15 @@ export default function GenerateResumeModal({
     if (open) setStep(0);
   }, [open]);
 
-  // A previous choice outranks the recommendation: someone who overrode it once
-  // shouldn't have to override it again. Falls back to the recommendation,
-  // which may still have been in flight when this opened.
+  // The pick lasts one visit, so reopening drops it and the fallback chain in
+  // `choice` decides again: a previous choice outranks the recommendation,
+  // because someone who overrode it once shouldn't have to override it twice.
+  // That chain is also what adopts a recommendation still in flight when this
+  // opened — it is re-read every render, so nothing has to be copied into
+  // state when it lands.
   useEffect(() => {
-    if (open) setSelected(current ?? recommended);
-  }, [open, current, recommended]);
+    if (open) setSelected(null);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;

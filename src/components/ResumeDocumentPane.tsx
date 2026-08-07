@@ -9,7 +9,8 @@ import ChangeAuditModal, {
   type GroundingSummary,
 } from "./ChangeAuditModal";
 import { splitDocument } from "@/lib/resumeLatex";
-import { revealDownload } from "@/lib/saveDownload";
+import type { SaveResult } from "@/lib/saveDownload";
+import { chooseSaveFolder, useSaveFolder } from "@/lib/saveFolder";
 import { lineAt, parseSyncTex } from "@/lib/synctex";
 import type { CompileState } from "@/lib/useLatexCompile";
 import type { ResumePageTarget, TailoredResume } from "@/types";
@@ -45,10 +46,11 @@ type Props = {
   /**
    * The last file written from this pane, or null before anything was saved.
    *
-   * `usedFolders` decides whether there is somewhere to open: the fallback path
-   * is a flat browser download, whose location the page never learns.
+   * `usedFolders` is false when the browser had no folder to write into and the
+   * file went to ordinary downloads instead — a different sentence, not a
+   * failure.
    */
-  saved: { path: string; usedFolders: boolean } | null;
+  saved: SaveResult | null;
   /**
    * What the grounding pass did to this generation, or null if none has run in
    * this session. Reported rather than silent: the document says something
@@ -141,17 +143,9 @@ export default function ResumeDocumentPane({
   // counting them would report a clean generation as forty changes.
   const unused = resume?.omitted?.length ?? 0;
 
-  // Only set when revealing fails — a file moved since it was written, or a
-  // machine with no file manager on the path. Shown next to the link rather
-  // than thrown, because the save itself already worked.
-  // Tied to the path it happened on, so the next save clears it without an
-  // effect to watch for one.
-  const [revealError, setRevealError] = useState<{ path: string; message: string } | null>(null);
-  const handleReveal = useCallback(async () => {
-    if (!saved) return;
-    const message = await revealDownload(saved.path);
-    setRevealError(message ? { path: saved.path, message } : null);
-  }, [saved]);
+  // False on Firefox and Safari, where a saved file that went to downloads is
+  // simply where it is — there is no picker to offer.
+  const { supported: canChooseFolder } = useSaveFolder();
 
   // Parsed from whatever the preview is currently showing, so a click is always
   // resolved against the document on screen rather than the source being typed.
@@ -340,14 +334,17 @@ export default function ResumeDocumentPane({
               against a lot of empty row, which read as leftovers rather than as
               the thing the page is for. */}
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-            {/* One link, not a link and a caption and a confirmation. It used
+            {/* One line, not a line and a caption and a confirmation. It used
                 to be a panel under the document — the full path on its own
                 line, below the fold on a scrolled pane, printed for copying
-                because a page cannot navigate to a file:// URL. The server can
-                do what the page cannot, so the path is a control now rather
-                than a notice, and the folder name is the whole of it: the file
-                name was a second thing to read for something the tick already
-                says, and the path is one hover away.
+                because a page cannot navigate to a file:// URL.
+
+                It was briefly a link that opened the folder, back when a server
+                on this machine did the saving. The browser does it now, and no
+                page can open a file manager, so this is a statement again — the
+                folder name, because the file name is a second thing to read for
+                something the tick already says, and the rest of the path is one
+                hover away.
 
                 Green, matching its tick — the one green thing in the row is the
                 one reporting a success, which is what keeps it from reading as
@@ -356,17 +353,38 @@ export default function ResumeDocumentPane({
               <span className="flex min-w-0 items-center gap-1 text-xs">
                 <span className="shrink-0 text-[var(--color-success)]">✓</span>
                 {saved.usedFolders ? (
-                  <button
-                    type="button"
-                    onClick={handleReveal}
-                    title={`Saved as ${saved.path}\n\nClick to open the folder.`}
-                    className="max-w-[14rem] truncate font-medium text-[var(--color-success)] underline decoration-dotted underline-offset-2 hover:text-[var(--color-text-primary)]"
+                  // The path shown starts at the folder you chose, which is as
+                  // much as a directory handle will disclose about where it is.
+                  <span
+                    className="max-w-[14rem] truncate font-medium text-[var(--color-success)]"
+                    title={`Saved as ${saved.path}`}
                   >
                     {splitPath(saved.path).folder || splitPath(saved.path).file}
+                  </span>
+                ) : canChooseFolder ? (
+                  // The browser-download fallback, and the way out of it.
+                  //
+                  // Someone lands here by cancelling the picker — including by
+                  // cancelling it after Chrome refused the folder they chose,
+                  // which is the same event and the more likely one. Offering
+                  // again costs a click nobody has to make, and the alternative
+                  // is a reader who tried once, hit a wall Chrome put there,
+                  // and has no way of knowing the feature is still on offer.
+                  //
+                  // It files the *next* one: this document is already in
+                  // downloads, and quietly writing a second copy somewhere else
+                  // would be a click doing more than it said.
+                  <button
+                    type="button"
+                    onClick={() => void chooseSaveFolder()}
+                    title={`Saved to your browser's download folder as ${saved.path}\n\nClick to file the next one into a folder — one inside Downloads, which Chrome does allow, rather than Downloads itself, which it doesn't.`}
+                    className="max-w-[14rem] truncate text-[var(--color-text-muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--color-text-secondary)]"
+                  >
+                    {saved.path}
                   </button>
                 ) : (
-                  // The browser-download fallback: no folders were made, so
-                  // there is no folder to open — only the name it landed under.
+                  // No picker in this browser, so there is nothing to offer —
+                  // only the name it landed under.
                   <span
                     className="max-w-[14rem] truncate text-[var(--color-text-muted)]"
                     title={`Saved to your browser's download folder as ${saved.path}`}
@@ -376,14 +394,6 @@ export default function ResumeDocumentPane({
                 )}
               </span>
             )}
-            {/* Failures only. A successful open announces itself by being a
-                window on your screen, and the confirmation that stood here
-                said, permanently and next to a green tick, something the user
-                could already see. */}
-            {revealError?.path === saved?.path && revealError && (
-              <span className="text-xs text-[var(--color-warning)]">{revealError.message}</span>
-            )}
-
             <button
               onClick={onDownloadPdf}
               disabled={downloading || !canDownloadPdf}

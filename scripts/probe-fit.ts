@@ -122,6 +122,72 @@ async function main() {
         : "FAIL"
     } collapsing freed room the lead role got back`
   );
+
+  // --- Demote rather than starve --------------------------------------------
+  // Five jobs, newest first, whose relevance runs the other way: the oldest is
+  // the role the posting describes and the current one has nothing to do with
+  // it. Ranked on relevance alone the fitter has every reason to gut the top of
+  // the page, and before the demotion step it did something worse than that —
+  // it left all five standing with one bullet each, a career listed rather than
+  // argued.
+  //
+  // What should come back: the oldest roles carrying the argument, the weakest
+  // middle ones as dated lines, and the current job still explained.
+  const scored = (
+    id: string,
+    heading: string,
+    start: string,
+    end: string,
+    n: number,
+    rel: number
+  ): ResumeEntry => ({ ...entry(id, heading, `Employer ${id}`, start, end, n), relevance: rel });
+
+  const inverted: TailoredResume = {
+    ...resume,
+    sections: [
+      resume.sections[0],
+      {
+        key: "experience",
+        entries: [
+          scored("a", "Operations Lead", "2023", "Present", 5, 1),
+          scored("b", "Support Manager", "2021", "2023", 5, 3),
+          scored("c", "Analyst", "2019", "2021", 5, 5),
+          // More than can fit, so there is somewhere for freed space to go. With
+          // the strong roles already showing every bullet they have, collapsing
+          // a weak one buys room nothing can use, and the step correctly
+          // declines — which is a real outcome but tests nothing.
+          scored("d", "Backend Engineer", "2016", "2019", 9, 8),
+          scored("e", "Platform Engineer", "2013", "2016", 9, 10),
+        ],
+      },
+    ],
+  };
+
+  const flipped = await fitToPages(inverted, profile, "Kafka Postgres platform engineer");
+  const shown = flipped.resume.sections.flatMap((s) => s.entries ?? []);
+  const bulletsOf = (heading: string) =>
+    shown.find((e) => e.heading === heading)?.bullets.filter((b) => !b.dropped).length ?? 0;
+  const asLine = (flipped.resume.collapsed ?? []).map((c) => c.heading);
+
+  console.log("\ninverted-relevance case:", JSON.stringify({ ...flipped, resume: undefined }));
+  console.log("  shown:", shown.map((e) => `${e.heading}(${bulletsOf(e.heading)})`).join(" "));
+  console.log("  as dated lines:", asLine.join(", ") || "none");
+
+  const stubs = shown.filter((e) => e.bullets.filter((b) => !b.dropped).length === 1).length;
+  console.log(
+    `  ${bulletsOf("Operations Lead") >= 3 ? "PASS" : "FAIL"} the current role kept its floor of 3`
+  );
+  console.log(
+    `  ${!asLine.includes("Operations Lead") ? "PASS" : "FAIL"} the current role was never collapsed`
+  );
+  console.log(
+    `  ${!asLine.includes("Support Manager") ? "PASS" : "FAIL"} the second-newest was never collapsed`
+  );
+  console.log(
+    `  ${bulletsOf("Platform Engineer") > 1 ? "PASS" : "FAIL"} the role the posting describes argues`
+  );
+  console.log(`  ${stubs <= 2 ? "PASS" : "FAIL"} the page is not a row of stubs (${stubs} at one bullet)`);
+  console.log(`  ${flipped.fits ? "PASS" : "FAIL"} it reached the page target`);
 }
 
 main();

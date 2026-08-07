@@ -43,12 +43,19 @@ import type {
  *      \RaggedRightRightskip is given infinite stretch and TeX ends the line
  *      early instead. Measured: 10 split words before, 0 after, 0 overfull.
  *
- *   3. Dates in a left-hand column, not flush right. The rule this replaced —
- *      "never \hfill a date" — was right about the failure and wrong about the
- *      cause: what tears dates into a loose column at the end of the document
- *      is the right-alignment jump, not the column. A left date box emitted
- *      before its heading extracts adjacent to it, confirmed on all three
- *      parsers. Do not "restore" flush-right dates.
+ *   3. Dates ranged right on the heading line, never in a box of their own.
+ *      This note has now been wrong in both directions. It began as "never
+ *      \hfill a date", was replaced by "dates belong in a left-hand column",
+ *      and the truth is narrower than either: what tears a date away from its
+ *      job is giving it a separate box, not the alignment. Measured on
+ *      .tex-debug/latest.tex and volume-2p.tex against pdf-parse, pdfjs-dist
+ *      and pypdf — a date \hfill'd onto the heading line extracts adjacent to
+ *      it on 3/3 parsers ("Principal Engineer February 2021 - Present"), while
+ *      the same dates in a right-hand minipage extract onto a line of their
+ *      own, attached to nothing, on 0/3. A left-hand column passed too, which
+ *      is why it lasted so long — it just charged 1.48in of measure on every
+ *      line of the document to do it, and left that strip empty on 80% of them.
+ *      What must not come back is a date in its own minipage, either side.
  *
  *   4. \strut first in every minipage, and \textcolor rather than \color. A
  *      minipage[t] is a \vtop, whose height is that of the first box on its
@@ -118,43 +125,39 @@ function link(url: string, display: string): string {
  * resume and a CV. A resume is fighting for a page and gets tighter setting; a
  * CV is read across several pages and gets the extra leading back.
  *
- * `datecol` is sized so that the common case — "July 2024 - June 2027" set at
- * 9pt — fits on one line. It used to be narrow enough that nearly every range
- * wrapped, which left the left-hand column looking like a stack of fragments
- * rather than a column of dates.
- *
- * The common case is not the widest case, and on the two long shapes it is
- * worth paying for the difference. `entryDates` wraps gracefully by design, but
- * a column where one range in ten breaks reads as a defect rather than as a
- * grid: on a real clinical CV "September 2013 - May 2019" was the only wrapped
- * date on two pages, and it was the first thing the eye landed on. September is
- * the widest month name, so 1.52in is what makes every Month-Year pair short of
- * a September/September range set on one line. It costs 0.1in of measure, which
- * at these margins is about one character per line of body text.
+ * `labelcol` sizes the label column in \labeled — the "Platform · Systems ·
+ * Observability" gutter in Skills, and nothing else. It used to carry the
+ * dates too, and was sized around them: wide enough that "September 2013 -
+ * May 2019" set on one line, because a column where one range in ten wrapped
+ * read as a defect rather than as a grid. Dates are ranged right on the
+ * heading line now (see note 3), so that constraint is gone and these widths
+ * answer a much smaller question — the longest skill-group label a shape
+ * tends to carry. They are unchanged because they already cleared it; there
+ * is just no longer a reason to widen them for a long month name.
  */
 const METRICS: Record<DocumentShape, {
   size: string;
   margin: string;
-  datecol: string;
+  labelcol: string;
   /** Name size in the header, in points. A CV is a longer read; its name is no bigger. */
   name: string;
 }> = {
-  resume: { size: "10pt", margin: "0.65in", datecol: "1.32in", name: "22" },
-  cv: { size: "10.5pt", margin: "0.72in", datecol: "1.52in", name: "22" },
+  resume: { size: "10pt", margin: "0.65in", labelcol: "1.32in", name: "22" },
+  cv: { size: "10.5pt", margin: "0.72in", labelcol: "1.52in", name: "22" },
   // Set like the clinical CV: both are long reads where the page count is not
   // being fought for, and a document someone reads for ten minutes wants the
   // half-point and the wider margin.
-  academic: { size: "10.5pt", margin: "0.72in", datecol: "1.52in", name: "22" },
-  // The widest date column of the six. A federal entry's left column carries a
-  // date range where the others carry a year, and federal reviewers read these
-  // on paper, so the margin is the most generous here.
-  federal: { size: "10.5pt", margin: "0.75in", datecol: "1.5in", name: "22" },
+  academic: { size: "10.5pt", margin: "0.72in", labelcol: "1.52in", name: "22" },
+  // Federal reviewers read these on paper, so the margin is the most generous
+  // here. The label column is wide for the same reason the CV's is: these are
+  // long documents whose skill groups carry spelled-out labels.
+  federal: { size: "10.5pt", margin: "0.75in", labelcol: "1.5in", name: "22" },
   // Conservative by convention: legal hiring reads an unusual-looking document
   // as a flag, so this is the resume metrics with a little more air.
-  legal: { size: "10pt", margin: "0.7in", datecol: "1.32in", name: "22" },
-  // A credit's left column carries a year and its right a production name and a
-  // company, so the date column is slightly wider than the resume's.
-  creative: { size: "10pt", margin: "0.7in", datecol: "1.38in", name: "22" },
+  legal: { size: "10pt", margin: "0.7in", labelcol: "1.32in", name: "22" },
+  // A credit's label column carries slightly longer group names than a
+  // resume's, so it gets a little more room.
+  creative: { size: "10pt", margin: "0.7in", labelcol: "1.38in", name: "22" },
 };
 
 /**
@@ -250,12 +253,13 @@ function preambleFor(shape: DocumentShape): string {
 % Overwritten by the renderer. Drives the running footer.
 \newcommand{\cvname}{}
 
-% Widen \datecol if your dates run long ("Expected June 2027"); the content
-% column and every indented list follow it automatically.
-\newlength{\datecol}   \setlength{\datecol}{${m.datecol}}
-\newlength{\gutter}    \setlength{\gutter}{0.16in}
+% Widen \labelcol if your skill-group labels run long; the value column follows
+% it automatically. Nothing else in the document is on this grid — dates are
+% ranged right on their heading line, not columned (note 3).
+\newlength{\labelcol}   \setlength{\labelcol}{${m.labelcol}}
+\newlength{\gutter}     \setlength{\gutter}{0.16in}
 \newlength{\contentindent}
-\setlength{\contentindent}{\dimexpr\datecol+\gutter\relax}
+\setlength{\contentindent}{\dimexpr\labelcol+\gutter\relax}
 \newlength{\entrygap}  \setlength{\entrygap}{5pt}
 
 \setlength{\parindent}{0pt}
@@ -269,10 +273,12 @@ function preambleFor(shape: DocumentShape): string {
 \exhyphenpenalty=10000
 \setlength{\RaggedRightRightskip}{0pt plus 1fil}
 
-% Bullets sit under an entry, so they indent to the content column and line up
-% with the heading above them. Numbered lists do not: a citation list has no
-% date column to sit beside, and indenting it would leave the gutter empty for
-% the length of the section.
+% Bullets take a small indent of their own, not a column-sized one. They used to
+% indent to \contentindent so they lined up under the heading beside the date
+% column, and that column is gone — but the indent outlived it once by accident,
+% which cost 1.48in of measure on every bullet line in the document for a grid
+% that no longer had anything to align to. 1em is enough to read as the entry's
+% detail rather than as its sibling.
 %
 % The marker stays a real \textbullet rather than becoming a rule or a dingbat:
 % it is the one list marker every PDF extractor recognises and strips cleanly.
@@ -280,7 +286,7 @@ function preambleFor(shape: DocumentShape): string {
 % as loud as the sentence beside it.
 \setlist[itemize,1]{
   label=\textcolor{navy!65}{\small\textbullet},
-  labelindent=\contentindent, labelsep=0.5em, leftmargin=*,
+  labelindent=1em, labelsep=0.5em, leftmargin=*,
   itemsep=2pt, topsep=3.5pt, parsep=0pt, partopsep=0pt
 }
 \setlist[enumerate,1]{
@@ -288,10 +294,6 @@ function preambleFor(shape: DocumentShape): string {
   itemsep=3.5pt, topsep=3.5pt, parsep=0pt, partopsep=0pt
 }
 \newenvironment{bullets}{\begin{itemize}}{\end{itemize}\vspace{\entrygap}}
-% Bullets in an undated section have no content column to line up with, so they
-% take a small indent of their own instead. At labelindent=0 they sat flush with
-% the heading above them and read as its siblings rather than as its detail.
-\newenvironment{flatbullets}{\begin{itemize}[labelindent=1em]}{\end{itemize}\vspace{\entrygap}}
 \newenvironment{numlist}{\begin{enumerate}}{\end{enumerate}\vspace{2pt}}
 
 % Section headings: uppercase sans, small, navy, over a rule tinted from the
@@ -337,11 +339,13 @@ function preambleFor(shape: DocumentShape): string {
 % A real space glyph, emitted as a character node so TeX cannot discard it the
 % way it discards a trailing space.
 %
-% It closes every left-hand column in this file, and it is not decoration. The
-% two columns are two separately positioned runs in the PDF, and an extractor
-% has to decide whether the jump between them means a space. pdf.js decides yes;
-% pdf-parse decides no, and concatenates: "2015 - 2019Doctor of Medicine",
-% "IndependentBone marrow aspiration". Widening the gutter does not help — the
+% It sits at every point in this file where two runs of text are separated by
+% glue rather than by a space -- the label column in \labeled, the gap before a
+% \hfill'd date, the contact row -- and it is not decoration. Either side of the
+% gap is a separately positioned run in the PDF, and an extractor has to decide
+% whether the jump between them means a space. pdf.js decides yes; pdf-parse
+% decides no, and concatenates: "2015 - 2019Doctor of Medicine",
+% "IndependentBone marrow aspiration". Widening the gap does not help — the
 % gutter is already 0.16in and it still glued. Putting an actual space in the
 % stream takes the decision away from the extractor.
 \newcommand{\colgap}{\char"20 }
@@ -358,34 +362,48 @@ function preambleFor(shape: DocumentShape): string {
 \newcommand{\labelstyle}[1]{{\sffamily\bfseries\fontsize{9.5}{12}\selectfont\textcolor{slate}{#1}}}
 
 % \entry{dates}{heading}{organisation}{note} -- the workhorse. Any argument may
-% be empty and its line disappears without leaving a gap. Two side-by-side boxes
-% rather than a table: an entry then stays whole across a page break.
+% be empty and its line disappears without leaving a gap. One full-measure box
+% rather than two side by side: an entry stays whole across a page break, and
+% every line inside it gets the whole measure instead of the 5.58in that was
+% left over after a date column took its 1.48in.
+%
+% \rightskip=0pt on the heading line is load-bearing, not tidying. \RaggedRight
+% gives the right skip infinite stretch (note 2), so a bare \hfill has to share
+% the gap with it evenly and the date lands halfway across the line instead of
+% at the margin. Zeroing the skip for that one line -- and only that line, so
+% the organisation and note below it stay ragged -- is what puts the date on the
+% right edge. See note 3 before moving the date anywhere else.
 %
 % \newline, not \\, between the stacked lines: \\ scans ahead for an optional
 % [length], so a note that legitimately begins with a bracket gets eaten as a
-% dimension and the document dies with "Missing number, treated as zero".
+% dimension and the document dies with "Missing number, treated as zero". The
+% lines below are \par-separated for the same reason.
 %
 % \strut first, and \textcolor rather than \color -- see note 4 at the top of
 % this file. This is load-bearing, not style.
+%
+% \colgap in front of the date is the same real space character that used to
+% close the date column: the heading and the date are separated by a long run of
+% glue, and it takes the "is that a space?" decision away from the extractor.
 \newcommand{\entry}[4]{%
   \noindent
-  \begin{minipage}[t]{\datecol}%
-    \raggedright\strut\datestyle{#1}\colgap%
-  \end{minipage}%
-  \hspace{\gutter}%
-  \begin{minipage}[t]{\dimexpr\textwidth-\contentindent\relax}%
-    \RaggedRight\strut\textbf{#2}%
-    \ifblank{#3}{}{\newline\orgstyle{#3}}%
-    \ifblank{#4}{}{\newline#4}%
+  \begin{minipage}[t]{\textwidth}%
+    \RaggedRight
+    {\rightskip=0pt\relax\strut\textbf{#2}%
+      \ifblank{#1}{}{\hfill\colgap\datestyle{#1}}\par}%
+    \ifblank{#3}{}{\orgstyle{#3}\par}%
+    \ifblank{#4}{}{#4\par}%
   \end{minipage}%
   \par\vspace{\entrygap}%
 }
 
-% \labeled{Label}{Text} -- label/value rows on the same grid, for skill groups
-% and anything else that reads as a table without being one.
+% \labeled{Label}{Text} -- label/value rows for skill groups and anything else
+% that reads as a table without being one. The only two-column construction left
+% in the document, and it keeps its column because the labels genuinely fill it:
+% this is a real table of contents, not a date hung beside a paragraph.
 \newcommand{\labeled}[2]{%
   \noindent
-  \begin{minipage}[t]{\datecol}%
+  \begin{minipage}[t]{\labelcol}%
     \raggedright\strut\labelstyle{#1}\colgap%
   \end{minipage}%
   \hspace{\gutter}%
@@ -467,12 +485,36 @@ function unbreakable(text: string): string {
 }
 
 /**
- * The dates for an entry's left-hand column, ALREADY ESCAPED — do not escape
+ * An \item whose text is safe to begin with a bracket.
+ *
+ * \item takes an optional [label], and the scanner does not care that the
+ * bracket came from the candidate's own prose. A bullet that opens
+ * "[Immunophenotyping] of leukemia specimens" silently becomes an item
+ * *labelled* "Immunophenotyping": the brackets are eaten as delimiters and the
+ * words are set in the marker's position instead of the sentence's.
+ *
+ * This is the same hazard \entry documents for \\ and its optional [length],
+ * and it was invisible for as long as bullets indented to the old date column —
+ * a label an inch and a third from the margin still landed on the page. At the
+ * 1em indent the label hangs off the left edge of the paper, which is how it
+ * was finally noticed.
+ *
+ * A leading {} is an empty group, and that is enough for \@ifnextchar to
+ * conclude there is no optional argument. It typesets nothing.
+ */
+function listItem(text: string): string {
+  return text.startsWith("[") ? `\\item {}${text}` : `\\item ${text}`;
+}
+
+/**
+ * The date range for an entry's heading line, ALREADY ESCAPED — do not escape
  * the result again.
  *
- * The column is narrower than a full "July 2021 - June 2024", so the question
- * is not whether a range wraps but where. Left to itself TeX breaks at any
- * space and splits a single date down the middle:
+ * The ties survive the move out of the old date column. A range set at the
+ * right-hand end of a heading line has the whole measure to itself and almost
+ * never wraps, but "almost" is doing real work: a long enough job title pushes
+ * the date onto a line of its own, and without the ties TeX breaks at any space
+ * and splits a single date down the middle:
  *
  *     July 2021 - June
  *     2024
@@ -554,17 +596,22 @@ function entryLead(entry: ResumeEntry): { heading: string; org: string } {
 /**
  * Entries for one section.
  *
- * A section in which nothing is dated — research projects and named
- * initiatives often aren't — is set flush to the margin instead. Reserving the
- * date column for a section that will never fill it leaves an inch and a third
- * of empty gutter running down the whole block, which reads as a rendering
- * fault rather than as a grid. The decision is per section, not per entry, so
- * one undated item among dated ones still lines up with its neighbours.
+ * A section in which nothing is dated — research projects and named initiatives
+ * often aren't — is still emitted with \entryflat rather than \entry with an
+ * empty first argument. Since dates moved onto the heading line the two render
+ * identically, so this is no longer a layout decision; it is a contract one.
+ * \entryflat is documented to the chat model in api/resume-chat/route.ts and
+ * asserted by probe-prose-heading, and a document that stopped using it would
+ * quietly break a patch the model had been told how to write.
+ *
+ * The list environment no longer forks with it. `flatbullets` existed because
+ * bullets under a dated entry indented to the date column and bullets under an
+ * undated one could not; both take the same 1em now, so there is one of them.
  */
 function renderEntries(entries: ResumeEntry[]): string {
   const dated = entries.some((e) => entryDates(e) !== "");
   const macro = dated ? "entry" : "entryflat";
-  const list = dated ? "bullets" : "flatbullets";
+  const list = "bullets";
 
   return entries
     .map((entry) => {
@@ -576,7 +623,7 @@ function renderEntries(entries: ResumeEntry[]): string {
       const bullets = visibleBullets(entry.bullets);
       if (bullets.length) {
         lines.push(`\\begin{${list}}`);
-        for (const b of bullets) lines.push(`  \\item ${escapeLatex(b.value)}`);
+        for (const b of bullets) lines.push(`  ${listItem(escapeLatex(b.value))}`);
         lines.push(`\\end{${list}}`);
       }
       return lines.join("\n");
@@ -610,30 +657,14 @@ function renderSectionBody(spec: SectionSpec, section: ResumeSection): string {
     if (spec.listStyle === "numbered") {
       return [
         "\\begin{numlist}",
-        ...items.map((i) => `  \\item ${escapeLatex(i)}`),
+        ...items.map((i) => `  ${listItem(escapeLatex(i))}`),
         "\\end{numlist}",
       ].join("\n");
     }
     return items.map((i) => `\\plainitem{${escapeLatex(i)}}`).join("\n");
   }
 
-  /*
-   * Entries, with one concession to documents generated before a section
-   * became a dated layout.
-   *
-   * Licensure used to be a `list` and stored its lines in `items`. Rendering an
-   * empty `entries` array would return "", and the caller drops a section whose
-   * body is empty — so an already-generated CV would quietly lose the whole
-   * block on the next compile. Falling back prints what that document actually
-   * holds; regenerating is what upgrades it to the date column.
-   */
-  const entries = section.entries ?? [];
-  const legacyItems = (section.items ?? []).filter((i) => i.trim());
-  if (!entries.length && legacyItems.length) {
-    return legacyItems.map((i) => `\\plainitem{${escapeLatex(i)}}`).join("\n");
-  }
-
-  return renderEntries(entries);
+  return renderEntries(section.entries ?? []);
 }
 
 // --- Header -----------------------------------------------------------------
@@ -647,8 +678,8 @@ function renderSectionBody(spec: SectionSpec, section: ResumeSection): string {
  * edge to hang from and reads as stranded rather than balanced; almost nobody
  * fills in enough contact fields to make that column look deliberate. And an
  * extractor sees the contact row as one run of text on one line instead of a
- * separate column it has to guess the reading order of, which is the same
- * argument that put the dates in a left-hand column rather than flush right.
+ * separate column it has to guess the reading order of — the same argument that
+ * keeps dates on their heading line rather than in a box of their own (note 3).
  *
  * Plain \raggedright rather than ragged2e's: these are short, deliberately
  * broken lines, and ragged2e's finite stretch reports every one of them as

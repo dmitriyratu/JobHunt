@@ -8,6 +8,12 @@ import type { MatchReport } from "@/types";
  * outline (which requirements matter, which the candidate clears and by how
  * much), so they need to read the report identically. Two copies of this would
  * drift, and the two documents would start arguing different cases.
+ *
+ * What this renders is the report, not what to do with it. A standout is used
+ * one way in a letter (pick at most one, tie it to the role) and the opposite
+ * way in a resume (keep all of them, they are already in the document), so the
+ * usage rules belong in each system prompt — the same split EXCEEDS already
+ * has. A rule written here reaches the document it was never meant for.
  */
 export function formatMatchReport(report: MatchReport): string {
   const byStatus = { match: [], partial: [], gap: [] } as Record<
@@ -50,8 +56,8 @@ export function formatMatchReport(report: MatchReport): string {
   const standouts = report.standouts ?? [];
   if (standouts.length) {
     sections.push(
-      "STANDOUTS (not asked for by this posting; use AT MOST ONE, only if it ties " +
-        "naturally to this role, and never as the opening):\n" +
+      "STANDOUTS (credentials already in the resume that this posting never asked " +
+        "for, but that a hiring team would prize anyway):\n" +
         standouts
           .map((s) => {
             const evidence = s.evidence ? `\n    evidence: ${s.evidence}` : "";

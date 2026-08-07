@@ -165,43 +165,54 @@ export const TASK_MODELS = {
     why: "Applies a correction you've already stated to a report that's already been analysed. Short and mechanical, so it runs on the cheap model.",
   },
 
-  // The most demanding step in the app, and still the cheap model — measured,
-  // not assumed, because it is the obvious place to want a better writer.
+  // The most demanding step in the app, on the standard model by decision
+  // rather than by measurement. Everything below argues the other way and is
+  // kept in full, because it is what the next person reopening this needs.
   //
   // Over 8 generations per tier from one resume and posting, fast and standard
   // were level on everything that can be counted: bullets kept (11.3 vs 11.8),
   // lines reverted by the grounding check (2.3 vs 2.0), and the two that matter
   // most — how often it welds two of the candidate's own lines into one bullet
   // (4.8 vs 3.0) and how many of the source's stranded figures survive into the
-  // document (3.0/4 vs 2.8/4). Fast leads both, at two thirds the price and the
+  // document (3.0/4 vs 2.8/4). Fast led both, at two thirds the price and the
   // same latency.
   //
-  // Blind pairwise judging agrees, and it was run on the case built to break
+  // Blind pairwise judging agreed, and it was run on the case built to break
   // the cheap model: a career-changer whose evidence is buried mid-sentence in
   // descriptive bullets rather than stranded on its own line. Every pair judged
   // in both orders, and the judge was order-consistent throughout. On the clean
-  // resume the two tiers tie 4-4 over 8 judgements. On the hard one fast takes
+  // resume the two tiers tie 4-4 over 8 judgements. On the hard one fast took
   // it 6-2.
   //
-  // Read the judge's reasons rather than the tally: standard loses by
+  // Read the judge's reasons rather than the tally: standard lost by
   // generalising. It reduces a quantified outcome to a description and drops
-  // "less relevant" detail that was the candidate's best evidence. Fast keeps
-  // the concrete thing on the page. That is the opposite of what more
-  // capability was supposed to buy, and it is the whole case for this line.
+  // "less relevant" detail that was the candidate's best evidence. Fast kept
+  // the concrete thing on the page.
   //
-  // The reasoning tier is not an option here at all: gpt-5.6-sol exhausted a
+  // So this line now pays about 3.3x for a writer that measured worse at the
+  // two things the step exists to do. If tailored documents start coming back
+  // vaguer, or with the source's stranded numbers missing, that is this change
+  // and not a regression elsewhere. The harnesses that produced the figures
+  // above are `TIERS=fast,standard npm run check:models` and, for the judging,
+  // `FIXTURE=hard tsx scripts/probe-judge.ts`.
+  //
+  // The reasoning tier remains unusable here: gpt-5.6-sol exhausted a
   // 12,000-token completion budget on reasoning alone in 5 of 7 attempts, and
-  // the 2 that answered returned a document with no bullets in it.
+  // the 2 that answered returned a document with no bullets in it. Half of that
+  // second failure — answering the entries section in the prose variant — has
+  // since been made unrepresentable by the key enum in the route's schema. The
+  // budget exhaustion has not been retested, and it is the half that returns a
+  // 500 to the user.
   //
   // Worth knowing before anyone re-opens this: the first version of the judge
   // harness ran both generations concurrently against the same shared model
   // entry, so one overwrote the other's model and it compared a tier against
-  // itself. It reported 4-2 for standard. Change the tier on this evidence, not
-  // on that number.
+  // itself. It reported 4-2 for standard. Weigh this line on the evidence
+  // above, not on that number.
   "tailor-resume": {
-    ...CATALOG.fast,
+    ...CATALOG.standard,
     task: "Resume tailoring",
-    why: "Rewrites and reorders the lines you already wrote so they answer this posting. The fast model is the best of the three here at combining your own lines and keeping your numbers on the page, so the longest step is also a cheap one.",
+    why: "Rewrites and reorders the lines you already wrote so they answer this posting, folding separate lines into one where they describe the same piece of work. It is the longest step and the one that produces the document you actually send, so it runs on a stronger model.",
   },
 
   // The one place cheap intelligence measurably failed.

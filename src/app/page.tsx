@@ -14,7 +14,9 @@ import { useSettings } from "@/lib/useSettings";
 import { appendUsageEntry } from "@/lib/usage";
 
 /**
- * Identifies one attempt to read one posting.
+ * Identifies one attempt to read one posting. Shared by both readers below —
+ * the terms panel and the document-type triage ask different questions of the
+ * same text, and "have we tried this posting yet" means the same thing to both.
  *
  * The text itself, not its length. Length was standing in for the text and is
  * wrong in exactly the case that matters most: replacing a posting with a
@@ -27,7 +29,7 @@ import { appendUsageEntry } from "@/lib/usage";
  * keeping whole descriptions here costs a few kilobytes and removes an entire
  * class of collision.
  */
-function factsKey(sessionId: string, jobDescription: string): string {
+function postingKey(sessionId: string, jobDescription: string): string {
   return `${sessionId}:${jobDescription}`;
 }
 
@@ -173,7 +175,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!hydrated || !settingsLoaded || !state.id) return;
     if (!state.jobDescription || state.jobFacts) return;
-    const key = factsKey(state.id, state.jobDescription);
+    const key = postingKey(state.id, state.jobDescription);
     if (attemptedRef.current.has(key)) return;
     attemptedRef.current.add(key);
     void extractFacts(state.id, state.jobDescription, key);
@@ -188,10 +190,86 @@ export default function HomePage() {
 
   const retryFacts = useCallback(() => {
     if (!state.id || !state.jobDescription) return;
-    const key = factsKey(state.id, state.jobDescription);
+    const key = postingKey(state.id, state.jobDescription);
     attemptedRef.current.add(key);
     void extractFacts(state.id, state.jobDescription, key);
   }, [state.id, state.jobDescription, extractFacts]);
+
+  /**
+   * Reading which document this employer expects, once per posting.
+   *
+   * Here rather than on the resume step because it is a fact about the posting
+   * and not about the candidate: the same person applying to a hospital and to
+   * a health-technology product role needs two different documents, so the
+   * answer cannot be attached to the resume on file. The session already stores
+   * it per application and already discards it when the posting changes (see
+   * JOB_CHANGE_RESET, and its note that a new resume deliberately does not
+   * clear it) — this puts the question where that invalidation already is,
+   * settled long before the picker opens.
+   *
+   * No resume is required. The route asks only for the posting, and demanding
+   * one would leave anyone who skipped the upload with no recommendation at all.
+   *
+   * Silent on failure, unlike the terms panel above: there is nothing on this
+   * page to show an error in, and the picker on the resume step already reads a
+   * missing recommendation as one still to be made, with its own retry.
+   */
+  const triedShapeRef = useRef<Set<string>>(new Set());
+
+  const triageDocument = useCallback(
+    async (sessionId: string, jobDescription: string, key: string) => {
+      try {
+        const res = await fetch("/api/triage-document", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobDescription, apiKey: settings.apiKey || undefined }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Could not pick a document type");
+        // Guarded like the facts above: switching applications mid-call must not
+        // write one posting's answer onto another's.
+        setState((prev) =>
+          prev.id === sessionId && prev.jobDescription === jobDescription
+            ? {
+                ...prev,
+                recommendedShape: data.shape,
+                recommendedShapeReason: data.rationale ?? "",
+                recommendedShapeConfident: data.confident !== false,
+              }
+            : prev,
+        );
+        if (data.usage) {
+          appendUsageEntry({
+            endpoint: "triage-document",
+            model: data.usage.model,
+            sessionId,
+            usage: data.usage,
+          });
+        }
+      } catch {
+        // Forgotten rather than recorded, so returning to this page tries again
+        // and the resume step's retry is not the only way back.
+        triedShapeRef.current.delete(key);
+      }
+    },
+    [settings.apiKey, setState],
+  );
+
+  useEffect(() => {
+    if (!hydrated || !settingsLoaded || !state.id) return;
+    if (!state.jobDescription || state.recommendedShape) return;
+    const key = postingKey(state.id, state.jobDescription);
+    if (triedShapeRef.current.has(key)) return;
+    triedShapeRef.current.add(key);
+    void triageDocument(state.id, state.jobDescription, key);
+  }, [
+    hydrated,
+    settingsLoaded,
+    state.id,
+    state.jobDescription,
+    state.recommendedShape,
+    triageDocument,
+  ]);
 
   // Drives the layout switch below, and gates the panel that only makes sense
   // once there is a posting for it to be about.

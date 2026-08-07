@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["pdf-parse"],
+  // pdf-parse reads uploaded documents; pdfjs-dist counts the pages of the ones
+  // this app typesets. Both resolve files relative to themselves at runtime —
+  // pdf.js loads its worker that way — which bundling breaks.
+  serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
   /**
    * Ship the Tectonic engine and its primed TeX cache with the two routes that
    * typeset.

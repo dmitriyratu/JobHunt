@@ -90,7 +90,7 @@ Each rewrite also carries "cited" — the lines the writer says it worked from. 
 
 ALLOWED, and not a finding:
 - Rewording, compression, reordering clauses, changing voice, changing tense.
-- Combining facts from anywhere in the document into one sentence.
+- Combining facts from anywhere in the document into one sentence, where they describe the same piece of work.
 - Leading with a figure the document states.
 - Naming a system, employer or technology the document names elsewhere.
 - Writing a number the document spells out as a numeral, or the reverse: "over twelve years" and "12+ years" are the same claim.
@@ -102,8 +102,9 @@ A FINDING, and only these:
 - A larger role than the document states anywhere: "led" from "contributed to", "owned" from "helped", "migrated" from "was heavily involved in".
 - A scope or outcome the document does not claim: "across the organisation" from "on my team".
 - A causal or temporal link asserted between two facts that the document never connects.
+- A claim whose facts are all present in the document but whose ATTACHMENTS are not. A fact carries what it was attached to — whose work, which system, which population, which category — and a rewrite can keep every fact while breaking that. It shows up as figures from two different jobs pooled under one subject; as a figure moved onto a relationship the source never gave it ("monitors 400K users" becoming "deployed across 400K users"); or as a capability restated as a neighbouring one ("reduced detection latency" becoming "low-latency inference"). Every word being findable in the document clears none of these: the claim is the attachment, and the document never made it. This concentrates in prose sections, which are allowed to draw on the whole document, and in any sentence carrying two or more figures.
 
-Before reporting anything, name to yourself the exact words you believe are unsupported, then search the whole document for them. If you find them, it is not a finding. Most apparent problems are this.
+Before reporting anything, name to yourself the exact words you believe are unsupported, then search the whole document for them. If you find them, it is not a finding. Most apparent problems are this. The attachment finding above is the exception, and the only one where every word being present is beside the point — there what is wrong is the arrangement, so judge it by working out what each fact was attached to, not by searching for the words.
 
 Some items carry a "numericHint" — a regex that could not find a figure among the cited lines. It does not see the rest of the document and it cannot tell what a number was attached to, so it is wrong more often than right. Check it against the full document before believing it.
 
@@ -155,6 +156,7 @@ Rewrite each one so that every claim in it is supported by the originals taken t
 - Never introduce a fact, figure, tool or scope that is not in the originals.
 - Never restore the claim the problem names, in any wording.
 - If the problem is an INFERRED LINK between two originals, drop one of them. Do not keep both and soften the join: "built the pipeline while fraud losses fell over the same period" implies the same causation the problem named, and a bullet the candidate cannot claim credit for is worth less than a shorter one they can.
+- If the problem is POOLED ATTRIBUTION, do not fix it by deleting the figures. Attribute them: name the system or the employer beside each, or give each its own clause with its own subject. Drop one only when the line cannot carry both attributed.
 - If the rewrite's only value came from the unsupported claim, return the first original verbatim. That is a correct answer, not a failure.
 - Keep the register: past-tense verb first, no first person, not a full sentence, no trailing period.
 - No em dashes or en dashes. Avoid: delve, leverage, robust, seamless, spearheaded, pivotal, honed, adept, streamlined.
